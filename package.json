@@ -1,51 +1,30 @@
 {
-  "name": "sgchat-client",
+  "name": "sgchat-desktop",
   "version": "1.0.0",
-  "description": "sgChat Desktop Client - Tauri 2.0 + SolidJS",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
-    "tauri": "tauri"
-  },
-  "dependencies": {
-    "@solidjs/router": "^0.15.2",
-    "@tanstack/solid-query": "^5.62.7",
-    "@tanstack/solid-virtual": "^3.10.9",
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-autostart": "^2",
-    "@tauri-apps/plugin-clipboard-manager": "^2",
-    "@tauri-apps/plugin-dialog": "^2",
-    "@tauri-apps/plugin-global-shortcut": "^2",
-    "@tauri-apps/plugin-notification": "^2",
-    "@tauri-apps/plugin-os": "^2",
-    "@tauri-apps/plugin-shell": "^2",
-    "@tauri-apps/plugin-store": "^2",
-    "@tauri-apps/plugin-window-state": "^2",
-    "clsx": "^2.1.1",
-    "dompurify": "^3.2.3",
-    "livekit-client": "^2.6.2",
-    "marked": "^14.1.4",
-    "socket.io-client": "^4.8.1",
-    "solid-js": "^1.9.3",
-    "zod": "^3.25.76"
-  },
-  "devDependencies": {
-    "@tailwindcss/vite": "^4.0.0",
-    "@tauri-apps/cli": "^2",
-    "@types/dompurify": "^3.0.5",
-    "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.2",
-    "vite": "^6.0.7",
-    "vite-plugin-solid": "^2.10.2"
-  },
+  "description": "sgChat Desktop Client — thin Electron wrapper for sgChat servers",
+  "main": "dist/main/index.js",
   "author": "DemonFiend",
   "license": "MIT",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build:main": "esbuild src/main/index.ts --bundle --platform=node --outdir=dist/main --external:electron --format=cjs --sourcemap",
+    "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --outdir=dist/preload --external:electron --format=cjs --sourcemap",
+    "build": "npm run build:main && npm run build:preload",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux"
+  },
+  "dependencies": {
+    "electron-store": "^10.0.0",
+    "electron-updater": "^6.3.0"
+  },
+  "devDependencies": {
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2",
+    "chokidar": "^4.0.3"
   }
 }

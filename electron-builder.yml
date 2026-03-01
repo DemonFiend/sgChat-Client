@@ -1,0 +1,46 @@
+appId: com.sgchat.desktop
+productName: sgChat
+copyright: Copyright © 2024 DemonFiend
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - dist/**/*
+  - pages/**/*
+  - resources/**/*
+  - package.json
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/SgChat_Icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  icon: resources/icon.png
+  category: public.app-category.social-networking
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  icon: resources/icon.png
+  category: Network
+
+publish:
+  provider: generic
+  url: ""
