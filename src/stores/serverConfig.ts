@@ -1,0 +1,209 @@
+import { createSignal, createRoot } from 'solid-js';
+import { api } from '@/api';
+import { tauriGet, tauriSet, tauriDelete } from '@/lib/tauri';
+import type { ServerPopupConfig, UpdatePopupConfigInput } from '@/shared';
+
+interface ChannelInfo {
+    id: string;
+    name: string;
+    type: string;
+}
+
+interface ServerConfigState {
+    config: ServerPopupConfig | null;
+    channels: ChannelInfo[];
+    isLoading: boolean;
+    isSaving: boolean;
+    error: string | null;
+    isDirty: boolean;
+    lastSaved: Date | null;
+}
+
+// Tauri store helper for draft persistence
+const DRAFT_KEY_PREFIX = 'serverPopupConfig_draft_';
+
+interface DraftData {
+    config: ServerPopupConfig;
+    timestamp: number;
+}
+
+async function saveDraft(serverId: string, config: ServerPopupConfig): Promise<void> {
+    try {
+        const draft: DraftData = {
+            config,
+            timestamp: Date.now(),
+        };
+        await tauriSet(`${DRAFT_KEY_PREFIX}${serverId}`, draft);
+    } catch (e) {
+        console.warn('[ServerConfig] Failed to save draft', e);
+    }
+}
+
+async function clearDraft(serverId: string): Promise<void> {
+    try {
+        await tauriDelete(`${DRAFT_KEY_PREFIX}${serverId}`);
+    } catch {
+        // Fail silently
+    }
+}
+
+function createServerConfigStore() {
+    const [state, setState] = createSignal<ServerConfigState>({
+        config: null,
+        channels: [],
+        isLoading: false,
+        isSaving: false,
+        error: null,
+        isDirty: false,
+        lastSaved: null,
+    });
+
+    /**
+     * Fetch popup configuration for the server
+     */
+    const fetchConfig = async (_serverId: string): Promise<void> => {
+        setState({
+            ...state(),
+            isLoading: true,
+            error: null,
+        });
+
+        try {
+            const [config, channelsData] = await Promise.all([
+                api.get<ServerPopupConfig>('/server/popup-config'),
+                api.get<{ channels: ChannelInfo[] }>('/channels'),
+            ]);
+
+            setState({
+                ...state(),
+                config,
+                channels: channelsData.channels || [],
+                isLoading: false,
+                isDirty: false,
+            });
+        } catch (error: any) {
+            console.error('[ServerConfig] Failed to fetch config:', error);
+            setState({
+                ...state(),
+                error: error.message || 'Failed to load configuration',
+                isLoading: false,
+            });
+        }
+    };
+
+    /**
+     * Update popup configuration
+     */
+    const updateConfig = async (serverId: string, updates: UpdatePopupConfigInput): Promise<boolean> => {
+        setState({
+            ...state(),
+            isSaving: true,
+            error: null,
+        });
+
+        try {
+            const updatedConfig = await api.put<ServerPopupConfig>('/server/popup-config', updates);
+
+            setState({
+                ...state(),
+                config: updatedConfig,
+                isSaving: false,
+                isDirty: false,
+                lastSaved: new Date(),
+            });
+
+            // Clear draft on successful save
+            await clearDraft(serverId);
+
+            return true;
+        } catch (error: any) {
+            console.error('[ServerConfig] Failed to update config:', error);
+            setState({
+                ...state(),
+                error: error.message || 'Failed to save configuration',
+                isSaving: false,
+            });
+            return false;
+        }
+    };
+
+    /**
+     * Update local state (for controlled inputs)
+     */
+    const setConfig = (config: ServerPopupConfig): void => {
+        setState({
+            ...state(),
+            config,
+            isDirty: true,
+        });
+
+        // Auto-save draft
+        if (config.serverId) {
+            saveDraft(config.serverId, config);
+        }
+    };
+
+    /**
+     * Update a single field
+     */
+    const updateField = <K extends keyof ServerPopupConfig>(
+        field: K,
+        value: ServerPopupConfig[K]
+    ): void => {
+        const current = state().config;
+        if (!current) return;
+
+        const updated = { ...current, [field]: value };
+        setConfig(updated);
+    };
+
+    /**
+     * Reset form to last saved state
+     */
+    const reset = (): void => {
+        setState({
+            ...state(),
+            isDirty: false,
+            error: null,
+        });
+    };
+
+    /**
+     * Clear all state
+     */
+    const clear = (): void => {
+        setState({
+            config: null,
+            channels: [],
+            isLoading: false,
+            isSaving: false,
+            error: null,
+            isDirty: false,
+            lastSaved: null,
+        });
+    };
+
+    /**
+     * Clear error message
+     */
+    const clearError = (): void => {
+        setState({
+            ...state(),
+            error: null,
+        });
+    };
+
+    return {
+        state,
+        fetchConfig,
+        updateConfig,
+        setConfig,
+        updateField,
+        reset,
+        clear,
+        clearError,
+    };
+}
+
+// Create singleton instance
+export const useServerConfigStore = createRoot(createServerConfigStore);
