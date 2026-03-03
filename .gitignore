@@ -34,6 +34,7 @@ src-tauri/
 # Plan files
 clientplan.md
 SERVER-CHANGES.md
+server-handoff.md
 
 # Beads issue tracking
 .beads/

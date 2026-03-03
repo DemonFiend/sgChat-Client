@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
+
+const electronAPI = (window as any).electronAPI;
 
 interface LoginPageProps {
   onSwitchToRegister: () => void;
@@ -9,9 +11,20 @@ interface LoginPageProps {
 export function LoginPage({ onSwitchToRegister, onBack }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, serverUrl } = useAuthStore();
+
+  // Load remembered email on mount
+  useEffect(() => {
+    electronAPI.config.getRememberedEmail().then((saved: string) => {
+      if (saved) {
+        setEmail(saved);
+        setRememberMe(true);
+      }
+    });
+  }, []);
 
   const handleLogin = async () => {
     setError('');
@@ -23,7 +36,9 @@ export function LoginPage({ onSwitchToRegister, onBack }: LoginPageProps) {
     setLoading(true);
     try {
       const result = await login(serverUrl, email, password);
-      if (!result.success) {
+      if (result.success) {
+        electronAPI.config.setRememberedEmail(rememberMe ? email : '');
+      } else {
         setError(result.error || 'Login failed');
       }
     } catch (err: any) {
@@ -58,6 +73,16 @@ export function LoginPage({ onSwitchToRegister, onBack }: LoginPageProps) {
           onChange={(e) => setPassword(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
         />
+
+        <label style={styles.checkboxRow}>
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            style={styles.checkbox}
+          />
+          <span style={styles.checkboxLabel}>Remember me</span>
+        </label>
 
         {error && <p style={styles.error}>{error}</p>}
 
@@ -138,6 +163,24 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '1rem',
     outline: 'none',
     boxSizing: 'border-box' as const,
+  },
+  checkboxRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    marginTop: '1rem',
+    cursor: 'pointer',
+    textAlign: 'left' as const,
+  },
+  checkbox: {
+    width: 16,
+    height: 16,
+    accentColor: '#5865f2',
+    cursor: 'pointer',
+  },
+  checkboxLabel: {
+    fontSize: '0.85rem',
+    color: '#b5b5be',
   },
   error: {
     color: '#ed4245',

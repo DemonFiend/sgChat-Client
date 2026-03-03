@@ -50,6 +50,7 @@ interface AuthSchema {
   accessToken: string;
   refreshToken: string;
   userId: string;
+  rememberedEmail: string;
   encryptionSalt: string;
 }
 
@@ -72,6 +73,7 @@ const authStore = new Store<AuthSchema>({
     accessToken: '',
     refreshToken: '',
     userId: '',
+    rememberedEmail: '',
     encryptionSalt: '',
   },
 });
@@ -116,6 +118,14 @@ export function clearTokens(): void {
 
 export function isAuthenticated(): boolean {
   return !!authStore.get('accessToken') && !!authStore.get('refreshToken');
+}
+
+export function getRememberedEmail(): string {
+  return authStore.get('rememberedEmail');
+}
+
+export function setRememberedEmail(email: string): void {
+  authStore.set('rememberedEmail', email);
 }
 
 export { settingsStore, authStore };

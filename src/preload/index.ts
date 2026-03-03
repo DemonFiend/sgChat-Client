@@ -40,6 +40,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getServerUrl: () => ipcRenderer.invoke('config:getServerUrl'),
     setServerUrl: (url: string) => ipcRenderer.invoke('config:setServerUrl', url),
     hasServerUrl: () => ipcRenderer.invoke('config:hasServerUrl'),
+    healthCheck: (url: string) => ipcRenderer.invoke('config:healthCheck', url),
+    getRememberedEmail: () => ipcRenderer.invoke('config:getRememberedEmail'),
+    setRememberedEmail: (email: string) => ipcRenderer.invoke('config:setRememberedEmail', email),
   },
 
   // Auth

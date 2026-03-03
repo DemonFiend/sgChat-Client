@@ -1,11 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
+
+const electronAPI = (window as any).electronAPI;
 
 export function ServerSetupPage({ onComplete }: { onComplete: () => void }) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const setServerUrl = useAuthStore((s) => s.setServerUrl);
+
+  // Pre-fill with saved server URL if one exists
+  useEffect(() => {
+    electronAPI.config.getServerUrl().then((saved: string) => {
+      if (saved) setUrl(saved);
+    });
+  }, []);
 
   const handleConnect = async () => {
     setError('');
@@ -24,19 +33,16 @@ export function ServerSetupPage({ onComplete }: { onComplete: () => void }) {
 
     setLoading(true);
     try {
-      const res = await fetch(normalized + '/health', { signal: AbortSignal.timeout(10000) });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
-      if (!data.name && !data.status) throw new Error('Not a valid sgChat server');
+      const result = await electronAPI.config.healthCheck(normalized);
+      if (!result.ok) {
+        setError(result.error || 'Could not reach server.');
+        return;
+      }
 
       setServerUrl(normalized);
       onComplete();
     } catch (err: any) {
-      if (err.name === 'TimeoutError') {
-        setError('Connection timed out. Check the URL and try again.');
-      } else {
-        setError(err.message || 'Could not reach server.');
-      }
+      setError(err.message || 'Could not reach server.');
     } finally {
       setLoading(false);
     }

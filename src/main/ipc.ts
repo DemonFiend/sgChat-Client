@@ -1,7 +1,8 @@
-import { ipcMain, BrowserWindow, Notification, app } from 'electron';
+import { ipcMain, BrowserWindow, Notification, app, net } from 'electron';
 import {
   getAutoStart, setAutoStart,
   getServerUrl, setServerUrl, hasServerUrl,
+  getRememberedEmail, setRememberedEmail,
   isAuthenticated,
 } from './store';
 import { login, register, logout, getToken, refreshAccessToken } from './auth';
@@ -59,6 +60,26 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle('config:hasServerUrl', () => {
     return hasServerUrl();
+  });
+
+  ipcMain.handle('config:getRememberedEmail', () => {
+    return getRememberedEmail();
+  });
+
+  ipcMain.handle('config:setRememberedEmail', (_event, email: string) => {
+    setRememberedEmail(email);
+  });
+
+  ipcMain.handle('config:healthCheck', async (_event, url: string) => {
+    try {
+      const res = await net.fetch(`${url}/health`);
+      if (!res.ok) return { ok: false, error: `Server returned ${res.status}` };
+      const data = await res.json();
+      if (!data.name && !data.status) return { ok: false, error: 'Not a valid sgChat server' };
+      return { ok: true, data };
+    } catch (err: any) {
+      return { ok: false, error: err.message || 'Could not reach server' };
+    }
   });
 
   // ── Auth ───────────────────────────────────────────────────────────────

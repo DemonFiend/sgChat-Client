@@ -1,3 +1,5 @@
+import { net } from 'electron';
+import { createHash } from 'crypto';
 import {
   getServerUrl,
   getAccessToken,
@@ -27,16 +29,20 @@ interface AuthError {
 
 let refreshPromise: Promise<string> | null = null;
 
+function hashPasswordForTransit(password: string): string {
+  return `sha256:${createHash('sha256').update(password).digest('hex')}`;
+}
+
 export async function login(
   serverUrl: string,
   email: string,
   password: string
 ): Promise<{ success: boolean; user?: AuthResponse['user']; error?: string }> {
   try {
-    const res = await fetch(`${serverUrl}/api/auth/login`, {
+    const res = await net.fetch(`${serverUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password: hashPasswordForTransit(password) }),
     });
 
     if (!res.ok) {
@@ -59,10 +65,10 @@ export async function register(
   password: string
 ): Promise<{ success: boolean; user?: AuthResponse['user']; error?: string }> {
   try {
-    const res = await fetch(`${serverUrl}/api/auth/register`, {
+    const res = await net.fetch(`${serverUrl}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, email, password }),
+      body: JSON.stringify({ username, email, password: hashPasswordForTransit(password) }),
     });
 
     if (!res.ok) {
@@ -91,7 +97,7 @@ export async function refreshAccessToken(): Promise<string> {
         throw new Error('No server URL or refresh token');
       }
 
-      const res = await fetch(`${serverUrl}/api/auth/refresh`, {
+      const res = await net.fetch(`${serverUrl}/api/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: refreshToken }),

@@ -1,3 +1,4 @@
+import { net } from 'electron';
 import { getServerUrl, getAccessToken } from './store';
 import { refreshAccessToken } from './auth';
 
@@ -28,7 +29,7 @@ export async function apiRequest(
       headers['Authorization'] = `Bearer ${authToken}`;
     }
 
-    return fetch(`${serverUrl}${path}`, {
+    return net.fetch(`${serverUrl}${path}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
@@ -102,7 +103,7 @@ export async function apiUpload(
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const res = await fetch(`${serverUrl}${path}`, {
+    const res = await net.fetch(`${serverUrl}${path}`, {
       method: 'POST',
       headers,
       body: bodyBuffer,
