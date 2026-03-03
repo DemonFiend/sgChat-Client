@@ -17,7 +17,7 @@ export function FriendsView() {
   const statuses = usePresenceStore((s) => s.statuses);
   const onlineFriends = friends?.filter((f) => statuses[f.id] && statuses[f.id] !== 'offline') || [];
   const allFriends = friends || [];
-  const pendingRequests = requests?.filter((r) => r.status === 'pending') || [];
+  const pendingRequests = requests?.incoming?.filter((r) => r.status === 'pending') || [];
 
   const handleAddFriend = () => {
     const trimmed = addUsername.trim();

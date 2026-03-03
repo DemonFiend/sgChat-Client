@@ -20,21 +20,21 @@ export interface FriendRequest {
 export function useFriends() {
   return useQuery({
     queryKey: ['friends'],
-    queryFn: () => api.get<Friend[]>('/api/users/@me/friends'),
+    queryFn: () => api.get<Friend[]>('/api/friends/'),
   });
 }
 
 export function useFriendRequests() {
   return useQuery({
     queryKey: ['friend-requests'],
-    queryFn: () => api.get<FriendRequest[]>('/api/users/@me/friend-requests'),
+    queryFn: () => api.get<{ incoming: FriendRequest[]; outgoing: FriendRequest[] }>('/api/friends/requests'),
   });
 }
 
 export function useSendFriendRequest() {
   return useMutation({
     mutationFn: (username: string) =>
-      api.post('/api/users/@me/friend-requests', { username }),
+      api.post('/api/friends/requests', { username }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
     },
@@ -44,7 +44,7 @@ export function useSendFriendRequest() {
 export function useAcceptFriendRequest() {
   return useMutation({
     mutationFn: (requestId: string) =>
-      api.post(`/api/users/@me/friend-requests/${requestId}/accept`),
+      api.post(`/api/friends/requests/${requestId}/accept`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['friends'] });
       queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
@@ -55,7 +55,7 @@ export function useAcceptFriendRequest() {
 export function useRemoveFriend() {
   return useMutation({
     mutationFn: (userId: string) =>
-      api.delete(`/api/users/@me/friends/${userId}`),
+      api.delete(`/api/friends/${userId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['friends'] });
     },

@@ -3,12 +3,19 @@ import { queryClient } from '../lib/queryClient';
 import { usePresenceStore } from '../stores/presenceStore';
 import { useTypingStore } from '../stores/typingStore';
 import { useVoiceStore } from '../stores/voiceStore';
+import {
+  setKeyMaterial, encrypt as cryptoEncrypt, decrypt as cryptoDecrypt,
+  isEncryptedEnvelope, hasActiveSession as hasCryptoSession,
+  clearSession as clearCryptoSession, getSessionId,
+} from '../lib/crypto';
 
 const electronAPI = (window as any).electronAPI;
 
 let socket: Socket | null = null;
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
-let lastSequence = 0;
+let gatewaySessionId: string | null = null;
+let lastSequences: Record<string, number> = {};
+let unsubCryptoRefresh: (() => void) | null = null;
 
 export function getSocket(): Socket | null {
   return socket;
@@ -17,11 +24,25 @@ export function getSocket(): Socket | null {
 export async function connectSocket(): Promise<void> {
   if (socket?.connected) return;
 
-  const { token, serverUrl } = await electronAPI.auth.getSocketToken();
+  const { token, serverUrl, cryptoSessionId } = await electronAPI.auth.getSocketToken();
   if (!token || !serverUrl) return;
 
+  // Load crypto key material from main process if session exists
+  if (cryptoSessionId) {
+    const keyMaterial = await electronAPI.crypto.getKeyMaterial();
+    if (keyMaterial) {
+      await setKeyMaterial(keyMaterial.key, keyMaterial.sessionId);
+    }
+  }
+
+  // Build auth object with optional crypto session
+  const auth: Record<string, any> = { token };
+  if (hasCryptoSession()) {
+    auth.cryptoSessionId = getSessionId();
+  }
+
   socket = io(serverUrl, {
-    auth: { token },
+    auth,
     transports: ['websocket'],
     reconnection: true,
     reconnectionDelay: 1000,
@@ -29,7 +50,12 @@ export async function connectSocket(): Promise<void> {
     reconnectionAttempts: Infinity,
   });
 
-  socket.on('gateway.hello', (data: { heartbeat_interval: number }) => {
+  socket.on('gateway.hello', async (rawData: any) => {
+    const data = isEncryptedEnvelope(rawData) && hasCryptoSession()
+      ? await cryptoDecrypt(rawData) : rawData;
+
+    gatewaySessionId = data.session_id || null;
+
     // Start heartbeat
     if (heartbeatInterval) clearInterval(heartbeatInterval);
     heartbeatInterval = setInterval(() => {
@@ -37,15 +63,38 @@ export async function connectSocket(): Promise<void> {
     }, data.heartbeat_interval);
   });
 
-  socket.on('gateway.ready', (data: any) => {
-    lastSequence = data.sequence || 0;
+  socket.on('gateway.ready', async (rawData: any) => {
+    const data = isEncryptedEnvelope(rawData) && hasCryptoSession()
+      ? await cryptoDecrypt(rawData) : rawData;
+
+    lastSequences = data.sequences || {};
     // Trigger initial data refetch
     queryClient.invalidateQueries();
   });
 
-  socket.on('event', (envelope: { type: string; data: any; sequence: number }) => {
-    lastSequence = envelope.sequence;
-    handleEvent(envelope.type, envelope.data);
+  socket.on('event', async (envelope: {
+    type: string;
+    payload: any;
+    sequence: number;
+    resource_id?: string;
+  }) => {
+    // Track per-resource sequences
+    if (envelope.resource_id) {
+      lastSequences[envelope.resource_id] = envelope.sequence;
+    }
+
+    // Decrypt payload if encrypted
+    let eventData = envelope.payload;
+    if (hasCryptoSession() && isEncryptedEnvelope(eventData)) {
+      try {
+        eventData = await cryptoDecrypt(eventData);
+      } catch (err) {
+        console.error('[socket] Decryption failed for event:', envelope.type, err);
+        return; // Drop undecryptable events
+      }
+    }
+
+    handleEvent(envelope.type, eventData);
   });
 
   socket.on('connect_error', async (err: Error) => {
@@ -53,6 +102,9 @@ export async function connectSocket(): Promise<void> {
       const result = await electronAPI.auth.refreshToken();
       if (result.success) {
         socket!.auth = { token: result.token };
+        if (hasCryptoSession()) {
+          (socket!.auth as any).cryptoSessionId = getSessionId();
+        }
         socket!.connect();
       }
     }
@@ -67,10 +119,24 @@ export async function connectSocket(): Promise<void> {
     // Try to resume on reconnect
     if (reason !== 'io client disconnect') {
       socket?.once('connect', () => {
-        socket?.emit('gateway.resume', { sequence: lastSequence });
+        socket?.emit('gateway.resume', {
+          session_id: gatewaySessionId,
+          last_sequences: lastSequences,
+        });
       });
     }
   });
+
+  // Listen for crypto session refresh from main process
+  unsubCryptoRefresh = electronAPI.crypto.onSessionRefreshed(
+    async (data: { sessionId: string; key: string }) => {
+      await setKeyMaterial(data.key, data.sessionId);
+      // Update socket auth for next reconnect
+      if (socket) {
+        (socket.auth as any).cryptoSessionId = data.sessionId;
+      }
+    }
+  );
 }
 
 export function disconnectSocket(): void {
@@ -78,11 +144,17 @@ export function disconnectSocket(): void {
     clearInterval(heartbeatInterval);
     heartbeatInterval = null;
   }
+  if (unsubCryptoRefresh) {
+    unsubCryptoRefresh();
+    unsubCryptoRefresh = null;
+  }
   if (socket) {
     socket.disconnect();
     socket = null;
   }
-  lastSequence = 0;
+  gatewaySessionId = null;
+  lastSequences = {};
+  clearCryptoSession();
 }
 
 function handleEvent(type: string, data: any): void {
@@ -121,6 +193,7 @@ function handleEvent(type: string, data: any): void {
     case 'friend.request.accepted':
     case 'friend.removed':
       queryClient.invalidateQueries({ queryKey: ['friends'] });
+      queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
       break;
 
     // Presence — update Zustand directly (ephemeral)
@@ -147,18 +220,14 @@ function handleEvent(type: string, data: any): void {
 
     // Voice — update voice store + query cache
     case 'voice.join':
-      // Someone joined a voice channel — refresh channel member display
       queryClient.invalidateQueries({ queryKey: ['channels'] });
       break;
     case 'voice.leave':
       queryClient.invalidateQueries({ queryKey: ['channels'] });
       break;
     case 'voice.state_update':
-      // Remote participant mute/deafen state changed — voiceService handles
-      // LiveKit track events directly, but we can force a participant refresh
       break;
     case 'voice.force_move': {
-      // Server is forcing us to move to a different voice channel
       const voiceStore = useVoiceStore.getState();
       if (voiceStore.connected) {
         voiceStore.leave().then(() => {
@@ -172,15 +241,34 @@ function handleEvent(type: string, data: any): void {
   }
 }
 
-// Emit helpers
-export function emitTypingStart(channelId: string): void {
-  socket?.emit('typing:start', { channel_id: channelId });
+// ── Emit helpers (encrypt when crypto session active) ────────────────────────
+
+export async function emitTypingStart(channelId: string): Promise<void> {
+  if (!socket) return;
+  const payload = { channel_id: channelId };
+  if (hasCryptoSession()) {
+    socket.emit('typing:start', await cryptoEncrypt(payload));
+  } else {
+    socket.emit('typing:start', payload);
+  }
 }
 
-export function emitTypingStop(channelId: string): void {
-  socket?.emit('typing:stop', { channel_id: channelId });
+export async function emitTypingStop(channelId: string): Promise<void> {
+  if (!socket) return;
+  const payload = { channel_id: channelId };
+  if (hasCryptoSession()) {
+    socket.emit('typing:stop', await cryptoEncrypt(payload));
+  } else {
+    socket.emit('typing:stop', payload);
+  }
 }
 
-export function emitPresenceUpdate(status: string): void {
-  socket?.emit('presence:update', { status });
+export async function emitPresenceUpdate(status: string): Promise<void> {
+  if (!socket) return;
+  const payload = { status };
+  if (hasCryptoSession()) {
+    socket.emit('presence:update', await cryptoEncrypt(payload));
+  } else {
+    socket.emit('presence:update', payload);
+  }
 }

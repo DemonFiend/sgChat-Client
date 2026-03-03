@@ -7,6 +7,11 @@ import {
 } from './store';
 import { login, register, logout, getToken, refreshAccessToken } from './auth';
 import { apiRequest, apiUpload } from './api-proxy';
+import {
+  negotiateCryptoSession, clearCryptoSession,
+  getKeyMaterial, getSessionInfo, getSessionId,
+  hasActiveSession,
+} from './crypto';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // ── Window controls ────────────────────────────────────────────────────
@@ -55,6 +60,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   ipcMain.handle('config:setServerUrl', (_event, url: string) => {
+    clearCryptoSession(); // Crypto session is tied to specific server
     setServerUrl(url);
   });
 
@@ -94,6 +100,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   ipcMain.handle('auth:logout', () => {
+    clearCryptoSession();
     logout();
   });
 
@@ -105,7 +112,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     try {
       const token = getToken();
       if (!token) return { token: null };
-      return { token, serverUrl: getServerUrl() };
+      return {
+        token,
+        serverUrl: getServerUrl(),
+        cryptoSessionId: getSessionId(),
+      };
     } catch {
       return { token: null };
     }
@@ -118,6 +129,33 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     } catch {
       return { success: false };
     }
+  });
+
+  // ── Crypto (payload encryption) ────────────────────────────────────────
+  ipcMain.handle('crypto:negotiate', async () => {
+    try {
+      const session = await negotiateCryptoSession();
+      if (!session) return { ok: false, supported: false };
+      return { ok: true, supported: true, sessionId: session.sessionId };
+    } catch (err: any) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('crypto:getKeyMaterial', () => {
+    return getKeyMaterial();
+  });
+
+  ipcMain.handle('crypto:getSessionInfo', () => {
+    return getSessionInfo();
+  });
+
+  ipcMain.handle('crypto:isActive', () => {
+    return hasActiveSession();
+  });
+
+  ipcMain.handle('crypto:clear', () => {
+    clearCryptoSession();
   });
 
   // ── API Proxy ──────────────────────────────────────────────────────────

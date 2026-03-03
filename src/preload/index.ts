@@ -64,4 +64,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     upload: (path: string, fileBuffer: ArrayBuffer, fileName: string, mimeType: string) =>
       ipcRenderer.invoke('api:upload', path, fileBuffer, fileName, mimeType),
   },
+
+  // Crypto (payload encryption)
+  crypto: {
+    negotiate: () => ipcRenderer.invoke('crypto:negotiate'),
+    getKeyMaterial: () => ipcRenderer.invoke('crypto:getKeyMaterial'),
+    getSessionInfo: () => ipcRenderer.invoke('crypto:getSessionInfo'),
+    isActive: () => ipcRenderer.invoke('crypto:isActive'),
+    clear: () => ipcRenderer.invoke('crypto:clear'),
+    onSessionRefreshed: (callback: (data: { sessionId: string; key: string }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data);
+      ipcRenderer.on('crypto:sessionRefreshed', handler);
+      return () => ipcRenderer.removeListener('crypto:sessionRefreshed', handler);
+    },
+  },
 });

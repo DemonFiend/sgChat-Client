@@ -8,6 +8,10 @@ import {
   clearTokens,
   isAuthenticated as checkAuth,
 } from './store';
+import {
+  encrypt, decrypt, isEncryptedPayload,
+  hasActiveSession, getSessionId,
+} from './crypto';
 
 interface AuthResponse {
   access_token: string;
@@ -33,6 +37,34 @@ function hashPasswordForTransit(password: string): string {
   return `sha256:${createHash('sha256').update(password).digest('hex')}`;
 }
 
+/** Build headers for an auth request, adding crypto session if active. */
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (hasActiveSession()) {
+    headers['X-Crypto-Session'] = getSessionId()!;
+  }
+  return headers;
+}
+
+/** Serialize request body, encrypting if crypto session is active. */
+function serializeBody(body: any): string {
+  if (hasActiveSession()) {
+    return JSON.stringify(encrypt(body));
+  }
+  return JSON.stringify(body);
+}
+
+/** Parse response, decrypting if encrypted. */
+async function parseResponse(res: Response): Promise<any> {
+  const data = await res.json();
+  if (isEncryptedPayload(data)) {
+    return decrypt(data);
+  }
+  return data;
+}
+
 export async function login(
   serverUrl: string,
   email: string,
@@ -41,16 +73,16 @@ export async function login(
   try {
     const res = await net.fetch(`${serverUrl}/api/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: hashPasswordForTransit(password) }),
+      headers: authHeaders(),
+      body: serializeBody({ email, password: hashPasswordForTransit(password) }),
     });
 
     if (!res.ok) {
-      const data = await res.json().catch(() => ({ message: 'Login failed' }));
+      const data = await parseResponse(res).catch(() => ({ message: 'Login failed' }));
       return { success: false, error: data.message || `Login failed (${res.status})` };
     }
 
-    const data: AuthResponse = await res.json();
+    const data: AuthResponse = await parseResponse(res);
     setTokens(data.access_token, data.refresh_token, data.user.id);
     return { success: true, user: data.user };
   } catch (err: any) {
@@ -67,16 +99,16 @@ export async function register(
   try {
     const res = await net.fetch(`${serverUrl}/api/auth/register`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, email, password: hashPasswordForTransit(password) }),
+      headers: authHeaders(),
+      body: serializeBody({ username, email, password: hashPasswordForTransit(password) }),
     });
 
     if (!res.ok) {
-      const data = await res.json().catch(() => ({ message: 'Registration failed' }));
+      const data = await parseResponse(res).catch(() => ({ message: 'Registration failed' }));
       return { success: false, error: data.message || `Registration failed (${res.status})` };
     }
 
-    const data: AuthResponse = await res.json();
+    const data: AuthResponse = await parseResponse(res);
     setTokens(data.access_token, data.refresh_token, data.user.id);
     return { success: true, user: data.user };
   } catch (err: any) {
@@ -99,8 +131,8 @@ export async function refreshAccessToken(): Promise<string> {
 
       const res = await net.fetch(`${serverUrl}/api/auth/refresh`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refreshToken }),
+        headers: authHeaders(),
+        body: serializeBody({ refresh_token: refreshToken }),
       });
 
       if (!res.ok) {
@@ -108,7 +140,7 @@ export async function refreshAccessToken(): Promise<string> {
         throw new Error('Token refresh failed');
       }
 
-      const data = await res.json();
+      const data = await parseResponse(res);
       const newAccessToken = data.access_token;
       const newRefreshToken = data.refresh_token || refreshToken;
       const { getUserId } = await import('./store');

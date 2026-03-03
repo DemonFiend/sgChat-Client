@@ -5,6 +5,8 @@ import { initTray, destroyTray } from './tray';
 import { registerShortcuts, unregisterShortcuts } from './shortcuts';
 import { registerIpcHandlers } from './ipc';
 import { restoreWindowState, trackWindowState } from './window-state';
+import { hasServerUrl } from './store';
+import { negotiateCryptoSession } from './crypto';
 
 // Register custom protocol BEFORE app is ready
 registerAppProtocol();
@@ -100,6 +102,14 @@ if (!gotSingleInstanceLock) {
     handleAppProtocol();
     mainWindow = createWindow();
     registerIpcHandlers(mainWindow);
+
+    // Negotiate crypto session if server URL is already configured
+    if (hasServerUrl()) {
+      negotiateCryptoSession().catch((err) => {
+        console.warn('[crypto] Initial negotiation failed:', err.message);
+      });
+    }
+
     loadApp(mainWindow);
     initTray(mainWindow);
     registerShortcuts(mainWindow);

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { clearSession as clearCryptoSession } from '../lib/crypto';
 
 const electronAPI = (window as any).electronAPI;
 
@@ -46,6 +47,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
+    clearCryptoSession();
     await electronAPI.auth.logout();
     set({ user: null, isAuthenticated: false });
   },
@@ -59,11 +61,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
 
       const serverUrl = await electronAPI.config.getServerUrl();
+
+      // Ensure crypto session is negotiated (non-blocking)
+      electronAPI.crypto.negotiate().catch(() => {});
+
       const isAuth = await electronAPI.auth.check();
 
       if (isAuth) {
         // Fetch current user data
-        const res = await electronAPI.api.request('GET', '/api/users/@me');
+        const res = await electronAPI.api.request('GET', '/api/users/me');
         if (res.ok) {
           set({ user: res.data, isAuthenticated: true, isLoading: false, serverUrl });
           return;

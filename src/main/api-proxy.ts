@@ -1,6 +1,11 @@
 import { net } from 'electron';
 import { getServerUrl, getAccessToken } from './store';
 import { refreshAccessToken } from './auth';
+import {
+  encrypt, decrypt, isEncryptedPayload,
+  getSessionId, hasActiveSession, isExemptPath,
+  handleSessionExpired,
+} from './crypto';
 
 interface ApiResponse {
   ok: boolean;
@@ -29,23 +34,50 @@ export async function apiRequest(
       headers['Authorization'] = `Bearer ${authToken}`;
     }
 
+    // Encryption: add session header + encrypt body
+    const cryptoActive = hasActiveSession() && !isExemptPath(path);
+    let requestBody: string | undefined;
+
+    if (cryptoActive) {
+      headers['X-Crypto-Session'] = getSessionId()!;
+      requestBody = body ? JSON.stringify(encrypt(body)) : undefined;
+    } else {
+      requestBody = body ? JSON.stringify(body) : undefined;
+    }
+
     return net.fetch(`${serverUrl}${path}`, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: requestBody,
     });
   };
 
   try {
     let res = await doFetch(token);
 
-    // Auto-refresh on 401
-    if (res.status === 401 && token) {
+    // Handle 401: check for CRYPTO_SESSION_EXPIRED before normal token refresh
+    if (res.status === 401) {
+      let handled = false;
+
       try {
-        const newToken = await refreshAccessToken();
-        res = await doFetch(newToken);
+        const cloned = res.clone();
+        const errBody = await cloned.json();
+        if (errBody.code === 'CRYPTO_SESSION_EXPIRED') {
+          await handleSessionExpired();
+          res = await doFetch(token);
+          handled = true;
+        }
       } catch {
-        return { ok: false, status: 401, data: null, error: 'Authentication expired' };
+        // Could not parse error body; fall through to token refresh
+      }
+
+      if (!handled && token) {
+        try {
+          const newToken = await refreshAccessToken();
+          res = await doFetch(newToken);
+        } catch {
+          return { ok: false, status: 401, data: null, error: 'Authentication expired' };
+        }
       }
     }
 
@@ -53,6 +85,10 @@ export async function apiRequest(
     let data;
     if (contentType?.includes('application/json')) {
       data = await res.json();
+      // Decryption: unwrap encrypted response
+      if (isEncryptedPayload(data)) {
+        data = decrypt(data);
+      }
     } else {
       data = await res.text();
     }
@@ -62,7 +98,9 @@ export async function apiRequest(
         ok: false,
         status: res.status,
         data,
-        error: typeof data === 'object' ? data.message || data.error || `Request failed (${res.status})` : `Request failed (${res.status})`,
+        error: typeof data === 'object'
+          ? data.message || data.error || `Request failed (${res.status})`
+          : `Request failed (${res.status})`,
       };
     }
 
@@ -84,36 +122,74 @@ export async function apiUpload(
   }
 
   const token = getAccessToken();
+  const cryptoActive = hasActiveSession() && !isExemptPath(path);
 
   try {
-    // Build multipart form in Node.js
-    const boundary = `----FormBoundary${Date.now()}`;
-    const preamble = Buffer.from(
-      `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="file"; filename="${fileName}"\r\n` +
-      `Content-Type: ${mimeType}\r\n\r\n`
-    );
-    const epilogue = Buffer.from(`\r\n--${boundary}--\r\n`);
-    const bodyBuffer = Buffer.concat([preamble, fileBuffer, epilogue]);
+    if (cryptoActive) {
+      // Encrypted upload: base64-encode file, wrap, encrypt
+      const filePayload = {
+        _fileUpload: true,
+        filename: fileName,
+        mimetype: mimeType,
+        data: fileBuffer.toString('base64'),
+        fields: {},
+      };
 
-    const headers: Record<string, string> = {
-      'Content-Type': `multipart/form-data; boundary=${boundary}`,
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      const encryptedBody = JSON.stringify(encrypt(filePayload));
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Crypto-Session': getSessionId()!,
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await net.fetch(`${serverUrl}${path}`, {
+        method: 'POST',
+        headers,
+        body: encryptedBody,
+      });
+
+      let data = await res.json().catch(() => null);
+      if (isEncryptedPayload(data)) {
+        data = decrypt(data);
+      }
+
+      if (!res.ok) {
+        return { ok: false, status: res.status, data, error: data?.message || `Upload failed (${res.status})` };
+      }
+      return { ok: true, status: res.status, data };
+    } else {
+      // Existing multipart upload path (unchanged)
+      const boundary = `----FormBoundary${Date.now()}`;
+      const preamble = Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="file"; filename="${fileName}"\r\n` +
+        `Content-Type: ${mimeType}\r\n\r\n`
+      );
+      const epilogue = Buffer.from(`\r\n--${boundary}--\r\n`);
+      const bodyBuffer = Buffer.concat([preamble, fileBuffer, epilogue]);
+
+      const headers: Record<string, string> = {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await net.fetch(`${serverUrl}${path}`, {
+        method: 'POST',
+        headers,
+        body: bodyBuffer,
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        return { ok: false, status: res.status, data, error: data?.message || `Upload failed (${res.status})` };
+      }
+      return { ok: true, status: res.status, data };
     }
-
-    const res = await net.fetch(`${serverUrl}${path}`, {
-      method: 'POST',
-      headers,
-      body: bodyBuffer,
-    });
-
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      return { ok: false, status: res.status, data, error: data?.message || `Upload failed (${res.status})` };
-    }
-    return { ok: true, status: res.status, data };
   } catch (err: any) {
     return { ok: false, status: 0, data: null, error: err.message || 'Upload error' };
   }

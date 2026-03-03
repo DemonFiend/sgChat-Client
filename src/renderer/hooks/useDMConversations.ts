@@ -17,7 +17,7 @@ export interface DMConversation {
 export function useDMConversations() {
   return useQuery({
     queryKey: ['dm-conversations'],
-    queryFn: () => api.get<DMConversation[]>('/api/dm/conversations'),
+    queryFn: () => api.get<DMConversation[]>('/api/dms/'),
   });
 }
 
@@ -27,7 +27,7 @@ export function useDMMessages(conversationId: string | null) {
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ limit: '50' });
       if (pageParam) params.set('before', pageParam);
-      return api.get<Message[]>(`/api/dm/${conversationId}/messages?${params}`);
+      return api.get<Message[]>(`/api/dms/${conversationId}/messages?${params}`);
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => {
@@ -41,7 +41,7 @@ export function useDMMessages(conversationId: string | null) {
 export function useSendDM(conversationId: string) {
   return useMutation({
     mutationFn: (content: string) =>
-      api.post(`/api/dm/${conversationId}/messages`, { content }),
+      api.post(`/api/dms/${conversationId}/messages`, { content }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dm-messages', conversationId] });
       queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
