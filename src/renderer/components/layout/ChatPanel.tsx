@@ -1,16 +1,18 @@
-import { useRef, useCallback } from 'react';
-import { ActionIcon, Group, ScrollArea, Stack, Text, Textarea, Tooltip } from '@mantine/core';
-import { IconHash, IconUsers, IconPaperclip, IconMoodSmile, IconSend } from '@tabler/icons-react';
-import { useMessages, useSendMessage, type Message } from '../../hooks/useMessages';
+import { useRef, useState } from 'react';
+import { ActionIcon, Group, Skeleton, ScrollArea, Stack, Text, Tooltip } from '@mantine/core';
+import { IconHash, IconUsers, IconSearch } from '@tabler/icons-react';
+import { useMessages, type Message } from '../../hooks/useMessages';
 import { useUIStore } from '../../stores/uiStore';
 import { useChannels } from '../../hooks/useChannels';
 import { MessageGroup } from '../messages/MessageGroup';
 import { MessageInput } from '../messages/MessageInput';
 import { TypingIndicator } from '../messages/TypingIndicator';
+import { SearchPanel } from '../ui/SearchPanel';
 
 export function ChatPanel() {
   const { activeChannelId, activeServerId, toggleMemberList, memberListVisible } = useUIStore();
   const { data: channels } = useChannels(activeServerId);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const activeChannel = channels?.find((c) => c.id === activeChannelId);
 
@@ -21,7 +23,7 @@ export function ChatPanel() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#313338',
+        background: 'var(--bg-primary)',
       }}>
         <Text c="dimmed" size="lg">Select a channel to start chatting</Text>
       </div>
@@ -33,7 +35,7 @@ export function ChatPanel() {
       flex: 1,
       display: 'flex',
       flexDirection: 'column',
-      background: '#313338',
+      background: 'var(--bg-primary)',
       minWidth: 0,
     }}>
       {/* Channel header */}
@@ -42,22 +44,32 @@ export function ChatPanel() {
         display: 'flex',
         alignItems: 'center',
         padding: '0 16px',
-        borderBottom: '1px solid #1a1b1e',
+        borderBottom: '1px solid var(--border)',
         flexShrink: 0,
         gap: 8,
       }}>
-        <IconHash size={20} style={{ color: '#8e8e93', flexShrink: 0 }} />
+        <IconHash size={20} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
         <Text fw={600} size="sm" truncate style={{ flex: 1 }}>
           {activeChannel?.name || 'Channel'}
         </Text>
         {activeChannel?.topic && (
           <>
-            <div style={{ width: 1, height: 20, background: '#3f4147' }} />
+            <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
             <Text size="xs" c="dimmed" truncate style={{ flex: 1, maxWidth: 300 }}>
               {activeChannel.topic}
             </Text>
           </>
         )}
+        <Tooltip label="Search" position="bottom" withArrow>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size={28}
+            onClick={() => setSearchOpen(true)}
+          >
+            <IconSearch size={18} />
+          </ActionIcon>
+        </Tooltip>
         <Tooltip label={memberListVisible ? 'Hide Members' : 'Show Members'} position="bottom" withArrow>
           <ActionIcon
             variant={memberListVisible ? 'light' : 'subtle'}
@@ -69,6 +81,15 @@ export function ChatPanel() {
           </ActionIcon>
         </Tooltip>
       </div>
+
+      {/* Search panel */}
+      {activeChannelId && (
+        <SearchPanel
+          opened={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          channelId={activeChannelId}
+        />
+      )}
 
       {/* Messages */}
       <MessageList channelId={activeChannelId} />
@@ -82,9 +103,31 @@ export function ChatPanel() {
   );
 }
 
+function MessageSkeleton() {
+  return (
+    <Stack gap={16} p={16}>
+      {[...Array(6)].map((_, i) => (
+        <Group key={i} gap={12} align="flex-start">
+          <Skeleton circle height={40} />
+          <Stack gap={6} style={{ flex: 1 }}>
+            <Group gap={8}>
+              <Skeleton height={12} width={100} radius="sm" />
+              <Skeleton height={10} width={60} radius="sm" />
+            </Group>
+            <Skeleton height={12} width={`${60 + Math.random() * 35}%`} radius="sm" />
+            {i % 2 === 0 && <Skeleton height={12} width={`${40 + Math.random() * 30}%`} radius="sm" />}
+          </Stack>
+        </Group>
+      ))}
+    </Stack>
+  );
+}
+
 function MessageList({ channelId }: { channelId: string }) {
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useMessages(channelId);
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useMessages(channelId);
   const viewportRef = useRef<HTMLDivElement>(null);
+
+  if (isLoading) return <MessageSkeleton />;
 
   const messages = data?.pages.flatMap((page) => page).reverse() || [];
 
@@ -123,7 +166,7 @@ function MessageList({ channelId }: { channelId: string }) {
           </Text>
         )}
         {groups.map((group, i) => (
-          <MessageGroup key={group[0].id} messages={group} />
+          <MessageGroup key={group[0].id} messages={group} channelId={channelId} />
         ))}
       </Stack>
     </ScrollArea>

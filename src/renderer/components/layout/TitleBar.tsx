@@ -1,32 +1,110 @@
-import { ActionIcon, Group, Text, Tooltip } from '@mantine/core';
-import { IconMinus, IconSquare, IconX } from '@tabler/icons-react';
+import { useEffect } from 'react';
+import { ActionIcon, Badge, Group, Indicator, Text, Tooltip, UnstyledButton } from '@mantine/core';
+import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings } from '@tabler/icons-react';
+import { useUIStore } from '../../stores/uiStore';
+import { useUnreadStore } from '../../stores/unreadStore';
 
 const electronAPI = (window as any).electronAPI;
 
+const NAV_TABS = [
+  { id: 'servers' as const, label: 'Server', icon: IconServer2 },
+  { id: 'dms' as const, label: 'Messages', icon: IconMessageCircle },
+  { id: 'friends' as const, label: 'Friends', icon: IconUsers },
+];
+
 export function TitleBar() {
+  const { view, setView } = useUIStore();
+  const totalUnread = useUnreadStore((s) => s.getTotalUnread());
+
+  // Update window title with unread count
+  useEffect(() => {
+    document.title = totalUnread > 0 ? `sgChat (${totalUnread})` : 'sgChat';
+  }, [totalUnread]);
+
   return (
     <div
       className="drag-region"
       style={{
-        height: 32,
-        background: '#111214',
+        height: 36,
+        background: 'var(--bg-tertiary)',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
         paddingLeft: 12,
         paddingRight: 0,
         flexShrink: 0,
       }}
     >
-      <Text size="xs" fw={600} c="dimmed" className="drag-region">
+      {/* Left: Logo */}
+      <Text
+        size="xs"
+        fw={700}
+        className="drag-region"
+        style={{ color: 'var(--accent)', letterSpacing: '-0.5px', flexShrink: 0, paddingRight: 12 }}
+      >
         sgChat
       </Text>
+
+      {/* Center: Navigation tabs */}
+      <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }} className="drag-region">
+        <Group gap={2} className="no-drag">
+          {NAV_TABS.map((tab) => {
+            const active = view === tab.id;
+            return (
+              <UnstyledButton
+                key={tab.id}
+                onClick={() => setView(tab.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 12px',
+                  borderRadius: 16,
+                  background: active ? 'var(--accent)' : 'transparent',
+                  color: active ? 'var(--accent-text)' : 'var(--text-muted)',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  transition: 'background 0.15s, color 0.15s',
+                  position: 'relative',
+                }}
+              >
+                <tab.icon size={14} />
+                {tab.label}
+                {tab.id === 'dms' && totalUnread > 0 && !active && (
+                  <Badge
+                    size="xs"
+                    variant="filled"
+                    color="red"
+                    circle
+                    style={{ position: 'absolute', top: -4, right: -4, fontSize: '0.6rem', minWidth: 16, height: 16 }}
+                  >
+                    {totalUnread > 99 ? '99+' : totalUnread}
+                  </Badge>
+                )}
+              </UnstyledButton>
+            );
+          })}
+        </Group>
+      </div>
+
+      {/* Right: Settings + window controls */}
       <Group gap={0} className="no-drag">
+        <Tooltip label="Settings" position="bottom" withArrow>
+          <ActionIcon
+            variant={view === 'settings' ? 'light' : 'subtle'}
+            color={view === 'settings' ? 'brand' : 'gray'}
+            size={36}
+            radius={0}
+            onClick={() => setView('settings')}
+            style={{ borderRadius: 0 }}
+          >
+            <IconSettings size={14} />
+          </ActionIcon>
+        </Tooltip>
         <Tooltip label="Minimize" position="bottom" withArrow>
           <ActionIcon
             variant="subtle"
             color="gray"
-            size={32}
+            size={36}
             radius={0}
             onClick={() => electronAPI.minimize()}
             style={{ borderRadius: 0 }}
@@ -38,7 +116,7 @@ export function TitleBar() {
           <ActionIcon
             variant="subtle"
             color="gray"
-            size={32}
+            size={36}
             radius={0}
             onClick={() => electronAPI.maximize()}
             style={{ borderRadius: 0 }}
@@ -50,7 +128,7 @@ export function TitleBar() {
           <ActionIcon
             variant="subtle"
             color="red"
-            size={32}
+            size={36}
             radius={0}
             onClick={() => electronAPI.close()}
             style={{ borderRadius: 0 }}

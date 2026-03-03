@@ -1,52 +1,102 @@
-import { ActionIcon, Avatar, Group, Indicator, Text, Tooltip } from '@mantine/core';
-import { IconMicrophone, IconMicrophoneOff, IconHeadphones, IconHeadphonesOff, IconSettings } from '@tabler/icons-react';
+import { useState } from 'react';
+import { ActionIcon, Avatar, Group, Indicator, Menu, Text, TextInput, Tooltip } from '@mantine/core';
+import { IconMicrophone, IconMicrophoneOff, IconHeadphones, IconHeadphonesOff, IconSettings, IconCircleFilled } from '@tabler/icons-react';
 import { useAuthStore } from '../../stores/authStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { emitPresenceUpdate } from '../../api/socket';
+import { api } from '../../lib/api';
+
+const STATUS_OPTIONS = [
+  { value: 'online', label: 'Online', color: 'var(--status-online)' },
+  { value: 'idle', label: 'Idle', color: 'var(--status-idle)' },
+  { value: 'dnd', label: 'Do Not Disturb', color: 'var(--status-dnd)' },
+  { value: 'offline', label: 'Invisible', color: 'var(--status-offline)' },
+];
 
 export function UserPanel() {
   const user = useAuthStore((s) => s.user);
   const setView = useUIStore((s) => s.setView);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [customStatus, setCustomStatus] = useState('');
 
   if (!user) return null;
 
-  const statusColor = {
-    online: 'green',
-    idle: 'yellow',
-    dnd: 'red',
-    offline: 'gray',
-  }[usePresenceStore((s) => s.getStatus(user.id))] || 'gray';
+  const currentStatus = usePresenceStore((s) => s.getStatus(user.id));
+  const statusComment = usePresenceStore((s) => s.statusComments[user.id] || '');
+  const statusColor = { online: 'green', idle: 'yellow', dnd: 'red', offline: 'gray' }[currentStatus] || 'gray';
+
+  const handleStatusChange = (status: string) => {
+    emitPresenceUpdate(status);
+    setStatusMenuOpen(false);
+  };
+
+  const handleCustomStatusSubmit = () => {
+    if (customStatus.trim()) {
+      api.patch('/api/users/@me/status-comment', { status_comment: customStatus.trim() }).catch(() => {});
+    }
+    setStatusMenuOpen(false);
+  };
 
   return (
     <div style={{
       height: 52,
-      background: '#1a1b1e',
+      background: 'var(--bg-tertiary)',
       display: 'flex',
       alignItems: 'center',
       padding: '0 8px',
       gap: 8,
       flexShrink: 0,
     }}>
-      <Indicator
-        color={statusColor as any}
-        size={10}
-        offset={4}
-        position="bottom-end"
-        withBorder
-      >
-        <Avatar
-          src={user.avatar_url}
-          size={32}
-          radius="xl"
-          color="brand"
-        >
-          {user.username.charAt(0).toUpperCase()}
-        </Avatar>
-      </Indicator>
+      <Menu opened={statusMenuOpen} onChange={setStatusMenuOpen} position="top-start" withArrow>
+        <Menu.Target>
+          <div style={{ cursor: 'pointer' }}>
+            <Indicator
+              color={statusColor as any}
+              size={10}
+              offset={4}
+              position="bottom-end"
+              withBorder
+            >
+              <Avatar
+                src={user.avatar_url}
+                size={32}
+                radius="xl"
+                color="brand"
+              >
+                {user.username.charAt(0).toUpperCase()}
+              </Avatar>
+            </Indicator>
+          </div>
+        </Menu.Target>
+        <Menu.Dropdown style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+          <Menu.Label>Status</Menu.Label>
+          {STATUS_OPTIONS.map((opt) => (
+            <Menu.Item
+              key={opt.value}
+              leftSection={<IconCircleFilled size={10} style={{ color: opt.color }} />}
+              onClick={() => handleStatusChange(opt.value)}
+            >
+              {opt.label}
+            </Menu.Item>
+          ))}
+          <Menu.Divider />
+          <Menu.Label>Custom Status</Menu.Label>
+          <div style={{ padding: '4px 12px 8px' }}>
+            <TextInput
+              size="xs"
+              placeholder="What are you up to?"
+              value={customStatus || statusComment}
+              onChange={(e) => setCustomStatus(e.currentTarget.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleCustomStatusSubmit(); }}
+            />
+          </div>
+        </Menu.Dropdown>
+      </Menu>
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <Text size="xs" fw={600} truncate>{user.username}</Text>
-        <Text size="xs" c="dimmed" truncate>Online</Text>
+        <Text size="xs" c="dimmed" truncate>{statusComment || 'Online'}</Text>
       </div>
 
       <Group gap={2}>

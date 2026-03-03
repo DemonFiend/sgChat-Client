@@ -1,5 +1,5 @@
 import { Avatar, Group, Indicator, ScrollArea, Stack, Text, Textarea, ActionIcon, UnstyledButton } from '@mantine/core';
-import { IconHash, IconUsers, IconSend } from '@tabler/icons-react';
+import { IconHash, IconUsers, IconSend, IconPhone } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useDMConversations, useDMMessages, useSendDM, type DMConversation } from '../hooks/useDMConversations';
 import { useUIStore } from '../stores/uiStore';
@@ -7,6 +7,7 @@ import { useAuthStore } from '../stores/authStore';
 import { usePresenceStore } from '../stores/presenceStore';
 import { MessageGroup } from '../components/messages/MessageGroup';
 import { UserPanel } from '../components/layout/UserPanel';
+import { VoiceBar } from '../components/voice/VoiceBar';
 
 export function DMView() {
   const { activeDMId, setActiveDM, setView } = useUIStore();
@@ -18,7 +19,7 @@ export function DMView() {
       {/* DM sidebar */}
       <div style={{
         width: 240,
-        background: '#2b2d31',
+        background: 'var(--bg-secondary)',
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
@@ -29,7 +30,7 @@ export function DMView() {
           display: 'flex',
           alignItems: 'center',
           padding: '0 16px',
-          borderBottom: '1px solid #1a1b1e',
+          borderBottom: '1px solid var(--border)',
           flexShrink: 0,
         }}>
           <Text fw={600} size="sm">Direct Messages</Text>
@@ -45,9 +46,9 @@ export function DMView() {
             padding: '8px 12px',
             margin: '8px 8px 0',
             borderRadius: 4,
-            color: '#e1e1e6',
+            color: 'var(--text-primary)',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = '#35373c'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-active)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
           <IconUsers size={20} />
@@ -75,6 +76,7 @@ export function DMView() {
           </Stack>
         </ScrollArea>
 
+        <VoiceBar compact />
         <UserPanel />
       </div>
 
@@ -87,7 +89,7 @@ export function DMView() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#313338',
+          background: 'var(--bg-primary)',
         }}>
           <Text c="dimmed">Select a conversation</Text>
         </div>
@@ -116,18 +118,18 @@ function DMItem({ conversation, otherUser, active, onClick }: {
         gap: 8,
         padding: '6px 8px',
         borderRadius: 4,
-        background: active ? '#35373c' : 'transparent',
+        background: active ? 'var(--bg-active)' : 'transparent',
         transition: 'background 0.1s',
       }}
-      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = '#2e3035'; }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = active ? '#35373c' : 'transparent'; }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = active ? 'var(--bg-active)' : 'transparent'; }}
     >
       <Indicator color={statusColor as any} size={8} offset={3} position="bottom-end" withBorder>
         <Avatar src={otherUser.avatar_url} size={32} radius="xl" color="brand">
           {otherUser.username.charAt(0).toUpperCase()}
         </Avatar>
       </Indicator>
-      <Text size="sm" truncate style={{ color: active ? '#e1e1e6' : '#8e8e93' }}>
+      <Text size="sm" truncate style={{ color: active ? 'var(--text-primary)' : 'var(--text-muted)' }}>
         {otherUser.username}
       </Text>
     </UnstyledButton>
@@ -163,17 +165,20 @@ function DMChat({ conversationId }: { conversationId: string }) {
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#313338' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
       {/* DM header */}
       <div style={{
         height: 48,
         display: 'flex',
         alignItems: 'center',
         padding: '0 16px',
-        borderBottom: '1px solid #1a1b1e',
+        borderBottom: '1px solid var(--border)',
         flexShrink: 0,
       }}>
-        <Text fw={600} size="sm">Conversation</Text>
+        <Text fw={600} size="sm" style={{ flex: 1 }}>Conversation</Text>
+        <ActionIcon variant="subtle" color="gray" size={28}>
+          <IconPhone size={18} />
+        </ActionIcon>
       </div>
 
       {/* Messages */}
@@ -188,7 +193,7 @@ function DMChat({ conversationId }: { conversationId: string }) {
       {/* Input */}
       <div style={{ padding: '0 16px 16px', flexShrink: 0 }}>
         <div style={{
-          background: '#383a40',
+          background: 'var(--bg-input)',
           borderRadius: 8,
           padding: '4px 8px',
           display: 'flex',
@@ -205,7 +210,7 @@ function DMChat({ conversationId }: { conversationId: string }) {
             maxRows={8}
             variant="unstyled"
             style={{ flex: 1 }}
-            styles={{ input: { color: '#dcddde', fontSize: '0.9rem', padding: '6px 0', minHeight: 'unset' } }}
+            styles={{ input: { color: 'var(--text-primary)', fontSize: '0.9rem', padding: '6px 0', minHeight: 'unset' } }}
           />
           {content.trim() && (
             <ActionIcon variant="filled" color="brand" size={32} onClick={handleSend} loading={sendDM.isPending}>

@@ -1,17 +1,17 @@
 import { createTheme, MantineColorsTuple } from '@mantine/core';
 
-// sgChat brand purple
+// Green palette for primary brand color
 const brand: MantineColorsTuple = [
-  '#eef0ff',
-  '#dce0f9',
-  '#b5bcf0',
-  '#8b96e8',
-  '#6875e1',
-  '#5260de',
-  '#4754dd',
-  '#3945c4',
-  '#303db0',
-  '#23349b',
+  '#e6fff0',
+  '#d0f5e0',
+  '#a3e8c1',
+  '#72dba0',
+  '#4ade80',
+  '#33d670',
+  '#22c55e',
+  '#16a34a',
+  '#0e8a3e',
+  '#047030',
 ];
 
 export const theme = createTheme({
@@ -19,16 +19,16 @@ export const theme = createTheme({
   colors: {
     brand,
     dark: [
-      '#C1C2C5',
-      '#A6A7AB',
-      '#909296',
-      '#5C5F66',
-      '#373A40',
-      '#2b2d31',
-      '#25262b',
-      '#1a1b1e',
-      '#141517',
-      '#111214',
+      '#e8f5e9',
+      '#a5d6a7',
+      '#6d9b7a',
+      '#4a6b5a',
+      '#2d4a3f',
+      '#243830',
+      '#1e2b27',
+      '#1a2420',
+      '#152019',
+      '#0f1813',
     ],
   },
   fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -36,7 +36,6 @@ export const theme = createTheme({
   cursorType: 'pointer',
   other: {
     headerHeight: 32,
-    serverSidebarWidth: 72,
     channelSidebarWidth: 240,
     memberListWidth: 240,
   },

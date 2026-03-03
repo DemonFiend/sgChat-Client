@@ -10,7 +10,7 @@ export function ServerSidebar() {
   return (
     <div style={{
       width: 72,
-      background: '#111214',
+      background: 'var(--bg-tertiary)',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -37,7 +37,7 @@ export function ServerSidebar() {
       <Divider
         w={32}
         my={8}
-        color="dark.5"
+        style={{ borderColor: 'var(--border)' }}
       />
 
       {/* Server list */}
@@ -89,7 +89,7 @@ function ServerIcon({ server, active, onClick }: { server: Server; active: boole
           width: 4,
           height: 36,
           borderRadius: '0 4px 4px 0',
-          background: '#e1e1e6',
+          background: 'var(--text-primary)',
         }} />
       )}
       <Tooltip label={server.name} position="right" withArrow>

@@ -4,6 +4,7 @@ import { IconCheck, IconUserPlus, IconX } from '@tabler/icons-react';
 import { useFriends, useFriendRequests, useSendFriendRequest, useAcceptFriendRequest, useRemoveFriend, type Friend } from '../hooks/useFriends';
 import { usePresenceStore } from '../stores/presenceStore';
 import { UserPanel } from '../components/layout/UserPanel';
+import { VoiceBar } from '../components/voice/VoiceBar';
 
 export function FriendsView() {
   const [tab, setTab] = useState<string | null>('online');
@@ -31,7 +32,7 @@ export function FriendsView() {
       {/* Friends sidebar reuses the DM sidebar space */}
       <div style={{
         width: 240,
-        background: '#2b2d31',
+        background: 'var(--bg-secondary)',
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
@@ -41,24 +42,25 @@ export function FriendsView() {
           display: 'flex',
           alignItems: 'center',
           padding: '0 16px',
-          borderBottom: '1px solid #1a1b1e',
+          borderBottom: '1px solid var(--border)',
           flexShrink: 0,
         }}>
           <Text fw={600} size="sm">Friends</Text>
         </div>
         <ScrollArea style={{ flex: 1 }} />
+        <VoiceBar compact />
         <UserPanel />
       </div>
 
       {/* Main friends area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#313338' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
         {/* Header with tabs */}
         <div style={{
           height: 48,
           display: 'flex',
           alignItems: 'center',
           padding: '0 16px',
-          borderBottom: '1px solid #1a1b1e',
+          borderBottom: '1px solid var(--border)',
           flexShrink: 0,
           gap: 16,
         }}>
@@ -98,7 +100,7 @@ export function FriendsView() {
 
             {tab === 'pending' && pendingRequests.map((req) => (
               <Group key={req.id} px={8} py={8} style={{ borderRadius: 4 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = '#2e3035'; }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
                 <Avatar size={32} radius="xl" color="brand">
@@ -162,7 +164,7 @@ function FriendItem({ friend, onRemove }: { friend: Friend; onRemove: () => void
       px={8}
       py={8}
       style={{ borderRadius: 4, cursor: 'pointer', transition: 'background 0.1s' }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = '#2e3035'; }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
     >
       <Indicator color={statusColor as any} size={8} offset={3} position="bottom-end" withBorder>

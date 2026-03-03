@@ -1,6 +1,120 @@
 @import '@mantine/core/styles.css';
 @import '@mantine/notifications/styles.css';
 
+/* ── Theme: Soft Green (default) ─────────────────────────────────────────── */
+[data-theme='green'], :root {
+  --bg-primary: #1e2b27;
+  --bg-secondary: #1a2420;
+  --bg-tertiary: #152019;
+  --bg-input: #2a3d35;
+  --bg-hover: #243830;
+  --bg-active: #2d4a3f;
+  --text-primary: #e8f5e9;
+  --text-secondary: #a5d6a7;
+  --text-muted: #6d9b7a;
+  --text-link: #66bb6a;
+  --border: rgba(74, 222, 128, 0.12);
+  --accent: #4ade80;
+  --accent-hover: #22c55e;
+  --accent-text: #111;
+  --scrollbar: #2a3d35;
+  --scrollbar-hover: #3a5a4a;
+  --status-online: #4ade80;
+  --status-idle: #facc15;
+  --status-dnd: #ef4444;
+  --status-offline: #6b7280;
+  --danger: #ef4444;
+  --danger-bg: rgba(239, 68, 68, 0.12);
+  --success: #4ade80;
+  --warning: #f59e0b;
+  /* Mantine dark palette overrides */
+  --mantine-color-dark-0: #e8f5e9;
+  --mantine-color-dark-1: #a5d6a7;
+  --mantine-color-dark-2: #6d9b7a;
+  --mantine-color-dark-3: #4a6b5a;
+  --mantine-color-dark-4: #2d4a3f;
+  --mantine-color-dark-5: #243830;
+  --mantine-color-dark-6: #1e2b27;
+  --mantine-color-dark-7: #1a2420;
+  --mantine-color-dark-8: #152019;
+  --mantine-color-dark-9: #0f1813;
+  --mantine-color-body: #152019;
+  --mantine-color-default-border: rgba(74, 222, 128, 0.12);
+}
+
+/* ── Theme: Midnight Blue ────────────────────────────────────────────────── */
+[data-theme='midnight'] {
+  --bg-primary: #1a1d2e;
+  --bg-secondary: #151827;
+  --bg-tertiary: #111322;
+  --bg-input: #242842;
+  --bg-hover: #1e2240;
+  --bg-active: #282d52;
+  --text-primary: #e0e4f7;
+  --text-secondary: #9ba3c7;
+  --text-muted: #6b739e;
+  --text-link: #818cf8;
+  --border: rgba(99, 128, 255, 0.12);
+  --accent: #6380ff;
+  --accent-hover: #4f6cf7;
+  --accent-text: #fff;
+  --scrollbar: #242842;
+  --scrollbar-hover: #363c66;
+  --status-online: #4ade80;
+  --status-idle: #facc15;
+  --status-dnd: #ef4444;
+  --status-offline: #6b7280;
+  --danger: #ef4444;
+  --danger-bg: rgba(239, 68, 68, 0.12);
+  --success: #4ade80;
+  --warning: #f59e0b;
+  /* Mantine dark palette overrides */
+  --mantine-color-dark-0: #e0e4f7;
+  --mantine-color-dark-1: #9ba3c7;
+  --mantine-color-dark-2: #6b739e;
+  --mantine-color-dark-3: #4a4f78;
+  --mantine-color-dark-4: #282d52;
+  --mantine-color-dark-5: #1e2240;
+  --mantine-color-dark-6: #1a1d2e;
+  --mantine-color-dark-7: #151827;
+  --mantine-color-dark-8: #111322;
+  --mantine-color-dark-9: #0d0f1a;
+  --mantine-color-body: #111322;
+  --mantine-color-default-border: rgba(99, 128, 255, 0.12);
+}
+
+/* ── Theme: Light ────────────────────────────────────────────────────────── */
+[data-theme='light'] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f2f3f5;
+  --bg-tertiary: #e3e5e8;
+  --bg-input: #ebedef;
+  --bg-hover: #e8eaed;
+  --bg-active: #d5d8dc;
+  --text-primary: #2e3338;
+  --text-secondary: #4f5660;
+  --text-muted: #80848e;
+  --text-link: #2d7d46;
+  --border: rgba(0, 0, 0, 0.08);
+  --accent: #2d7d46;
+  --accent-hover: #246b3a;
+  --accent-text: #fff;
+  --scrollbar: #c4c9ce;
+  --scrollbar-hover: #a8adb3;
+  --status-online: #22c55e;
+  --status-idle: #eab308;
+  --status-dnd: #dc2626;
+  --status-offline: #9ca3af;
+  --danger: #dc2626;
+  --danger-bg: rgba(220, 38, 38, 0.08);
+  --success: #22c55e;
+  --warning: #d97706;
+  /* Mantine light overrides */
+  --mantine-color-body: #e3e5e8;
+  --mantine-color-default-border: rgba(0, 0, 0, 0.08);
+}
+
+/* ── Base Reset ──────────────────────────────────────────────────────────── */
 * {
   margin: 0;
   padding: 0;
@@ -8,16 +122,17 @@
 }
 
 body {
-  background: #1a1b1e;
+  background: var(--bg-tertiary);
   overflow: hidden;
   user-select: none;
+  color: var(--text-primary);
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-/* Scrollbar styling */
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -27,15 +142,15 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1a1b1e;
+  background: var(--scrollbar);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #373a40;
+  background: var(--scrollbar-hover);
 }
 
-/* Drag region for custom titlebar */
+/* ── Drag Region ─────────────────────────────────────────────────────────── */
 .drag-region {
   -webkit-app-region: drag;
 }

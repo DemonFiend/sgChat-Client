@@ -32,7 +32,7 @@ function AuthRouter() {
 
   if (view === 'loading') {
     return (
-      <Center h="100vh" bg="dark.7">
+      <Center h="100vh" style={{ background: 'var(--bg-tertiary)' }}>
         <div className="drag-region" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 32 }} />
         <Stack align="center" gap="md">
           <Loader color="brand" size="lg" />

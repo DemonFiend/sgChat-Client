@@ -1,14 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
+export type ChannelType = 'text' | 'voice' | 'category' | 'announcement' | 'music' | 'temp_voice_generator' | 'temp_voice';
+
 export interface Channel {
   id: string;
   name: string;
-  type: 'text' | 'voice' | 'category';
+  type: ChannelType;
   server_id: string;
   category_id?: string;
   position: number;
   topic?: string;
+  bitrate?: number;
+  user_limit?: number;
+  is_afk_channel?: boolean;
 }
 
 export function useChannels(serverId: string | null) {

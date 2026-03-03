@@ -1,8 +1,11 @@
 import { io, Socket } from 'socket.io-client';
+import { notifications } from '@mantine/notifications';
 import { queryClient } from '../lib/queryClient';
 import { usePresenceStore } from '../stores/presenceStore';
 import { useTypingStore } from '../stores/typingStore';
 import { useVoiceStore } from '../stores/voiceStore';
+import { useUnreadStore } from '../stores/unreadStore';
+import { useUIStore } from '../stores/uiStore';
 import {
   setKeyMaterial, encrypt as cryptoEncrypt, decrypt as cryptoDecrypt,
   isEncryptedEnvelope, hasActiveSession as hasCryptoSession,
@@ -159,15 +162,52 @@ export function disconnectSocket(): void {
 
 function handleEvent(type: string, data: any): void {
   switch (type) {
-    // Messages — invalidate query cache
-    case 'message.new':
+    // Messages — invalidate query cache + track unreads
+    case 'message.new': {
+      queryClient.invalidateQueries({ queryKey: ['messages', data.channel_id] });
+      // Increment unread if not the active channel
+      const activeChannelId = useUIStore.getState().activeChannelId;
+      if (data.channel_id !== activeChannelId) {
+        useUnreadStore.getState().increment(data.channel_id, !!data.mentions_user);
+        // Toast for mentions
+        if (data.mentions_user) {
+          const author = data.author?.username || 'Someone';
+          const content = data.content?.slice(0, 80) || '';
+          notifications.show({
+            title: `@${author} mentioned you`,
+            message: content,
+            color: 'brand',
+            autoClose: 5000,
+          });
+          electronAPI?.flashFrame(true);
+        }
+      }
+      break;
+    }
     case 'message.update':
     case 'message.delete':
       queryClient.invalidateQueries({ queryKey: ['messages', data.channel_id] });
       break;
 
     // DM messages
-    case 'dm.message.new':
+    case 'dm.message.new': {
+      queryClient.invalidateQueries({ queryKey: ['dm-messages'] });
+      queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
+      // Toast for new DMs from non-active conversation
+      const currentView = useUIStore.getState().view;
+      if (currentView !== 'dms' || useUIStore.getState().activeDMId !== data.conversation_id) {
+        const dmAuthor = data.author?.username || 'Someone';
+        const dmContent = data.content?.slice(0, 80) || '';
+        notifications.show({
+          title: `${dmAuthor} sent you a message`,
+          message: dmContent,
+          color: 'brand',
+          autoClose: 5000,
+        });
+        electronAPI?.flashFrame(true);
+      }
+      break;
+    }
     case 'dm.message.update':
     case 'dm.message.delete':
       queryClient.invalidateQueries({ queryKey: ['dm-messages'] });

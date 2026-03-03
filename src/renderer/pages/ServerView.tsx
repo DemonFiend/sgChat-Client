@@ -13,10 +13,10 @@ export function ServerView() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#313338',
+        background: 'var(--bg-primary)',
       }}>
         <div style={{ textAlign: 'center' }}>
-          <p style={{ color: '#8e8e93', fontSize: '1.1rem' }}>Select a server from the sidebar</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Select a server from the sidebar</p>
         </div>
       </div>
     );

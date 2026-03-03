@@ -1,23 +1,174 @@
-import { Text } from '@mantine/core';
-import type { Message } from '../../hooks/useMessages';
+import { useState } from 'react';
+import { ActionIcon, Button, Group, Modal, Text, Textarea, Tooltip, UnstyledButton } from '@mantine/core';
+import { IconArrowBackUp, IconEdit, IconMoodSmile, IconTrash } from '@tabler/icons-react';
+import { useEditMessage, useDeleteMessage, useAddReaction, useRemoveReaction, type Message } from '../../hooks/useMessages';
+import { useAuthStore } from '../../stores/authStore';
+import { useUIStore } from '../../stores/uiStore';
 
 interface MessageItemProps {
   message: Message;
+  channelId: string;
+  hovered?: boolean;
 }
 
-export function MessageItem({ message }: MessageItemProps) {
+export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const currentUser = useAuthStore((s) => s.user);
+  const setReplyTo = useUIStore((s) => s.setReplyTo);
+
+  const editMessage = useEditMessage(channelId);
+  const deleteMessage = useDeleteMessage(channelId);
+  const addReaction = useAddReaction(channelId);
+  const removeReaction = useRemoveReaction(channelId);
+
+  const isOwn = currentUser?.id === message.author.id;
   const isEdited = message.updated_at && message.updated_at !== message.created_at;
 
+  const handleStartEdit = () => {
+    setEditContent(message.content);
+    setEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    const trimmed = editContent.trim();
+    if (!trimmed || trimmed === message.content) {
+      setEditing(false);
+      return;
+    }
+    editMessage.mutate({ messageId: message.id, content: trimmed }, {
+      onSuccess: () => setEditing(false),
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditing(false);
+  };
+
+  const handleDelete = () => {
+    deleteMessage.mutate(message.id, {
+      onSuccess: () => setDeleteModalOpen(false),
+    });
+  };
+
+  const handleReply = () => {
+    setReplyTo({
+      id: message.id,
+      content: message.content,
+      author: { id: message.author.id, username: message.author.username },
+    });
+  };
+
+  const handleReactionToggle = (emoji: string, hasReacted: boolean) => {
+    if (hasReacted) {
+      removeReaction.mutate({ messageId: message.id, emoji });
+    } else {
+      addReaction.mutate({ messageId: message.id, emoji });
+    }
+  };
+
   return (
-    <div style={{ marginTop: 2 }}>
-      <Text size="sm" style={{ color: '#dcddde', lineHeight: 1.375, wordBreak: 'break-word' }}>
-        {message.content}
-        {isEdited && (
-          <Text component="span" size="xs" c="dimmed" ml={4}>
-            (edited)
+    <div style={{ marginTop: 2, position: 'relative' }}>
+      {/* Reply reference */}
+      {message.reply_to && (
+        <Group gap={6} mb={2} style={{ paddingLeft: 2 }}>
+          <div style={{
+            width: 2,
+            height: 12,
+            borderRadius: 1,
+            background: 'var(--text-muted)',
+            flexShrink: 0,
+          }} />
+          <Text size="xs" c="dimmed" truncate>
+            <Text component="span" size="xs" fw={600} c="dimmed">@{message.reply_to.author.username}</Text>
+            {' '}{message.reply_to.content.slice(0, 80)}{message.reply_to.content.length > 80 ? '...' : ''}
           </Text>
-        )}
-      </Text>
+        </Group>
+      )}
+
+      {/* Action toolbar (shows on hover) */}
+      {hovered && !editing && (
+        <Group
+          gap={2}
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: -12,
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border)',
+            borderRadius: 4,
+            padding: '2px',
+            zIndex: 10,
+          }}
+        >
+          <Tooltip label="Reply" position="top" withArrow>
+            <ActionIcon variant="subtle" color="gray" size={24} onClick={handleReply}>
+              <IconArrowBackUp size={14} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="React" position="top" withArrow>
+            <ActionIcon variant="subtle" color="gray" size={24} onClick={() => handleReactionToggle('👍', false)}>
+              <IconMoodSmile size={14} />
+            </ActionIcon>
+          </Tooltip>
+          {isOwn && (
+            <>
+              <Tooltip label="Edit" position="top" withArrow>
+                <ActionIcon variant="subtle" color="gray" size={24} onClick={handleStartEdit}>
+                  <IconEdit size={14} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="Delete" position="top" withArrow>
+                <ActionIcon variant="subtle" color="red" size={24} onClick={() => setDeleteModalOpen(true)}>
+                  <IconTrash size={14} />
+                </ActionIcon>
+              </Tooltip>
+            </>
+          )}
+        </Group>
+      )}
+
+      {/* Message content or edit mode */}
+      {editing ? (
+        <div style={{ marginTop: 4 }}>
+          <Textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveEdit(); }
+              if (e.key === 'Escape') handleCancelEdit();
+            }}
+            autosize
+            minRows={1}
+            maxRows={8}
+            autoFocus
+            styles={{
+              input: {
+                background: 'var(--bg-input)',
+                color: 'var(--text-primary)',
+                fontSize: '0.875rem',
+                border: '1px solid var(--accent)',
+              },
+            }}
+          />
+          <Group gap={4} mt={4}>
+            <Text size="xs" c="dimmed">
+              escape to <UnstyledButton onClick={handleCancelEdit} style={{ color: 'var(--accent)', fontSize: '0.75rem' }}>cancel</UnstyledButton>
+              {' • '}enter to <UnstyledButton onClick={handleSaveEdit} style={{ color: 'var(--accent)', fontSize: '0.75rem' }}>save</UnstyledButton>
+            </Text>
+          </Group>
+        </div>
+      ) : (
+        <Text size="sm" style={{ color: 'var(--text-primary)', lineHeight: 1.375, wordBreak: 'break-word' }}>
+          {message.content}
+          {isEdited && (
+            <Text component="span" size="xs" c="dimmed" ml={4}>
+              (edited)
+            </Text>
+          )}
+        </Text>
+      )}
 
       {/* Attachments */}
       {message.attachments?.map((att, i) => (
@@ -48,6 +199,63 @@ export function MessageItem({ message }: MessageItemProps) {
           )}
         </div>
       ))}
+
+      {/* Reactions */}
+      {message.reactions && message.reactions.length > 0 && (
+        <Group gap={4} mt={4}>
+          {message.reactions.map((r) => (
+            <UnstyledButton
+              key={r.emoji}
+              onClick={() => handleReactionToggle(r.emoji, r.me)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 6px',
+                borderRadius: 4,
+                border: r.me ? '1px solid var(--accent)' : '1px solid var(--border)',
+                background: r.me ? 'rgba(74, 222, 128, 0.1)' : 'var(--bg-secondary)',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+              }}
+            >
+              <span>{r.emoji}</span>
+              <Text size="xs" fw={500} style={{ color: r.me ? 'var(--accent)' : 'var(--text-muted)' }}>
+                {r.count}
+              </Text>
+            </UnstyledButton>
+          ))}
+        </Group>
+      )}
+
+      {/* Delete confirmation modal */}
+      <Modal
+        opened={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        title="Delete Message"
+        centered
+        size="sm"
+      >
+        <Text size="sm" mb={12}>Are you sure you want to delete this message? This cannot be undone.</Text>
+        <div style={{
+          background: 'var(--bg-secondary)',
+          borderRadius: 4,
+          padding: '8px 12px',
+          marginBottom: 16,
+          borderLeft: '3px solid var(--border)',
+        }}>
+          <Text size="xs" fw={600} mb={2}>{message.author.username}</Text>
+          <Text size="xs" c="dimmed" lineClamp={3}>{message.content}</Text>
+        </div>
+        <Group justify="flex-end" gap={8}>
+          <Button variant="subtle" color="gray" onClick={() => setDeleteModalOpen(false)}>
+            Cancel
+          </Button>
+          <Button color="red" onClick={handleDelete} loading={deleteMessage.isPending}>
+            Delete
+          </Button>
+        </Group>
+      </Modal>
     </div>
   );
 }
