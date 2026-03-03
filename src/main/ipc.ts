@@ -1,8 +1,14 @@
 import { ipcMain, BrowserWindow, Notification, app } from 'electron';
-import { getServerUrl, setServerUrl, getAutoStart, setAutoStart } from './store';
+import {
+  getAutoStart, setAutoStart,
+  getServerUrl, setServerUrl, hasServerUrl,
+  isAuthenticated,
+} from './store';
+import { login, register, logout, getToken, refreshAccessToken } from './auth';
+import { apiRequest, apiUpload } from './api-proxy';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
-  // Window controls
+  // ── Window controls ────────────────────────────────────────────────────
   ipcMain.handle('window:minimize', () => {
     mainWindow.minimize();
   });
@@ -23,7 +29,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return mainWindow.isMaximized();
   });
 
-  // Notifications
+  // ── Notifications ──────────────────────────────────────────────────────
   ipcMain.handle('notification:show', (_event, title: string, body: string) => {
     new Notification({ title, body }).show();
   });
@@ -32,16 +38,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     mainWindow.flashFrame(flag);
   });
 
-  // Server URL
-  ipcMain.handle('server:getUrl', () => {
-    return getServerUrl();
-  });
-
-  ipcMain.handle('server:setUrl', (_event, url: string) => {
-    setServerUrl(url);
-  });
-
-  // Auto-start
+  // ── Auto-start ─────────────────────────────────────────────────────────
   ipcMain.handle('autostart:get', () => {
     return getAutoStart();
   });
@@ -51,13 +48,67 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     app.setLoginItemSettings({ openAtLogin: enabled });
   });
 
-  // Navigate to server after setup
-  ipcMain.handle('server:connect', (_event, url: string) => {
-    setServerUrl(url);
-    mainWindow.loadURL(url);
+  // ── Server config ──────────────────────────────────────────────────────
+  ipcMain.handle('config:getServerUrl', () => {
+    return getServerUrl();
   });
 
-  // Listen for maximize/unmaximize to notify renderer
+  ipcMain.handle('config:setServerUrl', (_event, url: string) => {
+    setServerUrl(url);
+  });
+
+  ipcMain.handle('config:hasServerUrl', () => {
+    return hasServerUrl();
+  });
+
+  // ── Auth ───────────────────────────────────────────────────────────────
+  ipcMain.handle('auth:login', async (_event, serverUrl: string, email: string, password: string) => {
+    setServerUrl(serverUrl);
+    return login(serverUrl, email, password);
+  });
+
+  ipcMain.handle('auth:register', async (_event, serverUrl: string, username: string, email: string, password: string) => {
+    setServerUrl(serverUrl);
+    return register(serverUrl, username, email, password);
+  });
+
+  ipcMain.handle('auth:logout', () => {
+    logout();
+  });
+
+  ipcMain.handle('auth:check', () => {
+    return isAuthenticated();
+  });
+
+  ipcMain.handle('auth:getSocketToken', async () => {
+    try {
+      const token = getToken();
+      if (!token) return { token: null };
+      return { token, serverUrl: getServerUrl() };
+    } catch {
+      return { token: null };
+    }
+  });
+
+  ipcMain.handle('auth:refreshToken', async () => {
+    try {
+      const token = await refreshAccessToken();
+      return { success: true, token };
+    } catch {
+      return { success: false };
+    }
+  });
+
+  // ── API Proxy ──────────────────────────────────────────────────────────
+  ipcMain.handle('api:request', async (_event, method: string, path: string, body?: any) => {
+    return apiRequest(method, path, body);
+  });
+
+  ipcMain.handle('api:upload', async (_event, path: string, fileBuffer: ArrayBuffer, fileName: string, mimeType: string) => {
+    return apiUpload(path, Buffer.from(fileBuffer), fileName, mimeType);
+  });
+
+  // ── Window events ──────────────────────────────────────────────────────
   mainWindow.on('maximize', () => {
     mainWindow.webContents.send('window:maximized', true);
   });

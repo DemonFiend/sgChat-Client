@@ -1,10 +1,13 @@
-import { app, BrowserWindow, shell, session } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import path from 'path';
+import { registerAppProtocol, handleAppProtocol } from './protocol';
 import { initTray, destroyTray } from './tray';
 import { registerShortcuts, unregisterShortcuts } from './shortcuts';
 import { registerIpcHandlers } from './ipc';
 import { restoreWindowState, trackWindowState } from './window-state';
-import { getServerUrl, hasServerUrl } from './store';
+
+// Register custom protocol BEFORE app is ready
+registerAppProtocol();
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -56,10 +59,13 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' };
   });
 
-  // Prevent navigation away from the server
+  // Prevent navigation away from the app
   win.webContents.on('will-navigate', (event, url) => {
-    const serverUrl = getServerUrl();
-    if (serverUrl && !url.startsWith(serverUrl)) {
+    const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+    const isAllowed =
+      url.startsWith('app://') ||
+      (devServerUrl && url.startsWith(devServerUrl));
+    if (!isAllowed) {
       event.preventDefault();
       shell.openExternal(url);
     }
@@ -69,30 +75,11 @@ function createWindow(): BrowserWindow {
 }
 
 function loadApp(win: BrowserWindow): void {
-  if (hasServerUrl()) {
-    const serverUrl = getServerUrl();
-    // Set CSP for the server
-    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [
-            `default-src 'self' ${serverUrl}; ` +
-            `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${serverUrl}; ` +
-            `style-src 'self' 'unsafe-inline' ${serverUrl}; ` +
-            `img-src 'self' data: blob: ${serverUrl} https:; ` +
-            `media-src 'self' blob: ${serverUrl} https:; ` +
-            `connect-src 'self' ${serverUrl} wss: ws: https:; ` +
-            `font-src 'self' ${serverUrl} data:;`
-          ],
-        },
-      });
-    });
-
-    win.loadURL(serverUrl);
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devServerUrl) {
+    win.loadURL(devServerUrl);
   } else {
-    // First run — show server configuration page
-    win.loadFile(path.join(__dirname, '../../pages/setup.html'));
+    win.loadURL('app://renderer/index.html');
   }
 }
 
@@ -110,6 +97,7 @@ if (!gotSingleInstanceLock) {
   });
 
   app.whenReady().then(() => {
+    handleAppProtocol();
     mainWindow = createWindow();
     registerIpcHandlers(mainWindow);
     loadApp(mainWindow);

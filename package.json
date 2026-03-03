@@ -1,7 +1,7 @@
 {
   "name": "sgchat-desktop",
   "version": "1.0.0",
-  "description": "sgChat Desktop Client — thin Electron wrapper for sgChat servers",
+  "description": "sgChat Desktop Client — independent Electron app for sgChat servers",
   "main": "dist/main/index.js",
   "author": "DemonFiend",
   "license": "MIT",
@@ -9,7 +9,8 @@
     "dev": "node scripts/dev.mjs",
     "build:main": "esbuild src/main/index.ts --bundle --platform=node --outdir=dist/main --external:electron --format=cjs --sourcemap",
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --outdir=dist/preload --external:electron --format=cjs --sourcemap",
-    "build": "npm run build:main && npm run build:preload",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:preload && npm run build:renderer",
     "start": "npm run build && electron .",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
@@ -17,14 +18,34 @@
     "dist:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
+    "@mantine/core": "^8.3.15",
+    "@mantine/hooks": "^8.3.15",
+    "@mantine/notifications": "^8.3.15",
+    "@tabler/icons-react": "^3.38.0",
+    "@tanstack/react-query": "^5.90.21",
+    "@tanstack/react-virtual": "^3.13.19",
     "electron-store": "^10.0.0",
-    "electron-updater": "^6.3.0"
+    "electron-updater": "^6.3.0",
+    "framer-motion": "^12.34.4",
+    "livekit-client": "^2.17.2",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.1",
+    "socket.io-client": "^4.8.3",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react-swc": "^4.2.3",
+    "chokidar": "^4.0.3",
     "electron": "^33.3.1",
     "electron-builder": "^25.1.8",
     "esbuild": "^0.24.2",
+    "postcss": "^8.5.8",
+    "postcss-preset-mantine": "^1.18.0",
+    "postcss-simple-vars": "^7.0.1",
     "typescript": "^5.7.2",
-    "chokidar": "^4.0.3"
+    "vite": "^7.3.1"
   }
 }

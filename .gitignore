@@ -30,3 +30,10 @@ src-tauri/
 
 # Claude Code
 .claude/
+
+# Plan files
+clientplan.md
+SERVER-CHANGES.md
+
+# Beads issue tracking
+.beads/

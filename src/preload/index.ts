@@ -31,12 +31,34 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('global-shortcut', handler);
   },
 
-  // Server connection
-  getServerUrl: () => ipcRenderer.invoke('server:getUrl'),
-  setServerUrl: (url: string) => ipcRenderer.invoke('server:setUrl', url),
-  connectToServer: (url: string) => ipcRenderer.invoke('server:connect', url),
-
   // Auto-start
   getAutoStart: () => ipcRenderer.invoke('autostart:get'),
   setAutoStart: (enabled: boolean) => ipcRenderer.invoke('autostart:set', enabled),
+
+  // Server config
+  config: {
+    getServerUrl: () => ipcRenderer.invoke('config:getServerUrl'),
+    setServerUrl: (url: string) => ipcRenderer.invoke('config:setServerUrl', url),
+    hasServerUrl: () => ipcRenderer.invoke('config:hasServerUrl'),
+  },
+
+  // Auth
+  auth: {
+    login: (serverUrl: string, email: string, password: string) =>
+      ipcRenderer.invoke('auth:login', serverUrl, email, password),
+    register: (serverUrl: string, username: string, email: string, password: string) =>
+      ipcRenderer.invoke('auth:register', serverUrl, username, email, password),
+    logout: () => ipcRenderer.invoke('auth:logout'),
+    check: () => ipcRenderer.invoke('auth:check'),
+    getSocketToken: () => ipcRenderer.invoke('auth:getSocketToken'),
+    refreshToken: () => ipcRenderer.invoke('auth:refreshToken'),
+  },
+
+  // API proxy
+  api: {
+    request: (method: string, path: string, body?: any) =>
+      ipcRenderer.invoke('api:request', method, path, body),
+    upload: (path: string, fileBuffer: ArrayBuffer, fileName: string, mimeType: string) =>
+      ipcRenderer.invoke('api:upload', path, fileBuffer, fileName, mimeType),
+  },
 });

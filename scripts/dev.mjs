@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
-import { watch } from 'chokidar';
+import { createServer } from 'vite';
 import { build } from 'esbuild';
+import { watch } from 'chokidar';
 import path from 'path';
 
 const mainEntry = 'src/main/index.ts';
@@ -34,7 +35,7 @@ async function buildPreload() {
   console.log('[dev] Preload script built');
 }
 
-function startElectron() {
+function startElectron(devServerUrl) {
   if (electronProcess) {
     electronProcess.kill();
     electronProcess = null;
@@ -43,7 +44,11 @@ function startElectron() {
   electronProcess = spawn('npx', ['electron', '.'], {
     stdio: 'inherit',
     shell: true,
-    env: { ...process.env, NODE_ENV: 'development' },
+    env: {
+      ...process.env,
+      NODE_ENV: 'development',
+      VITE_DEV_SERVER_URL: devServerUrl,
+    },
   });
 
   electronProcess.on('close', (code) => {
@@ -55,14 +60,25 @@ function startElectron() {
 }
 
 async function dev() {
-  console.log('[dev] Building...');
+  // 1. Start Vite dev server for the renderer
+  console.log('[dev] Starting Vite dev server...');
+  const viteServer = await createServer({
+    configFile: path.resolve('vite.config.ts'),
+  });
+  await viteServer.listen();
+  const devServerUrl = `http://localhost:${viteServer.config.server.port}`;
+  console.log(`[dev] Vite ready at ${devServerUrl}`);
+
+  // 2. Build main + preload with esbuild
+  console.log('[dev] Building main + preload...');
   await Promise.all([buildMain(), buildPreload()]);
 
+  // 3. Start Electron with dev server URL
   console.log('[dev] Starting Electron...');
-  startElectron();
+  startElectron(devServerUrl);
 
-  // Watch for changes and rebuild
-  const watcher = watch(['src/**/*.ts'], {
+  // 4. Watch main/preload for changes (renderer is handled by Vite HMR)
+  const watcher = watch(['src/main/**/*.ts', 'src/preload/**/*.ts'], {
     ignoreInitial: true,
   });
 
@@ -75,11 +91,18 @@ async function dev() {
       } else {
         await buildMain();
         console.log('[dev] Main rebuilt — restarting Electron...');
-        startElectron();
+        startElectron(devServerUrl);
       }
     } catch (err) {
       console.error('[dev] Build error:', err.message);
     }
+  });
+
+  // Cleanup on exit
+  process.on('SIGINT', async () => {
+    if (electronProcess) electronProcess.kill();
+    await viteServer.close();
+    process.exit(0);
   });
 }
 
