@@ -20,7 +20,9 @@ interface DMSidebarProps {
 }
 
 export function DMSidebar({ onCreateDM }: DMSidebarProps) {
-  const { activeDMId, setActiveDM, setView } = useUIStore();
+  const activeDMId = useUIStore((s) => s.activeDMId);
+  const setActiveDM = useUIStore((s) => s.setActiveDM);
+  const setView = useUIStore((s) => s.setView);
   const { data: conversations } = useDMConversations();
   const user = useAuthStore((s) => s.user);
   const [search, setSearch] = useState('');

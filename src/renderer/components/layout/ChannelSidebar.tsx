@@ -32,7 +32,9 @@ function getChannelIcon(channel: Channel) {
 }
 
 export function ChannelSidebar() {
-  const { activeServerId, activeChannelId, setActiveChannel } = useUIStore();
+  const activeServerId = useUIStore((s) => s.activeServerId);
+  const activeChannelId = useUIStore((s) => s.activeChannelId);
+  const setActiveChannel = useUIStore((s) => s.setActiveChannel);
   const { data: servers } = useServers();
   const { data: channels } = useChannels(activeServerId);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());

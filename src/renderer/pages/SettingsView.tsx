@@ -13,7 +13,8 @@ const electronAPI = (window as any).electronAPI;
 
 export function SettingsView() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
-  const { user, logout } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
   const setView = useUIStore((s) => s.setView);
 
   return (
@@ -198,7 +199,8 @@ const THEME_OPTIONS: Array<{ id: ThemeName; name: string; colors: [string, strin
 ];
 
 function AppearanceSettings() {
-  const { theme, setTheme } = useThemeStore();
+  const theme = useThemeStore((s) => s.theme);
+  const setTheme = useThemeStore((s) => s.setTheme);
   const [density, setDensity] = useState('cozy');
   const [fontSize, setFontSize] = useState(16);
 

@@ -6,7 +6,10 @@ import { getRoom } from '../../lib/voiceService';
 import { Track } from 'livekit-client';
 
 export function StreamViewer() {
-  const { isViewing, streamerName, streamerId, close } = useStreamViewerStore();
+  const isViewing = useStreamViewerStore((s) => s.isViewing);
+  const streamerName = useStreamViewerStore((s) => s.streamerName);
+  const streamerId = useStreamViewerStore((s) => s.streamerId);
+  const close = useStreamViewerStore((s) => s.close);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {

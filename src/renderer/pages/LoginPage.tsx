@@ -15,7 +15,8 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: Logi
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, serverUrl } = useAuthStore();
+  const login = useAuthStore((s) => s.login);
+  const serverUrl = useAuthStore((s) => s.serverUrl);
 
   // Load remembered email on mount
   useEffect(() => {

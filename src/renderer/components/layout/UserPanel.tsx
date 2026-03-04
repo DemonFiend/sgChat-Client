@@ -22,7 +22,10 @@ export function UserPanel() {
   const [customStatus, setCustomStatus] = useState('');
   const updateStatus = useAuthStore((s) => s.updateStatus);
   const updateCustomStatus = useAuthStore((s) => s.updateCustomStatus);
-  const { muted, deafened, toggleMute, toggleDeafen } = useVoiceStore();
+  const muted = useVoiceStore((s) => s.muted);
+  const deafened = useVoiceStore((s) => s.deafened);
+  const toggleMute = useVoiceStore((s) => s.toggleMute);
+  const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const currentStatus = usePresenceStore((s) => user ? s.getStatus(user.id) : 'offline');
   const statusComment = usePresenceStore((s) => user ? (s.statusComments[user.id] || '') : '');
 

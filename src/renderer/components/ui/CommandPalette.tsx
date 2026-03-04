@@ -8,7 +8,9 @@ import { useUnreadStore } from '../../stores/unreadStore';
 export function CommandPalette() {
   const [opened, setOpened] = useState(false);
   const [query, setQuery] = useState('');
-  const { activeServerId, setActiveChannel, setView } = useUIStore();
+  const activeServerId = useUIStore((s) => s.activeServerId);
+  const setActiveChannel = useUIStore((s) => s.setActiveChannel);
+  const setView = useUIStore((s) => s.setView);
   const { data: channels } = useChannels(activeServerId);
 
   // Listen for Ctrl+K

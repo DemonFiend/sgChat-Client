@@ -16,7 +16,10 @@ import { NotificationToast } from './components/ui/NotificationToast';
 type AuthView = 'loading' | 'server-setup' | 'login' | 'register' | 'forgot-password' | 'reset-password' | 'app';
 
 function AuthRouter() {
-  const { isAuthenticated, isLoading, serverUrl, checkAuth } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const serverUrl = useAuthStore((s) => s.serverUrl);
+  const checkAuth = useAuthStore((s) => s.checkAuth);
   const [view, setView] = useState<AuthView>('loading');
   const [resetToken, setResetToken] = useState('');
 

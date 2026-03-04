@@ -7,7 +7,10 @@ import { CreateServerModal } from '../ui/CreateServerModal';
 
 export function ServerSidebar() {
   const { data: servers } = useServers();
-  const { activeServerId, setActiveServer, setView, view } = useUIStore();
+  const activeServerId = useUIStore((s) => s.activeServerId);
+  const setActiveServer = useUIStore((s) => s.setActiveServer);
+  const setView = useUIStore((s) => s.setView);
+  const view = useUIStore((s) => s.view);
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   return (

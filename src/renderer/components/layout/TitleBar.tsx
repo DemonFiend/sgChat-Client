@@ -13,7 +13,8 @@ const NAV_TABS = [
 ];
 
 export function TitleBar() {
-  const { view, setView } = useUIStore();
+  const view = useUIStore((s) => s.view);
+  const setView = useUIStore((s) => s.setView);
   const totalUnread = useUnreadStore((s) => s.getTotalUnread());
 
   // Update window title with unread count

@@ -43,7 +43,7 @@ export function ServerView() {
     if (activeServerId && serverData?.popup_config?.enabled) {
       showPopup(activeServerId);
     }
-  }, [activeServerId, serverData]);
+  }, [activeServerId, serverData, showPopup]);
 
   if (isLoading) {
     return (

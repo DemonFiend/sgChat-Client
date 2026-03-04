@@ -11,7 +11,8 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { register, serverUrl } = useAuthStore();
+  const register = useAuthStore((s) => s.register);
+  const serverUrl = useAuthStore((s) => s.serverUrl);
 
   const handleRegister = async () => {
     setError('');

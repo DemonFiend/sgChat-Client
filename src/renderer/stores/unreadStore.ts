@@ -6,6 +6,8 @@ interface UnreadEntry {
   mentions: number;
 }
 
+const EMPTY_UNREAD: UnreadEntry = { count: 0, mentions: 0 };
+
 interface UnreadState {
   unreads: Record<string, UnreadEntry>;
   increment: (channelId: string, isMention?: boolean) => void;
@@ -43,7 +45,7 @@ export const useUnreadStore = create<UnreadState>((set, get) => ({
   },
 
   getUnread: (channelId) => {
-    return get().unreads[channelId] || { count: 0, mentions: 0 };
+    return get().unreads[channelId] || EMPTY_UNREAD;
   },
 
   getCategoryUnreadCount: (channelIds) => {

@@ -23,7 +23,8 @@ interface Member {
 }
 
 export function MemberList() {
-  const { activeServerId, memberListVisible } = useUIStore();
+  const activeServerId = useUIStore((s) => s.activeServerId);
+  const memberListVisible = useUIStore((s) => s.memberListVisible);
 
   const { data: members, isLoading: membersLoading } = useQuery({
     queryKey: ['members', activeServerId],

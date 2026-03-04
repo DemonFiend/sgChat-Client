@@ -10,7 +10,10 @@ import { TypingIndicator } from '../messages/TypingIndicator';
 import { SearchPanel } from '../ui/SearchPanel';
 
 export function ChatPanel() {
-  const { activeChannelId, activeServerId, toggleMemberList, memberListVisible } = useUIStore();
+  const activeChannelId = useUIStore((s) => s.activeChannelId);
+  const activeServerId = useUIStore((s) => s.activeServerId);
+  const toggleMemberList = useUIStore((s) => s.toggleMemberList);
+  const memberListVisible = useUIStore((s) => s.memberListVisible);
   const { data: channels } = useChannels(activeServerId);
   const [searchOpen, setSearchOpen] = useState(false);
 
