@@ -1,6 +1,6 @@
-import { Button, Divider, Group, NavLink, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton } from '@mantine/core';
-import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck } from '@tabler/icons-react';
-import { useState, useEffect } from 'react';
+import { Button, Divider, Group, NavLink, Progress, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton } from '@mantine/core';
+import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay } from '@tabler/icons-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import { useThemeStore, type ThemeName, themeNames } from '../stores/themeStore';
@@ -412,6 +412,81 @@ function VoiceSettings() {
     setGlobalOutputVolume(volume);
   };
 
+  // ── Mic test ────────────────────────────────────────────────────
+  const [isMicTesting, setIsMicTesting] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const testStreamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const rafRef = useRef<number>(0);
+
+  const updateMicLevel = useCallback(() => {
+    if (!analyserRef.current) return;
+    const data = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(data);
+    const avg = data.reduce((sum, v) => sum + v, 0) / data.length;
+    setMicLevel(Math.min(100, (avg / 128) * 100 * (inputVolume / 100)));
+    rafRef.current = requestAnimationFrame(updateMicLevel);
+  }, [inputVolume]);
+
+  const stopMicTest = useCallback(() => {
+    cancelAnimationFrame(rafRef.current);
+    testStreamRef.current?.getTracks().forEach((t) => t.stop());
+    audioCtxRef.current?.close().catch(() => {});
+    testStreamRef.current = null;
+    audioCtxRef.current = null;
+    analyserRef.current = null;
+    setMicLevel(0);
+    setIsMicTesting(false);
+  }, []);
+
+  const startMicTest = useCallback(async () => {
+    try {
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          deviceId: inputDevice !== 'default' ? { exact: inputDevice } : undefined,
+          echoCancellation: echoCancellation,
+          noiseSuppression: noiseSuppression,
+          autoGainControl: true,
+        },
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      testStreamRef.current = stream;
+
+      const ctx = new AudioContext();
+      audioCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      setIsMicTesting(true);
+      rafRef.current = requestAnimationFrame(updateMicLevel);
+    } catch {
+      // Permission denied or device error
+    }
+  }, [inputDevice, echoCancellation, noiseSuppression, updateMicLevel]);
+
+  // Cleanup on unmount
+  useEffect(() => () => { stopMicTest(); }, [stopMicTest]);
+
+  // ── Speaker test ────────────────────────────────────────────────
+  const testSpeakers = useCallback(() => {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 440;
+    gain.gain.value = (outputVolume / 100) * 0.3;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    setTimeout(() => {
+      osc.stop();
+      ctx.close().catch(() => {});
+    }, 1000);
+  }, [outputVolume]);
+
   return (
     <Stack gap={24}>
       <Text size="xl" fw={700}>Voice & Video</Text>
@@ -433,6 +508,21 @@ function VoiceSettings() {
         <Slider value={inputVolume} onChange={setInputVolumeSetting} min={0} max={200} />
       </div>
 
+      <Group>
+        <Button
+          variant={isMicTesting ? 'filled' : 'light'}
+          color={isMicTesting ? 'red' : 'brand'}
+          size="xs"
+          leftSection={<IconMicrophone size={14} />}
+          onClick={isMicTesting ? stopMicTest : startMicTest}
+        >
+          {isMicTesting ? 'Stop Testing' : 'Test Microphone'}
+        </Button>
+        {isMicTesting && (
+          <Progress value={micLevel} color="green" size="lg" style={{ flex: 1 }} />
+        )}
+      </Group>
+
       <Select
         label="Output Device"
         placeholder="Default speakers"
@@ -448,6 +538,17 @@ function VoiceSettings() {
         </Group>
         <Slider value={outputVolume} onChange={handleOutputVolumeChange} min={0} max={200} />
       </div>
+
+      <Button
+        variant="light"
+        color="brand"
+        size="xs"
+        leftSection={<IconPlayerPlay size={14} />}
+        onClick={testSpeakers}
+        style={{ alignSelf: 'flex-start' }}
+      >
+        Test Speakers
+      </Button>
 
       <Divider style={{ borderColor: 'var(--border)' }} />
 

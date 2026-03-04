@@ -1,15 +1,12 @@
 // Sound effects service for voice events
 const audioCache = new Map<string, HTMLAudioElement>();
-let globalVolume = 1.0;
+let globalVolume = 0.5;
 
 const SOUND_URLS: Record<string, string> = {
-  join: '/sounds/join.mp3',
-  leave: '/sounds/leave.mp3',
-  mute: '/sounds/mute.mp3',
-  unmute: '/sounds/unmute.mp3',
-  deafen: '/sounds/deafen.mp3',
-  undeafen: '/sounds/undeafen.mp3',
-  disconnect: '/sounds/disconnect.mp3',
+  join: '/sounds/JoinVoice.mp3',
+  leave: '/sounds/LeaveVoice.mp3',
+  'stream-join': '/sounds/stream-join.mp3',
+  'stream-leave': '/sounds/stream-leave.mp3',
   notification: '/sounds/notification.mp3',
 };
 
@@ -31,11 +28,22 @@ export const soundService = {
     const audio = getOrCreateAudio(sound);
     if (!audio) return;
 
-    audio.volume = globalVolume;
-    audio.currentTime = 0;
-    audio.play().catch(() => {
-      // Ignore autoplay errors
-    });
+    // Clone for overlapping playback
+    const clone = audio.cloneNode(true) as HTMLAudioElement;
+    clone.volume = globalVolume;
+    clone.play().catch(() => {});
+  },
+
+  playVoiceJoin() {
+    this.play('join');
+  },
+
+  playVoiceLeave() {
+    this.play('leave');
+  },
+
+  playNotification() {
+    this.play('notification');
   },
 
   setVolume(volume: number) {

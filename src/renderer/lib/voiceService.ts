@@ -6,6 +6,7 @@ import {
 } from 'livekit-client';
 import { api } from './api';
 import { useAuthStore } from '../stores/authStore';
+import { soundService } from './soundService';
 
 let currentRoom: Room | null = null;
 
@@ -160,6 +161,7 @@ export async function joinVoiceChannel(channelId: string): Promise<{
     }
 
     currentRoom = room;
+    soundService.playVoiceJoin();
     emit('connected', { channelId });
     emit('participant-update', getParticipants(room));
 
@@ -174,6 +176,7 @@ export async function joinVoiceChannel(channelId: string): Promise<{
 
 export async function leaveVoiceChannel(): Promise<void> {
   if (currentRoom) {
+    soundService.playVoiceLeave();
     currentRoom.disconnect();
     currentRoom = null;
     emit('disconnected', null);
