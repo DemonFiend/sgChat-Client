@@ -37,6 +37,7 @@ export function ChannelSidebar() {
   const setActiveChannel = useUIStore((s) => s.setActiveChannel);
   const { data: servers } = useServers();
   const { data: channels } = useChannels(activeServerId);
+  const unreads = useUnreadStore((s) => s.unreads);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [motdVisible, setMotdVisible] = useState(true);
@@ -184,7 +185,7 @@ export function ChannelSidebar() {
             );
             const isCollapsed = collapsedCategories.has(category.id);
             const categoryChannelIds = categoryChannels.map((c) => c.id);
-            const categoryUnreadCount = useUnreadStore.getState().getCategoryUnreadCount(categoryChannelIds);
+            const categoryUnreadCount = categoryChannelIds.reduce((sum, id) => sum + (unreads[id]?.count || 0), 0);
 
             return (
               <div key={category.id}>

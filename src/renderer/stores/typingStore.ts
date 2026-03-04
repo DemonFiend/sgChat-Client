@@ -11,6 +11,17 @@ interface TypingState {
 
   addTyping: (channelId: string, userId: string, username: string) => void;
   removeTyping: (channelId: string, userId: string) => void;
+  /**
+   * Returns filtered typing users for a channel. Uses `.filter()` internally,
+   * so it returns a NEW array on every call.
+   *
+   * ⚠️  NEVER call this inside a Zustand selector — it will cause React error #185
+   * (infinite re-render loop) because useSyncExternalStore's Object.is check
+   * always fails on new array references.
+   *
+   * ✅ Use `s.typing[channelId]` in selectors instead, then filter in the component.
+   * ✅ Safe to call via `useTypingStore.getState().getTyping()` in event handlers.
+   */
   getTyping: (channelId: string) => TypingUser[];
 }
 
