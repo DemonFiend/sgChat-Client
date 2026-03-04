@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ActionIcon, Avatar, Badge, Collapse, Group, Indicator, Menu, ScrollArea, Stack, Text, Tooltip, UnstyledButton } from '@mantine/core';
 import {
   IconHash, IconVolume, IconChevronDown, IconChevronRight,
@@ -12,6 +12,7 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { UserPanel } from './UserPanel';
 import { VoiceBar } from '../voice/VoiceBar';
+import { VoiceParticipantsList } from '../ui/VoiceParticipantsList';
 import { ServerSettingsModal } from '../ui/ServerSettingsModal';
 import { ChannelSettingsModal } from '../ui/ChannelSettingsModal';
 
@@ -50,6 +51,18 @@ export function ChannelSidebar() {
       return next;
     });
   }, []);
+
+  // Auto-select the first text channel when channels load and none is active
+  useEffect(() => {
+    if (!activeChannelId && channels && channels.length > 0) {
+      const firstText = [...channels]
+        .sort((a, b) => a.position - b.position)
+        .find((c) => c.type === 'text' || c.type === 'announcement');
+      if (firstText) {
+        setActiveChannel(firstText.id);
+      }
+    }
+  }, [activeChannelId, channels, setActiveChannel]);
 
   if (!activeServerId) return null;
 
@@ -314,23 +327,9 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
 
       {/* Voice channel participants inline */}
       {isVoiceType && isInThisVoiceChannel && voiceParticipants.length > 0 && (
-        <Stack gap={2} pl={28} py={2}>
-          {voiceParticipants.map((p) => (
-            <Group key={p.id} gap={6} style={{ opacity: p.isMuted ? 0.5 : 1 }}>
-              <Indicator
-                color={p.isSpeaking ? 'green' : 'gray'}
-                size={6}
-                offset={2}
-                position="bottom-end"
-              >
-                <Avatar size={20} radius="xl" color="brand">
-                  {p.username.charAt(0).toUpperCase()}
-                </Avatar>
-              </Indicator>
-              <Text size="xs" c="dimmed" truncate>{p.username}</Text>
-            </Group>
-          ))}
-        </Stack>
+        <div style={{ paddingLeft: 28, paddingTop: 2, paddingBottom: 2 }}>
+          <VoiceParticipantsList participants={voiceParticipants} compact />
+        </div>
       )}
 
       {/* Channel settings modal */}

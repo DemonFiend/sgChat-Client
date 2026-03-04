@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client';
-import { notifications } from '@mantine/notifications';
 import { queryClient } from '../lib/queryClient';
+import { toastStore } from '../stores/toastNotifications';
 import { usePresenceStore } from '../stores/presenceStore';
 import { useTypingStore } from '../stores/typingStore';
 import { useVoiceStore } from '../stores/voiceStore';
@@ -173,13 +173,12 @@ function handleEvent(type: string, data: any): void {
         if (data.mentions_user) {
           const author = data.author?.username || 'Someone';
           const content = data.content?.slice(0, 80) || '';
-          notifications.show({
+          toastStore.addToast({
+            type: 'mention',
             title: `@${author} mentioned you`,
             message: content,
-            color: 'brand',
-            autoClose: 5000,
+            avatarUrl: data.author?.avatar_url,
           });
-          electronAPI?.flashFrame(true);
         }
       }
       break;
@@ -198,13 +197,12 @@ function handleEvent(type: string, data: any): void {
       if (currentView !== 'dms' || useUIStore.getState().activeDMId !== data.conversation_id) {
         const dmAuthor = data.author?.username || 'Someone';
         const dmContent = data.content?.slice(0, 80) || '';
-        notifications.show({
+        toastStore.addToast({
+          type: 'dm',
           title: `${dmAuthor} sent you a message`,
           message: dmContent,
-          color: 'brand',
-          autoClose: 5000,
+          avatarUrl: data.author?.avatar_url,
         });
-        electronAPI?.flashFrame(true);
       }
       break;
     }

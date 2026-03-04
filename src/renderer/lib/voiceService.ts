@@ -2,11 +2,7 @@ import {
   Room,
   RoomEvent,
   Track,
-  LocalTrackPublication,
-  RemoteTrackPublication,
-  Participant,
-  LocalParticipant,
-  RemoteParticipant,
+  ConnectionQuality,
 } from 'livekit-client';
 import { api } from './api';
 
@@ -17,6 +13,9 @@ export interface VoiceParticipant {
   username: string;
   isMuted: boolean;
   isSpeaking: boolean;
+  isDeafened?: boolean;
+  isStreaming?: boolean;
+  avatarUrl?: string;
 }
 
 type VoiceCallback = (event: string, data: any) => void;
@@ -31,9 +30,36 @@ function emit(event: string, data: any) {
   eventCallback?.(event, data);
 }
 
-export async function joinVoiceChannel(channelId: string): Promise<{ success: boolean; error?: string }> {
+// Per-user volume (0-200%)
+const userVolumes = new Map<string, number>();
+
+export function setUserVolume(userId: string, volume: number) {
+  userVolumes.set(userId, Math.max(0, Math.min(200, volume)));
+  if (!currentRoom) return;
+
+  const participant = currentRoom.remoteParticipants.get(userId);
+  if (participant) {
+    participant.audioTrackPublications.forEach((pub) => {
+      if (pub.track) {
+        const elements = pub.track.attachedElements;
+        elements.forEach((el) => {
+          (el as HTMLMediaElement).volume = volume / 100;
+        });
+      }
+    });
+  }
+}
+
+export function getUserVolume(userId: string): number {
+  return userVolumes.get(userId) ?? 100;
+}
+
+export async function joinVoiceChannel(channelId: string): Promise<{
+  success: boolean;
+  error?: string;
+  permissions?: { canSpeak: boolean; canVideo: boolean; canStream: boolean };
+}> {
   try {
-    // Get LiveKit token from server via IPC proxy
     const response = await api.post<{
       livekit_token: string;
       livekit_url: string;
@@ -45,18 +71,38 @@ export async function joinVoiceChannel(channelId: string): Promise<{ success: bo
       dynacast: true,
     });
 
-    // Set up event handlers
+    // Audio track subscribed
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
       if (track.kind === Track.Kind.Audio) {
         const element = track.attach();
         document.body.appendChild(element);
         element.style.display = 'none';
+
+        // Apply per-user volume
+        const vol = userVolumes.get(participant.identity);
+        if (vol !== undefined) {
+          element.volume = vol / 100;
+        }
       }
+
+      // Detect screen share
+      if (track.kind === Track.Kind.Video && track.source === Track.Source.ScreenShare) {
+        emit('screen-share-started', {
+          participantId: participant.identity,
+          participantName: participant.name || participant.identity,
+        });
+      }
+
       emit('participant-update', getParticipants(room));
     });
 
-    room.on(RoomEvent.TrackUnsubscribed, (track) => {
+    room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
       track.detach().forEach((el) => el.remove());
+
+      if (track.kind === Track.Kind.Video && track.source === Track.Source.ScreenShare) {
+        emit('screen-share-stopped', { participantId: participant.identity });
+      }
+
       emit('participant-update', currentRoom ? getParticipants(currentRoom) : []);
     });
 
@@ -73,15 +119,21 @@ export async function joinVoiceChannel(channelId: string): Promise<{ success: bo
       emit('participant-update', getParticipants(room));
     });
 
+    room.on(RoomEvent.Reconnecting, () => {
+      emit('reconnecting', null);
+    });
+
+    room.on(RoomEvent.Reconnected, () => {
+      emit('connected', { channelId });
+    });
+
     room.on(RoomEvent.Disconnected, () => {
       emit('disconnected', null);
       currentRoom = null;
     });
 
-    // Connect
     await room.connect(response.livekit_url, response.livekit_token);
 
-    // Enable microphone
     if (response.permissions.can_speak) {
       await room.localParticipant.setMicrophoneEnabled(true);
     }
@@ -90,7 +142,14 @@ export async function joinVoiceChannel(channelId: string): Promise<{ success: bo
     emit('connected', { channelId });
     emit('participant-update', getParticipants(room));
 
-    return { success: true };
+    return {
+      success: true,
+      permissions: {
+        canSpeak: response.permissions.can_speak,
+        canVideo: response.permissions.can_video,
+        canStream: response.permissions.can_stream,
+      },
+    };
   } catch (err: any) {
     return { success: false, error: err.message || 'Failed to join voice channel' };
   }
@@ -112,17 +171,37 @@ export async function toggleMute(): Promise<boolean> {
   return !enabled;
 }
 
+export async function toggleScreenShare(): Promise<boolean> {
+  if (!currentRoom) return false;
+  const isSharing = currentRoom.localParticipant.isScreenShareEnabled;
+  await currentRoom.localParticipant.setScreenShareEnabled(!isSharing);
+  return !isSharing;
+}
+
 export async function toggleDeafen(): Promise<boolean> {
   if (!currentRoom) return false;
-  // Deafen = mute all remote audio tracks
   const remoteParticipants = Array.from(currentRoom.remoteParticipants.values());
   const anyEnabled = remoteParticipants.some((p) =>
-    Array.from(p.audioTrackPublications.values()).some((pub) => !pub.isMuted)
+    Array.from(p.audioTrackPublications.values()).some((pub) => !pub.isMuted),
   );
-
-  // Toggle: if any are enabled, mute all; if all muted, unmute all
-  // LiveKit doesn't have a native "deafen" — we simulate by adjusting volume
   return !anyEnabled;
+}
+
+export function getConnectionQuality(): { ping: number; quality: 'excellent' | 'good' | 'poor' | 'lost' } | null {
+  if (!currentRoom || !currentRoom.localParticipant) return null;
+
+  const lkQuality = currentRoom.localParticipant.connectionQuality;
+  const qualityMap: Record<string, 'excellent' | 'good' | 'poor' | 'lost'> = {
+    [ConnectionQuality.Excellent]: 'excellent',
+    [ConnectionQuality.Good]: 'good',
+    [ConnectionQuality.Poor]: 'poor',
+    [ConnectionQuality.Lost]: 'lost',
+  };
+
+  return {
+    ping: 0, // LiveKit doesn't expose RTT directly; we use quality level instead
+    quality: qualityMap[lkQuality] || 'good',
+  };
 }
 
 export function isConnected(): boolean {
@@ -136,22 +215,24 @@ export function getRoom(): Room | null {
 function getParticipants(room: Room): VoiceParticipant[] {
   const participants: VoiceParticipant[] = [];
 
-  // Local participant
   const local = room.localParticipant;
   participants.push({
     id: local.identity,
     username: local.name || local.identity,
     isMuted: !local.isMicrophoneEnabled,
     isSpeaking: local.isSpeaking,
+    isStreaming: local.isScreenShareEnabled,
   });
 
-  // Remote participants
   room.remoteParticipants.forEach((participant) => {
     participants.push({
       id: participant.identity,
       username: participant.name || participant.identity,
       isMuted: !participant.isMicrophoneEnabled,
       isSpeaking: participant.isSpeaking,
+      isStreaming: Array.from(participant.trackPublications.values()).some(
+        (pub) => pub.source === Track.Source.ScreenShare,
+      ),
     });
   });
 

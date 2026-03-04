@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActionIcon, Button, Group, Modal, Text, Textarea, Tooltip, UnstyledButton } from '@mantine/core';
 import { IconArrowBackUp, IconEdit, IconMoodSmile, IconTrash } from '@tabler/icons-react';
 import { useEditMessage, useDeleteMessage, useAddReaction, useRemoveReaction, type Message } from '../../hooks/useMessages';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
+import { MessageContent } from '../ui/MessageContent';
+import { ReactionPicker } from '../ui/ReactionPicker';
+import { ReactionDisplay } from '../ui/ReactionDisplay';
 
 interface MessageItemProps {
   message: Message;
@@ -15,6 +18,8 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
+  const reactionBtnRef = useRef<HTMLButtonElement>(null);
   const currentUser = useAuthStore((s) => s.user);
   const setReplyTo = useUIStore((s) => s.setReplyTo);
 
@@ -108,7 +113,7 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
             </ActionIcon>
           </Tooltip>
           <Tooltip label="React" position="top" withArrow>
-            <ActionIcon variant="subtle" color="gray" size={24} onClick={() => handleReactionToggle('👍', false)}>
+            <ActionIcon ref={reactionBtnRef} variant="subtle" color="gray" size={24} onClick={() => setReactionPickerOpen(true)}>
               <IconMoodSmile size={14} />
             </ActionIcon>
           </Tooltip>
@@ -161,7 +166,7 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
         </div>
       ) : (
         <Text size="sm" style={{ color: 'var(--text-primary)', lineHeight: 1.375, wordBreak: 'break-word' }}>
-          {message.content}
+          <MessageContent content={message.content} isOwnMessage={isOwn} />
           {isEdited && (
             <Text component="span" size="xs" c="dimmed" ml={4}>
               (edited)
@@ -202,31 +207,16 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
 
       {/* Reactions */}
       {message.reactions && message.reactions.length > 0 && (
-        <Group gap={4} mt={4}>
-          {message.reactions.map((r) => (
-            <UnstyledButton
-              key={r.emoji}
-              onClick={() => handleReactionToggle(r.emoji, r.me)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '2px 6px',
-                borderRadius: 4,
-                border: r.me ? '1px solid var(--accent)' : '1px solid var(--border)',
-                background: r.me ? 'rgba(74, 222, 128, 0.1)' : 'var(--bg-secondary)',
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-              }}
-            >
-              <span>{r.emoji}</span>
-              <Text size="xs" fw={500} style={{ color: r.me ? 'var(--accent)' : 'var(--text-muted)' }}>
-                {r.count}
-              </Text>
-            </UnstyledButton>
-          ))}
-        </Group>
+        <ReactionDisplay reactions={message.reactions} onToggle={handleReactionToggle} />
       )}
+
+      {/* Reaction picker */}
+      <ReactionPicker
+        isOpen={reactionPickerOpen}
+        onClose={() => setReactionPickerOpen(false)}
+        onSelect={(emoji) => handleReactionToggle(emoji, false)}
+        anchorRef={reactionBtnRef.current}
+      />
 
       {/* Delete confirmation modal */}
       <Modal

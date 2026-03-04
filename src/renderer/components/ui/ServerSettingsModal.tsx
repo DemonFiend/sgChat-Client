@@ -8,9 +8,11 @@ import {
 import {
   IconSettings, IconUsers, IconShield, IconHash, IconLink, IconPlus,
   IconTrash, IconCopy, IconCheck, IconBan, IconUserMinus, IconClock,
+  IconHistory, IconMessageCircle,
 } from '@tabler/icons-react';
 import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
+import { ServerPopupConfigForm } from './ServerPopupConfigForm';
 
 interface ServerSettingsModalProps {
   opened: boolean;
@@ -107,6 +109,27 @@ export function ServerSettingsModal({ opened, onClose, serverId }: ServerSetting
             onClick={() => setTab('invites')}
             variant="subtle"
           />
+          <NavLink
+            label="Bans"
+            leftSection={<IconBan size={16} />}
+            active={tab === 'bans'}
+            onClick={() => setTab('bans')}
+            variant="subtle"
+          />
+          <NavLink
+            label="Audit Log"
+            leftSection={<IconHistory size={16} />}
+            active={tab === 'audit'}
+            onClick={() => setTab('audit')}
+            variant="subtle"
+          />
+          <NavLink
+            label="Welcome Popup"
+            leftSection={<IconMessageCircle size={16} />}
+            active={tab === 'popup'}
+            onClick={() => setTab('popup')}
+            variant="subtle"
+          />
         </Stack>
 
         {/* Content */}
@@ -116,6 +139,9 @@ export function ServerSettingsModal({ opened, onClose, serverId }: ServerSetting
           {tab === 'members' && <MembersTab serverId={serverId} />}
           {tab === 'channels' && <ChannelsTab serverId={serverId} />}
           {tab === 'invites' && <InvitesTab serverId={serverId} />}
+          {tab === 'bans' && <BansTab serverId={serverId} />}
+          {tab === 'audit' && <AuditLogTab serverId={serverId} />}
+          {tab === 'popup' && <ServerPopupConfigForm serverId={serverId} />}
         </ScrollArea>
       </div>
     </Modal>
@@ -643,6 +669,132 @@ function InvitesTab({ serverId }: { serverId: string }) {
         </Stack>
       ) : (
         <Text c="dimmed" size="sm" style={{ fontStyle: 'italic' }}>No active invites.</Text>
+      )}
+    </Stack>
+  );
+}
+
+/* ─── Bans Tab ─── */
+
+interface Ban {
+  user_id: string;
+  username: string;
+  display_name?: string;
+  avatar_url?: string;
+  reason?: string;
+  banned_at: string;
+}
+
+function BansTab({ serverId }: { serverId: string }) {
+  const { data: bans } = useQuery({
+    queryKey: ['bans', serverId],
+    queryFn: () => api.get<Ban[]>(`/api/servers/${serverId}/bans`),
+  });
+
+  const handleUnban = async (userId: string) => {
+    try {
+      await api.delete(`/api/servers/${serverId}/bans/${userId}`);
+      queryClient.invalidateQueries({ queryKey: ['bans', serverId] });
+    } catch {
+      // silently fail
+    }
+  };
+
+  return (
+    <Stack gap={16}>
+      <Group justify="space-between">
+        <Text size="lg" fw={700}>Bans</Text>
+        <Text size="sm" c="dimmed">{bans?.length || 0} banned users</Text>
+      </Group>
+
+      {(bans || []).length > 0 ? (
+        <Stack gap={4}>
+          {bans!.map((ban) => (
+            <Group
+              key={ban.user_id}
+              gap={8}
+              px={12}
+              py={8}
+              style={{ borderRadius: 4, background: 'var(--bg-hover)' }}
+            >
+              <Avatar src={ban.avatar_url} size={28} radius="xl" color="brand">
+                {ban.username.charAt(0).toUpperCase()}
+              </Avatar>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text size="sm" truncate>{ban.display_name || ban.username}</Text>
+                {ban.reason && (
+                  <Text size="xs" c="dimmed" truncate>Reason: {ban.reason}</Text>
+                )}
+              </div>
+              <Text size="xs" c="dimmed">{new Date(ban.banned_at).toLocaleDateString()}</Text>
+              <Tooltip label="Unban" withArrow>
+                <Button size="xs" variant="outline" color="green" onClick={() => handleUnban(ban.user_id)}>
+                  Unban
+                </Button>
+              </Tooltip>
+            </Group>
+          ))}
+        </Stack>
+      ) : (
+        <Text c="dimmed" size="sm" style={{ fontStyle: 'italic' }}>No banned users.</Text>
+      )}
+    </Stack>
+  );
+}
+
+/* ─── Audit Log Tab ─── */
+
+interface AuditEntry {
+  id: string;
+  action: string;
+  user: { id: string; username: string };
+  target?: { id: string; type: string; name?: string };
+  changes?: Record<string, any>;
+  created_at: string;
+}
+
+function AuditLogTab({ serverId }: { serverId: string }) {
+  const { data: entries, isLoading } = useQuery({
+    queryKey: ['audit-log', serverId],
+    queryFn: () => api.get<AuditEntry[]>(`/api/servers/${serverId}/audit-log`),
+  });
+
+  return (
+    <Stack gap={16}>
+      <Text size="lg" fw={700}>Audit Log</Text>
+      <Text size="sm" c="dimmed">Recent administrative actions on this server.</Text>
+
+      {isLoading && <Text size="sm" c="dimmed">Loading...</Text>}
+
+      {!isLoading && (entries || []).length > 0 ? (
+        <Stack gap={4}>
+          {entries!.map((entry) => (
+            <Group
+              key={entry.id}
+              gap={8}
+              px={12}
+              py={8}
+              style={{ borderRadius: 4, background: 'var(--bg-hover)' }}
+              wrap="nowrap"
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text size="sm">
+                  <Text component="span" fw={600}>{entry.user.username}</Text>
+                  {' '}
+                  <Text component="span" c="dimmed">{entry.action.replace(/_/g, ' ')}</Text>
+                  {entry.target?.name && (
+                    <Text component="span" fw={500}>{' '}{entry.target.name}</Text>
+                  )}
+                </Text>
+              </div>
+              <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+                {new Date(entry.created_at).toLocaleString()}
+              </Text>
+            </Group>
+          ))}
+        </Stack>
+      ) : (
+        !isLoading && <Text c="dimmed" size="sm" style={{ fontStyle: 'italic' }}>No audit log entries.</Text>
       )}
     </Stack>
   );

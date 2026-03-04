@@ -1,109 +1,104 @@
-import { useState, useEffect } from 'react';
-import { useAuthStore } from '../stores/authStore';
+import { useState } from 'react';
+import { api } from '../lib/api';
 
-const electronAPI = (window as any).electronAPI;
-
-interface LoginPageProps {
-  onSwitchToRegister: () => void;
-  onForgotPassword: () => void;
+interface ResetPasswordPageProps {
+  token: string;
   onBack: () => void;
 }
 
-export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: LoginPageProps) {
-  const [email, setEmail] = useState('');
+export function ResetPasswordPage({ token, onBack }: ResetPasswordPageProps) {
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { login, serverUrl } = useAuthStore();
 
-  // Load remembered email on mount
-  useEffect(() => {
-    electronAPI.config.getRememberedEmail().then((saved: string) => {
-      if (saved) {
-        setEmail(saved);
-        setRememberMe(true);
-      }
-    });
-  }, []);
-
-  const handleLogin = async () => {
+  const handleSubmit = async () => {
     setError('');
-    if (!email || !password) {
-      setError('Please fill in all fields.');
+
+    if (!password || !confirmPassword) {
+      setError('Please fill in both fields.');
+      return;
+    }
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
 
     setLoading(true);
     try {
-      const result = await login(serverUrl, email, password);
-      if (result.success) {
-        electronAPI.config.setRememberedEmail(rememberMe ? email : '');
-      } else {
-        setError(result.error || 'Login failed');
-      }
+      await api.post('/api/auth/reset-password', { token, password });
+      setSuccess(true);
     } catch (err: any) {
-      setError(err.message || 'Login failed');
+      setError(err.message || 'Failed to reset password. The link may have expired.');
     } finally {
       setLoading(false);
     }
   };
 
+  if (success) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.dragRegion} />
+        <div style={styles.card}>
+          <h1 style={styles.title}>Password reset!</h1>
+          <p style={styles.subtitle}>
+            Your password has been successfully reset. You can now log in with your new password.
+          </p>
+          <button style={styles.btn} onClick={onBack}>
+            Back to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={styles.container}>
       <div style={styles.dragRegion} />
       <div style={styles.card}>
-        <h1 style={styles.title}>Welcome back!</h1>
-        <p style={styles.subtitle}>We're so excited to see you again!</p>
+        <h1 style={styles.title}>Reset your password</h1>
+        <p style={styles.subtitle}>
+          Enter a new password for your account.
+        </p>
 
-        <label style={styles.label}>Email</label>
-        <input
-          type="email"
-          style={styles.input}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-          autoFocus
-        />
-
-        <label style={{ ...styles.label, marginTop: '1rem' }}>Password</label>
+        <label style={styles.label}>New Password</label>
         <input
           type="password"
           style={styles.input}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+          autoFocus
         />
 
-        <label style={styles.checkboxRow}>
-          <input
-            type="checkbox"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(e.target.checked)}
-            style={styles.checkbox}
-          />
-          <span style={styles.checkboxLabel}>Remember me</span>
-        </label>
+        <label style={{ ...styles.label, marginTop: '1rem' }}>Confirm Password</label>
+        <input
+          type="password"
+          style={styles.input}
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+        />
 
         {error && <p style={styles.error}>{error}</p>}
 
         <button
           style={{ ...styles.btn, ...(loading ? styles.btnDisabled : {}) }}
-          onClick={handleLogin}
+          onClick={handleSubmit}
           disabled={loading}
         >
-          {loading ? 'Logging in...' : 'Log In'}
+          {loading ? 'Resetting...' : 'Reset Password'}
         </button>
 
         <p style={styles.switchText}>
-          <span style={styles.link} onClick={onForgotPassword}>Forgot your password?</span>
-        </p>
-        <p style={styles.switchText}>
-          Need an account?{' '}
-          <span style={styles.link} onClick={onSwitchToRegister}>Register</span>
-        </p>
-        <p style={styles.switchText}>
-          <span style={styles.link} onClick={onBack}>Change server</span>
+          <span style={styles.link} onClick={onBack}>Back to Login</span>
         </p>
       </div>
     </div>
@@ -146,6 +141,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-muted)',
     fontSize: '0.95rem',
     marginBottom: '1.5rem',
+    lineHeight: 1.5,
   },
   label: {
     display: 'block',
@@ -167,24 +163,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '1rem',
     outline: 'none',
     boxSizing: 'border-box' as const,
-  },
-  checkboxRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    marginTop: '1rem',
-    cursor: 'pointer',
-    textAlign: 'left' as const,
-  },
-  checkbox: {
-    width: 16,
-    height: 16,
-    accentColor: 'var(--accent)',
-    cursor: 'pointer',
-  },
-  checkboxLabel: {
-    fontSize: '0.85rem',
-    color: 'var(--text-secondary)',
   },
   error: {
     color: 'var(--danger)',

@@ -114,6 +114,132 @@
   --mantine-color-default-border: rgba(0, 0, 0, 0.08);
 }
 
+/* ── Theme: Dark ────────────────────────────────────────────────────────── */
+[data-theme='dark'] {
+  --bg-primary: #313338;
+  --bg-secondary: #2b2d31;
+  --bg-tertiary: #1e1f22;
+  --bg-input: #383a40;
+  --bg-hover: rgba(79, 84, 92, 0.16);
+  --bg-active: rgba(79, 84, 92, 0.24);
+  --text-primary: #f2f3f5;
+  --text-secondary: #b5bac1;
+  --text-muted: #949ba4;
+  --text-link: #00a8fc;
+  --border: #3f4147;
+  --accent: #5865f2;
+  --accent-hover: #4752c4;
+  --accent-text: #fff;
+  --scrollbar: #1a1b1e;
+  --scrollbar-hover: #2b2d31;
+  --status-online: #23a55a;
+  --status-idle: #f0b232;
+  --status-dnd: #f23f43;
+  --status-offline: #80848e;
+  --danger: #da373c;
+  --danger-bg: rgba(218, 55, 60, 0.12);
+  --success: #23a55a;
+  --warning: #f0b232;
+  --mantine-color-dark-0: #f2f3f5;
+  --mantine-color-dark-1: #b5bac1;
+  --mantine-color-dark-2: #949ba4;
+  --mantine-color-dark-3: #6d6f78;
+  --mantine-color-dark-4: #4e5058;
+  --mantine-color-dark-5: #3f4147;
+  --mantine-color-dark-6: #313338;
+  --mantine-color-dark-7: #2b2d31;
+  --mantine-color-dark-8: #1e1f22;
+  --mantine-color-dark-9: #111214;
+  --mantine-color-body: #1e1f22;
+  --mantine-color-default-border: #3f4147;
+}
+
+/* ── Theme: OLED Black ──────────────────────────────────────────────────── */
+[data-theme='oled'] {
+  --bg-primary: #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-tertiary: #000000;
+  --bg-input: #1a1a1a;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --text-primary: #ffffff;
+  --text-secondary: #b5bac1;
+  --text-muted: #8e9297;
+  --text-link: #00b0f4;
+  --border: #1a1a1a;
+  --accent: #5865f2;
+  --accent-hover: #4752c4;
+  --accent-text: #fff;
+  --scrollbar: #1a1a1a;
+  --scrollbar-hover: #2a2a2a;
+  --status-online: #23a55a;
+  --status-idle: #f0b232;
+  --status-dnd: #f23f43;
+  --status-offline: #80848e;
+  --danger: #da373c;
+  --danger-bg: rgba(218, 55, 60, 0.12);
+  --success: #23a55a;
+  --warning: #f0b232;
+  --mantine-color-dark-0: #ffffff;
+  --mantine-color-dark-1: #b5bac1;
+  --mantine-color-dark-2: #8e9297;
+  --mantine-color-dark-3: #5c5f66;
+  --mantine-color-dark-4: #2a2a2a;
+  --mantine-color-dark-5: #1a1a1a;
+  --mantine-color-dark-6: #0a0a0a;
+  --mantine-color-dark-7: #050505;
+  --mantine-color-dark-8: #000000;
+  --mantine-color-dark-9: #000000;
+  --mantine-color-body: #000000;
+  --mantine-color-default-border: #1a1a1a;
+}
+
+/* ── Theme: Nord ────────────────────────────────────────────────────────── */
+[data-theme='nord'] {
+  --bg-primary: #2e3440;
+  --bg-secondary: #3b4252;
+  --bg-tertiary: #434c5e;
+  --bg-input: #4c566a;
+  --bg-hover: rgba(136, 192, 208, 0.1);
+  --bg-active: rgba(136, 192, 208, 0.16);
+  --text-primary: #eceff4;
+  --text-secondary: #d8dee9;
+  --text-muted: #a4adb8;
+  --text-link: #88c0d0;
+  --border: #4c566a;
+  --accent: #5e81ac;
+  --accent-hover: #81a1c1;
+  --accent-text: #fff;
+  --scrollbar: #4c566a;
+  --scrollbar-hover: #5c6a82;
+  --status-online: #a3be8c;
+  --status-idle: #ebcb8b;
+  --status-dnd: #bf616a;
+  --status-offline: #4c566a;
+  --danger: #bf616a;
+  --danger-bg: rgba(191, 97, 106, 0.12);
+  --success: #a3be8c;
+  --warning: #ebcb8b;
+  --mantine-color-dark-0: #eceff4;
+  --mantine-color-dark-1: #d8dee9;
+  --mantine-color-dark-2: #a4adb8;
+  --mantine-color-dark-3: #7b849a;
+  --mantine-color-dark-4: #5c6a82;
+  --mantine-color-dark-5: #4c566a;
+  --mantine-color-dark-6: #3b4252;
+  --mantine-color-dark-7: #2e3440;
+  --mantine-color-dark-8: #242a35;
+  --mantine-color-dark-9: #1a1f28;
+  --mantine-color-body: #434c5e;
+  --mantine-color-default-border: #4c566a;
+}
+
+/* ── Theme transition suppression ───────────────────────────────────────── */
+.no-theme-transition,
+.no-theme-transition * {
+  transition: none !important;
+}
+
 /* ── Base Reset ──────────────────────────────────────────────────────────── */
 * {
   margin: 0;
@@ -130,6 +256,11 @@ body {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
 }
 
 /* ── Scrollbar ───────────────────────────────────────────────────────────── */
@@ -157,4 +288,9 @@ body {
 
 .no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* ── Emoji button hover ─────────────────────────────────────────────────── */
+.emoji-btn:hover {
+  background: var(--bg-hover);
 }

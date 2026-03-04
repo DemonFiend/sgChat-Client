@@ -6,13 +6,19 @@ import { useAuthStore } from './stores/authStore';
 import { ServerSetupPage } from './pages/ServerSetupPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { AppLayout } from './layouts/AppLayout';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { SessionExpiredOverlay } from './components/ui/SessionExpiredOverlay';
+import { NotificationToast } from './components/ui/NotificationToast';
 
-type AuthView = 'loading' | 'server-setup' | 'login' | 'register' | 'app';
+type AuthView = 'loading' | 'server-setup' | 'login' | 'register' | 'forgot-password' | 'reset-password' | 'app';
 
 function AuthRouter() {
   const { isAuthenticated, isLoading, serverUrl, checkAuth } = useAuthStore();
   const [view, setView] = useState<AuthView>('loading');
+  const [resetToken, setResetToken] = useState('');
 
   useEffect(() => {
     checkAuth();
@@ -50,6 +56,7 @@ function AuthRouter() {
     return (
       <LoginPage
         onSwitchToRegister={() => setView('register')}
+        onForgotPassword={() => setView('forgot-password')}
         onBack={() => setView('server-setup')}
       />
     );
@@ -59,13 +66,25 @@ function AuthRouter() {
     return <RegisterPage onSwitchToLogin={() => setView('login')} />;
   }
 
+  if (view === 'forgot-password') {
+    return <ForgotPasswordPage onBack={() => setView('login')} />;
+  }
+
+  if (view === 'reset-password') {
+    return <ResetPasswordPage token={resetToken} onBack={() => setView('login')} />;
+  }
+
   return <AppLayout />;
 }
 
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthRouter />
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthRouter />
+        <SessionExpiredOverlay />
+        <NotificationToast />
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

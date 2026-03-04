@@ -1,22 +1,26 @@
 import { useRef, useState } from 'react';
-import { ActionIcon, Group, Text, Textarea, UnstyledButton } from '@mantine/core';
-import { IconPaperclip, IconMoodSmile, IconSend, IconX } from '@tabler/icons-react';
+import { ActionIcon, Group, Text, Textarea, Tooltip, UnstyledButton } from '@mantine/core';
+import { IconGif, IconPaperclip, IconMoodSmile, IconSend, IconX } from '@tabler/icons-react';
 import { useSendMessage } from '../../hooks/useMessages';
 import { emitTypingStart } from '../../api/socket';
 import { useUIStore } from '../../stores/uiStore';
 import { api } from '../../lib/api';
+import { GifPicker } from '../ui/GifPicker';
 
 interface MessageInputProps {
   channelId: string;
   channelName: string;
+  onSendOverride?: (content: string) => void;
 }
 
-export function MessageInput({ channelId, channelName }: MessageInputProps) {
+export function MessageInput({ channelId, channelName, onSendOverride }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [gifPickerOpen, setGifPickerOpen] = useState(false);
   const sendMessage = useSendMessage(channelId);
   const lastTypingEmit = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const gifBtnRef = useRef<HTMLButtonElement>(null);
   const replyTo = useUIStore((s) => s.replyTo);
   const setReplyTo = useUIStore((s) => s.setReplyTo);
 
@@ -37,10 +41,14 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     }
 
     if (trimmed) {
-      sendMessage.mutate({
-        content: trimmed,
-        reply_to_id: replyTo?.id,
-      });
+      if (onSendOverride) {
+        onSendOverride(trimmed);
+      } else {
+        sendMessage.mutate({
+          content: trimmed,
+          reply_to_id: replyTo?.id,
+        });
+      }
     }
 
     setContent('');
@@ -174,6 +182,11 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
         />
 
         <Group gap={2}>
+          <Tooltip label="GIF" position="top" withArrow>
+            <ActionIcon ref={gifBtnRef} variant="subtle" color="gray" size={32} onClick={() => setGifPickerOpen(true)}>
+              <IconGif size={20} />
+            </ActionIcon>
+          </Tooltip>
           <ActionIcon variant="subtle" color="gray" size={32}>
             <IconMoodSmile size={18} />
           </ActionIcon>
@@ -190,6 +203,21 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
           )}
         </Group>
       </div>
+
+      {/* GIF Picker */}
+      <GifPicker
+        isOpen={gifPickerOpen}
+        onClose={() => setGifPickerOpen(false)}
+        onSelect={(gifUrl) => {
+          if (onSendOverride) {
+            onSendOverride(gifUrl);
+          } else {
+            sendMessage.mutate({ content: gifUrl, reply_to_id: replyTo?.id });
+          }
+          setReplyTo(null);
+        }}
+        anchorRef={gifBtnRef.current}
+      />
     </div>
   );
 }

@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { ActionIcon, Avatar, Indicator, ScrollArea, Stack, Tooltip, Divider } from '@mantine/core';
 import { IconHome, IconPlus } from '@tabler/icons-react';
 import { useServers, type Server } from '../../hooks/useServers';
 import { useUIStore } from '../../stores/uiStore';
+import { CreateServerModal } from '../ui/CreateServerModal';
 
 export function ServerSidebar() {
   const { data: servers } = useServers();
   const { activeServerId, setActiveServer, setView, view } = useUIStore();
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   return (
     <div style={{
@@ -64,12 +67,19 @@ export function ServerSidebar() {
               size={48}
               radius="xl"
               style={{ transition: 'border-radius 0.2s' }}
+              onClick={() => setCreateModalOpen(true)}
             >
               <IconPlus size={24} />
             </ActionIcon>
           </Tooltip>
         </Stack>
       </ScrollArea>
+
+      <CreateServerModal
+        opened={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onCreated={(server) => setActiveServer(server.id)}
+      />
     </div>
   );
 }

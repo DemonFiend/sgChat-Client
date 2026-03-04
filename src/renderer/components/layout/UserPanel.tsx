@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { ActionIcon, Avatar, Group, Indicator, Menu, Text, TextInput, Tooltip } from '@mantine/core';
-import { IconMicrophone, IconMicrophoneOff, IconHeadphones, IconHeadphonesOff, IconSettings, IconCircleFilled } from '@tabler/icons-react';
+import { IconMicrophone, IconHeadphones, IconSettings, IconCircleFilled } from '@tabler/icons-react';
 import { useAuthStore } from '../../stores/authStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useVoiceStore } from '../../stores/voiceStore';
 import { emitPresenceUpdate } from '../../api/socket';
 import { api } from '../../lib/api';
 
@@ -26,14 +27,20 @@ export function UserPanel() {
   const statusComment = usePresenceStore((s) => s.statusComments[user.id] || '');
   const statusColor = { online: 'green', idle: 'yellow', dnd: 'red', offline: 'gray' }[currentStatus] || 'gray';
 
+  const updateStatus = useAuthStore((s) => s.updateStatus);
+  const updateCustomStatus = useAuthStore((s) => s.updateCustomStatus);
+  const { muted, deafened, toggleMute, toggleDeafen } = useVoiceStore();
+
   const handleStatusChange = (status: string) => {
     emitPresenceUpdate(status);
+    updateStatus(status as any);
     setStatusMenuOpen(false);
   };
 
   const handleCustomStatusSubmit = () => {
     if (customStatus.trim()) {
       api.patch('/api/users/@me/status-comment', { status_comment: customStatus.trim() }).catch(() => {});
+      updateCustomStatus(customStatus.trim());
     }
     setStatusMenuOpen(false);
   };
@@ -100,14 +107,24 @@ export function UserPanel() {
       </div>
 
       <Group gap={2}>
-        <Tooltip label="Mute" position="top" withArrow>
-          <ActionIcon variant="subtle" color="gray" size={28}>
-            <IconMicrophone size={16} />
+        <Tooltip label={muted ? 'Unmute' : 'Mute'} position="top" withArrow>
+          <ActionIcon
+            variant="subtle"
+            color={muted ? 'red' : 'gray'}
+            size={28}
+            onClick={() => toggleMute()}
+          >
+            <IconMicrophone size={16} style={muted ? { textDecoration: 'line-through' } : undefined} />
           </ActionIcon>
         </Tooltip>
-        <Tooltip label="Deafen" position="top" withArrow>
-          <ActionIcon variant="subtle" color="gray" size={28}>
-            <IconHeadphones size={16} />
+        <Tooltip label={deafened ? 'Undeafen' : 'Deafen'} position="top" withArrow>
+          <ActionIcon
+            variant="subtle"
+            color={deafened ? 'red' : 'gray'}
+            size={28}
+            onClick={() => toggleDeafen()}
+          >
+            <IconHeadphones size={16} style={deafened ? { textDecoration: 'line-through' } : undefined} />
           </ActionIcon>
         </Tooltip>
         <Tooltip label="Settings" position="top" withArrow>

@@ -1,10 +1,11 @@
-import { Avatar, Button, Divider, Group, NavLink, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, TextInput, UnstyledButton } from '@mantine/core';
+import { Button, Divider, Group, NavLink, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton } from '@mantine/core';
 import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
-import { useThemeStore, type ThemeName } from '../stores/themeStore';
+import { useThemeStore, type ThemeName, themeNames } from '../stores/themeStore';
 import { VoiceBar } from '../components/voice/VoiceBar';
+import { AvatarPicker } from '../components/ui/AvatarPicker';
 
 type SettingsTab = 'profile' | 'appearance' | 'notifications' | 'keybinds' | 'voice';
 
@@ -115,31 +116,85 @@ export function SettingsView() {
 }
 
 function ProfileSettings({ user }: { user: any }) {
+  const updateAvatarUrl = useAuthStore((s) => s.updateAvatarUrl);
+  const updateUser = useAuthStore((s) => s.updateUser);
+  const [displayName, setDisplayName] = useState(user?.display_name || '');
+  const [bio, setBio] = useState(user?.bio || '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSaveProfile = async () => {
+    setIsSaving(true);
+    setSaved(false);
+    try {
+      const res = await electronAPI.api.request('PATCH', '/api/users/me', {
+        display_name: displayName || null,
+        bio: bio || null,
+      });
+      if (res.ok) {
+        updateUser({ display_name: displayName || null, bio: bio || null });
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } catch { /* ignore */ }
+    setIsSaving(false);
+  };
+
   return (
     <Stack gap={24}>
       <Text size="xl" fw={700}>My Account</Text>
-      <Group gap={16}>
-        <Avatar src={user?.avatar_url} size={80} radius="xl" color="brand">
-          {user?.username?.charAt(0).toUpperCase()}
-        </Avatar>
-        <div>
-          <Text fw={600} size="lg">{user?.username}</Text>
-          <Text c="dimmed" size="sm">{user?.email}</Text>
-        </div>
-      </Group>
+
+      <AvatarPicker
+        currentAvatarUrl={user?.avatar_url}
+        username={user?.username}
+        displayName={user?.display_name}
+        onAvatarChange={(url) => updateAvatarUrl(url)}
+      />
+
       <Divider style={{ borderColor: 'var(--border)' }} />
+
       <Stack gap={12}>
         <TextInput label="Username" value={user?.username || ''} readOnly />
         <TextInput label="Email" value={user?.email || ''} readOnly />
+        <TextInput
+          label="Display Name"
+          placeholder="How others see you"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.currentTarget.value)}
+          maxLength={32}
+        />
+        <Textarea
+          label="Bio"
+          placeholder="Tell us about yourself..."
+          value={bio}
+          onChange={(e) => setBio(e.currentTarget.value)}
+          maxLength={190}
+          autosize
+          minRows={2}
+          maxRows={4}
+        />
+        <Group gap="xs">
+          <Button
+            size="sm"
+            onClick={handleSaveProfile}
+            loading={isSaving}
+            disabled={isSaving}
+          >
+            {saved ? 'Saved!' : 'Save Changes'}
+          </Button>
+        </Group>
       </Stack>
     </Stack>
   );
 }
 
 const THEME_OPTIONS: Array<{ id: ThemeName; name: string; colors: [string, string, string, string] }> = [
-  { id: 'green', name: 'Soft Green', colors: ['#152019', '#1e2b27', '#4ade80', '#e8f5e9'] },
-  { id: 'midnight', name: 'Midnight Blue', colors: ['#111322', '#1a1d2e', '#6380ff', '#e0e4f7'] },
-  { id: 'light', name: 'Light', colors: ['#e3e5e8', '#ffffff', '#2d7d46', '#2e3338'] },
+  { id: 'green', name: themeNames.green, colors: ['#152019', '#1e2b27', '#4ade80', '#e8f5e9'] },
+  { id: 'midnight', name: themeNames.midnight, colors: ['#111322', '#1a1d2e', '#6380ff', '#e0e4f7'] },
+  { id: 'dark', name: themeNames.dark, colors: ['#1e1f22', '#313338', '#5865f2', '#f2f3f5'] },
+  { id: 'light', name: themeNames.light, colors: ['#e3e5e8', '#ffffff', '#2d7d46', '#2e3338'] },
+  { id: 'oled', name: themeNames.oled, colors: ['#000000', '#0a0a0a', '#5865f2', '#ffffff'] },
+  { id: 'nord', name: themeNames.nord, colors: ['#434c5e', '#2e3440', '#5e81ac', '#eceff4'] },
 ];
 
 function AppearanceSettings() {

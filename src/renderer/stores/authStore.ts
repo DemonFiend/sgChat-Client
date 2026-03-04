@@ -1,34 +1,54 @@
 import { create } from 'zustand';
 import { clearSession as clearCryptoSession } from '../lib/crypto';
+import type { UserPermissions } from './permissions';
 
 const electronAPI = (window as any).electronAPI;
 
-interface User {
+export interface User {
   id: string;
-  username: string;
   email: string;
-  avatar_url?: string;
-  status?: string;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  bio: string | null;
+  status: 'online' | 'idle' | 'dnd' | 'offline';
+  custom_status: string | null;
+  custom_status_expires_at: string | null;
+  created_at: string;
+  permissions?: UserPermissions;
 }
+
+export type AuthErrorReason = 'session_expired' | 'server_unreachable' | 'token_invalid';
 
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   serverUrl: string;
+  authError: AuthErrorReason | null;
 
   login: (serverUrl: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (serverUrl: string, username: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   setServerUrl: (url: string) => void;
+  triggerAuthError: (reason: AuthErrorReason) => void;
+  clearAuthError: () => void;
+  updateStatus: (status: User['status']) => void;
+  updateCustomStatus: (custom_status: string | null, expires_at?: string | null) => void;
+  clearExpiredCustomStatus: () => boolean;
+  refreshUser: () => Promise<User | null>;
+  updateAvatarUrl: (avatar_url: string | null) => void;
+  updateUser: (updates: Partial<User>) => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
   serverUrl: '',
+  authError: null,
 
   login: async (serverUrl, email, password) => {
     const result = await electronAPI.auth.login(serverUrl, email, password);
@@ -49,7 +69,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: async () => {
     clearCryptoSession();
     await electronAPI.auth.logout();
-    set({ user: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false, authError: null });
   },
 
   checkAuth: async () => {
@@ -68,7 +88,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       const isAuth = await electronAPI.auth.check();
 
       if (isAuth) {
-        // Fetch current user data
         const res = await electronAPI.api.request('GET', '/api/users/me');
         if (res.ok) {
           set({ user: res.data, isAuthenticated: true, isLoading: false, serverUrl });
@@ -86,4 +105,67 @@ export const useAuthStore = create<AuthState>((set) => ({
     electronAPI.config.setServerUrl(url);
     set({ serverUrl: url });
   },
+
+  triggerAuthError: (reason) => {
+    if (get().authError === null) set({ authError: reason });
+  },
+
+  clearAuthError: () => set({ authError: null }),
+
+  updateStatus: (status) =>
+    set((s) => ({ user: s.user ? { ...s.user, status } : null })),
+
+  updateCustomStatus: (custom_status, expires_at) =>
+    set((s) => ({
+      user: s.user
+        ? { ...s.user, custom_status, custom_status_expires_at: expires_at ?? null }
+        : null,
+    })),
+
+  clearExpiredCustomStatus: () => {
+    const user = get().user;
+    if (user?.custom_status_expires_at && new Date(user.custom_status_expires_at) <= new Date()) {
+      set((s) => ({
+        user: s.user
+          ? { ...s.user, custom_status: null, custom_status_expires_at: null }
+          : null,
+      }));
+      return true;
+    }
+    return false;
+  },
+
+  refreshUser: async () => {
+    try {
+      const res = await electronAPI.api.request('GET', '/api/users/me');
+      if (res.ok) {
+        set({ user: res.data });
+        return res.data;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  updateAvatarUrl: (avatar_url) =>
+    set((s) => ({ user: s.user ? { ...s.user, avatar_url } : null })),
+
+  updateUser: (updates) =>
+    set((s) => ({ user: s.user ? { ...s.user, ...updates } : null })),
 }));
+
+// Convenience alias for non-hook contexts
+export const authStore = {
+  getState: () => useAuthStore.getState(),
+  state: () => {
+    const s = useAuthStore.getState();
+    return { user: s.user, isAuthenticated: s.isAuthenticated, isLoading: s.isLoading };
+  },
+  triggerAuthError: (reason: AuthErrorReason) => useAuthStore.getState().triggerAuthError(reason),
+  updateStatus: (status: User['status']) => useAuthStore.getState().updateStatus(status),
+  updateCustomStatus: (custom_status: string | null, expires_at?: string | null) =>
+    useAuthStore.getState().updateCustomStatus(custom_status, expires_at),
+  refreshUser: () => useAuthStore.getState().refreshUser(),
+  updateUser: (updates: Partial<User>) => useAuthStore.getState().updateUser(updates),
+};
