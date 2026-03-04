@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ActionIcon, Group, Text, Tooltip } from '@mantine/core';
 import {
   IconMicrophone, IconMicrophoneOff,
   IconHeadphones, IconHeadphonesOff,
   IconScreenShare, IconScreenShareOff,
   IconPhoneOff, IconWifi, IconWifiOff,
-  IconMusic,
+  IconMusic, IconAlertTriangle,
 } from '@tabler/icons-react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { SoundboardPanel } from '../ui/SoundboardPanel';
@@ -38,10 +38,43 @@ export function VoicePanel() {
   const canStream = useVoiceStore((s) => s.permissions?.canStream ?? false);
   const qualityLevel = useVoiceStore((s) => s.connectionQuality.quality);
   const ping = useVoiceStore((s) => s.connectionQuality.ping);
+  const error = useVoiceStore((s) => s.error);
+  const initListeners = useVoiceStore((s) => s.initListeners);
   const [soundboardOpen, setSoundboardOpen] = useState(false);
 
-  if (!connected && connectionState !== 'connecting' && connectionState !== 'reconnecting') {
+  // Initialize voice event listeners (quality polling, participant updates, reconnection)
+  useEffect(() => {
+    const cleanup = initListeners();
+    return cleanup;
+  }, [initListeners]);
+
+  if (!connected && connectionState !== 'connecting' && connectionState !== 'reconnecting' && connectionState !== 'error') {
     return null;
+  }
+
+  // Error state — show error message with disconnect button
+  if (connectionState === 'error') {
+    return (
+      <div style={{
+        background: 'linear-gradient(180deg, rgba(239,68,68,0.08) 0%, var(--bg-tertiary) 100%)',
+        borderTop: '1px solid var(--border)',
+        padding: '12px 8px 8px',
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <IconAlertTriangle size={20} style={{ color: '#ef4444' }} />
+          <Text size="xs" fw={600} style={{ color: '#ef4444' }}>Connection Failed</Text>
+          <Text size="xs" c="dimmed" ta="center" style={{ maxWidth: 180 }}>
+            {error || 'Could not connect to voice channel'}
+          </Text>
+          <Tooltip label="Dismiss" position="top" withArrow>
+            <ActionIcon variant="filled" color="red" size={28} radius="xl" onClick={leave} mt={4}>
+              <IconPhoneOff size={14} />
+            </ActionIcon>
+          </Tooltip>
+        </div>
+      </div>
+    );
   }
 
   const statusLabel =

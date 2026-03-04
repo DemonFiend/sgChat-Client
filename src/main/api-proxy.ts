@@ -27,9 +27,7 @@ export async function apiRequest(
   let token = getAccessToken();
 
   const doFetch = async (authToken: string): Promise<Response> => {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
+    const headers: Record<string, string> = {};
     if (authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
@@ -38,11 +36,16 @@ export async function apiRequest(
     const cryptoActive = hasActiveSession() && !isExemptPath(path);
     let requestBody: string | undefined;
 
-    if (cryptoActive) {
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      if (cryptoActive) {
+        headers['X-Crypto-Session'] = getSessionId()!;
+        requestBody = JSON.stringify(encrypt(body));
+      } else {
+        requestBody = JSON.stringify(body);
+      }
+    } else if (cryptoActive) {
       headers['X-Crypto-Session'] = getSessionId()!;
-      requestBody = body ? JSON.stringify(encrypt(body)) : undefined;
-    } else {
-      requestBody = body ? JSON.stringify(body) : undefined;
     }
 
     return net.fetch(`${serverUrl}${path}`, {

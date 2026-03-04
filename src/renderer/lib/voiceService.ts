@@ -5,6 +5,7 @@ import {
   ConnectionQuality,
 } from 'livekit-client';
 import { api } from './api';
+import { useAuthStore } from '../stores/authStore';
 
 let currentRoom: Room | null = null;
 
@@ -178,13 +179,27 @@ export async function toggleScreenShare(): Promise<boolean> {
   return !isSharing;
 }
 
-export async function toggleDeafen(): Promise<boolean> {
+export async function toggleDeafen(shouldDeafen: boolean): Promise<boolean> {
   if (!currentRoom) return false;
-  const remoteParticipants = Array.from(currentRoom.remoteParticipants.values());
-  const anyEnabled = remoteParticipants.some((p) =>
-    Array.from(p.audioTrackPublications.values()).some((pub) => !pub.isMuted),
-  );
-  return !anyEnabled;
+
+  // Mute/unmute all remote audio elements
+  for (const participant of currentRoom.remoteParticipants.values()) {
+    for (const pub of participant.audioTrackPublications.values()) {
+      if (pub.track) {
+        pub.track.attachedElements.forEach((el) => {
+          (el as HTMLMediaElement).muted = shouldDeafen;
+        });
+      }
+    }
+  }
+
+  // Also mute mic when deafening (deafen = deaf + mute, like Discord)
+  if (shouldDeafen && currentRoom.localParticipant.isMicrophoneEnabled) {
+    await currentRoom.localParticipant.setMicrophoneEnabled(false);
+    emit('participant-update', getParticipants(currentRoom));
+  }
+
+  return shouldDeafen;
 }
 
 export function getConnectionQuality(): { ping: number; quality: 'excellent' | 'good' | 'poor' | 'lost' } | null {
@@ -216,12 +231,14 @@ function getParticipants(room: Room): VoiceParticipant[] {
   const participants: VoiceParticipant[] = [];
 
   const local = room.localParticipant;
+  const currentUser = useAuthStore.getState().user;
   participants.push({
     id: local.identity,
-    username: local.name || local.identity,
+    username: currentUser?.display_name || currentUser?.username || local.name || local.identity,
     isMuted: !local.isMicrophoneEnabled,
     isSpeaking: local.isSpeaking,
     isStreaming: local.isScreenShareEnabled,
+    avatarUrl: currentUser?.avatar_url || undefined,
   });
 
   room.remoteParticipants.forEach((participant) => {
@@ -237,4 +254,30 @@ function getParticipants(room: Room): VoiceParticipant[] {
   });
 
   return participants;
+}
+
+// ── Device switching ────────────────────────────────────────────────────────
+
+export async function switchInputDevice(deviceId: string): Promise<void> {
+  if (!currentRoom) return;
+  await currentRoom.switchActiveDevice('audioinput', deviceId);
+}
+
+export async function switchOutputDevice(deviceId: string): Promise<void> {
+  if (!currentRoom) return;
+  await currentRoom.switchActiveDevice('audiooutput', deviceId);
+}
+
+export function setGlobalOutputVolume(volume: number): void {
+  if (!currentRoom) return;
+  const normalized = Math.max(0, Math.min(200, volume)) / 100;
+  for (const participant of currentRoom.remoteParticipants.values()) {
+    for (const pub of participant.audioTrackPublications.values()) {
+      if (pub.track) {
+        pub.track.attachedElements.forEach((el) => {
+          (el as HTMLMediaElement).volume = normalized;
+        });
+      }
+    }
+  }
 }

@@ -93,37 +93,53 @@ export function TitleBar() {
               </UnstyledButton>
             );
           })}
+
+          {/* Server Settings — admin only, after Friends */}
+          {showServerSettings && (
+            <UnstyledButton
+              onClick={() => setServerSettingsOpen(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 12px',
+                borderRadius: 16,
+                background: 'transparent',
+                color: 'var(--text-muted)',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                transition: 'background 0.15s, color 0.15s',
+              }}
+            >
+              <IconServerCog size={14} />
+              Admin
+            </UnstyledButton>
+          )}
+
+          {/* User Settings — always visible, at end */}
+          <UnstyledButton
+            onClick={() => setView('settings')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 12px',
+              borderRadius: 16,
+              background: view === 'settings' ? 'var(--accent)' : 'transparent',
+              color: view === 'settings' ? 'var(--accent-text)' : 'var(--text-muted)',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            <IconSettings size={14} />
+            Settings
+          </UnstyledButton>
         </Group>
       </div>
 
-      {/* Right: Settings + window controls */}
+      {/* Right: Window controls */}
       <Group gap={0} className="no-drag">
-        {showServerSettings && (
-          <Tooltip label="Server Settings" position="bottom" withArrow>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              size={36}
-              radius={0}
-              onClick={() => setServerSettingsOpen(true)}
-              style={{ borderRadius: 0 }}
-            >
-              <IconServerCog size={14} />
-            </ActionIcon>
-          </Tooltip>
-        )}
-        <Tooltip label="Settings" position="bottom" withArrow>
-          <ActionIcon
-            variant={view === 'settings' ? 'light' : 'subtle'}
-            color={view === 'settings' ? 'brand' : 'gray'}
-            size={36}
-            radius={0}
-            onClick={() => setView('settings')}
-            style={{ borderRadius: 0 }}
-          >
-            <IconSettings size={14} />
-          </ActionIcon>
-        </Tooltip>
         <Tooltip label="Minimize" position="bottom" withArrow>
           <ActionIcon
             variant="subtle"

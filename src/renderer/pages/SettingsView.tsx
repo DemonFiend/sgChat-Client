@@ -1,9 +1,11 @@
 import { Button, Divider, Group, NavLink, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton } from '@mantine/core';
 import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import { useThemeStore, type ThemeName, themeNames } from '../stores/themeStore';
+import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
+import { switchInputDevice, switchOutputDevice, setGlobalOutputVolume } from '../lib/voiceService';
 import { VoiceBar } from '../components/voice/VoiceBar';
 import { AvatarPicker } from '../components/ui/AvatarPicker';
 
@@ -343,13 +345,72 @@ function KeybindSettings() {
 }
 
 function VoiceSettings() {
-  const [inputDevice, setInputDevice] = useState<string | null>(null);
-  const [outputDevice, setOutputDevice] = useState<string | null>(null);
-  const [inputVolume, setInputVolume] = useState(100);
-  const [outputVolume, setOutputVolume] = useState(100);
-  const [noiseSuppression, setNoiseSuppression] = useState(true);
-  const [echoCancellation, setEchoCancellation] = useState(true);
-  const [vad, setVad] = useState(true);
+  const inputDevice = useVoiceSettingsStore((s) => s.inputDevice);
+  const outputDevice = useVoiceSettingsStore((s) => s.outputDevice);
+  const inputVolume = useVoiceSettingsStore((s) => s.inputVolume);
+  const outputVolume = useVoiceSettingsStore((s) => s.outputVolume);
+  const noiseSuppression = useVoiceSettingsStore((s) => s.noiseSuppression);
+  const echoCancellation = useVoiceSettingsStore((s) => s.echoCancellation);
+  const vad = useVoiceSettingsStore((s) => s.vad);
+  const setInputDeviceSetting = useVoiceSettingsStore((s) => s.setInputDevice);
+  const setOutputDeviceSetting = useVoiceSettingsStore((s) => s.setOutputDevice);
+  const setInputVolumeSetting = useVoiceSettingsStore((s) => s.setInputVolume);
+  const setOutputVolumeSetting = useVoiceSettingsStore((s) => s.setOutputVolume);
+  const setNoiseSuppressionSetting = useVoiceSettingsStore((s) => s.setNoiseSuppression);
+  const setEchoCancellationSetting = useVoiceSettingsStore((s) => s.setEchoCancellation);
+  const setVadSetting = useVoiceSettingsStore((s) => s.setVad);
+
+  const [inputDevices, setInputDevices] = useState<{ value: string; label: string }[]>([
+    { value: 'default', label: 'Default — System Microphone' },
+  ]);
+  const [outputDevices, setOutputDevices] = useState<{ value: string; label: string }[]>([
+    { value: 'default', label: 'Default — System Speakers' },
+  ]);
+
+  // Enumerate real audio devices
+  useEffect(() => {
+    async function loadDevices() {
+      try {
+        // Request mic permission to get device labels
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setInputDevices([
+          { value: 'default', label: 'Default' },
+          ...devices
+            .filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications')
+            .map((d) => ({ value: d.deviceId, label: d.label || `Microphone ${d.deviceId.slice(0, 8)}` })),
+        ]);
+        setOutputDevices([
+          { value: 'default', label: 'Default' },
+          ...devices
+            .filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications')
+            .map((d) => ({ value: d.deviceId, label: d.label || `Speaker ${d.deviceId.slice(0, 8)}` })),
+        ]);
+      } catch {
+        // Permission denied or no devices — keep defaults
+      }
+    }
+    loadDevices();
+  }, []);
+
+  const handleInputDeviceChange = (deviceId: string | null) => {
+    if (!deviceId) return;
+    setInputDeviceSetting(deviceId);
+    switchInputDevice(deviceId);
+  };
+
+  const handleOutputDeviceChange = (deviceId: string | null) => {
+    if (!deviceId) return;
+    setOutputDeviceSetting(deviceId);
+    switchOutputDevice(deviceId);
+  };
+
+  const handleOutputVolumeChange = (volume: number) => {
+    setOutputVolumeSetting(volume);
+    setGlobalOutputVolume(volume);
+  };
 
   return (
     <Stack gap={24}>
@@ -360,8 +421,8 @@ function VoiceSettings() {
         label="Input Device"
         placeholder="Default microphone"
         value={inputDevice}
-        onChange={setInputDevice}
-        data={[{ value: 'default', label: 'Default — System Microphone' }]}
+        onChange={handleInputDeviceChange}
+        data={inputDevices}
       />
 
       <div>
@@ -369,15 +430,15 @@ function VoiceSettings() {
           <Text size="sm">Input Volume</Text>
           <Text size="xs" c="dimmed">{inputVolume}%</Text>
         </Group>
-        <Slider value={inputVolume} onChange={setInputVolume} min={0} max={200} />
+        <Slider value={inputVolume} onChange={setInputVolumeSetting} min={0} max={200} />
       </div>
 
       <Select
         label="Output Device"
         placeholder="Default speakers"
         value={outputDevice}
-        onChange={setOutputDevice}
-        data={[{ value: 'default', label: 'Default — System Speakers' }]}
+        onChange={handleOutputDeviceChange}
+        data={outputDevices}
       />
 
       <div>
@@ -385,7 +446,7 @@ function VoiceSettings() {
           <Text size="sm">Output Volume</Text>
           <Text size="xs" c="dimmed">{outputVolume}%</Text>
         </Group>
-        <Slider value={outputVolume} onChange={setOutputVolume} min={0} max={200} />
+        <Slider value={outputVolume} onChange={handleOutputVolumeChange} min={0} max={200} />
       </div>
 
       <Divider style={{ borderColor: 'var(--border)' }} />
@@ -394,21 +455,21 @@ function VoiceSettings() {
         label="Voice Activity Detection"
         description="Automatically detect when you're speaking"
         checked={vad}
-        onChange={(e) => setVad(e.currentTarget.checked)}
+        onChange={(e) => setVadSetting(e.currentTarget.checked)}
       />
 
       <Switch
         label="Noise Suppression"
         description="Reduce background noise from your microphone"
         checked={noiseSuppression}
-        onChange={(e) => setNoiseSuppression(e.currentTarget.checked)}
+        onChange={(e) => setNoiseSuppressionSetting(e.currentTarget.checked)}
       />
 
       <Switch
         label="Echo Cancellation"
         description="Prevent echo from speakers feeding back into microphone"
         checked={echoCancellation}
-        onChange={(e) => setEchoCancellation(e.currentTarget.checked)}
+        onChange={(e) => setEchoCancellationSetting(e.currentTarget.checked)}
       />
     </Stack>
   );

@@ -3,6 +3,7 @@ import {
   joinVoiceChannel,
   leaveVoiceChannel,
   toggleMute as toggleMuteService,
+  toggleDeafen as toggleDeafenService,
   toggleScreenShare as toggleScreenShareService,
   getConnectionQuality,
   onVoiceEvent,
@@ -47,7 +48,7 @@ interface VoiceState {
   join: (channelId: string, channelName?: string) => Promise<{ success: boolean; error?: string }>;
   leave: () => Promise<void>;
   toggleMute: () => Promise<void>;
-  toggleDeafen: () => void;
+  toggleDeafen: () => Promise<void>;
   toggleScreenShare: () => Promise<void>;
   setConnectionQuality: (quality: ConnectionQualityState) => void;
   initListeners: () => () => void;
@@ -106,8 +107,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     set({ muted: !newEnabled });
   },
 
-  toggleDeafen: () => {
-    set((s) => ({ deafened: !s.deafened }));
+  toggleDeafen: async () => {
+    const wasDeafened = get().deafened;
+    const isNowDeafened = await toggleDeafenService(!wasDeafened);
+    set({
+      deafened: isNowDeafened,
+      muted: isNowDeafened ? true : get().muted,
+    });
   },
 
   toggleScreenShare: async () => {

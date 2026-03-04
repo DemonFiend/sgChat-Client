@@ -270,7 +270,7 @@ function handleEvent(type: string, data: any): void {
       if (voiceStore.connected) {
         voiceStore.leave().then(() => {
           if (data.channel_id) {
-            voiceStore.join(data.channel_id);
+            voiceStore.join(data.channel_id, data.channel_name);
           }
         });
       }

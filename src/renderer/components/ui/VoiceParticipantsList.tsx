@@ -1,6 +1,8 @@
-import { Avatar, Group, Stack, Text, Tooltip } from '@mantine/core';
-import { IconMicrophoneOff, IconScreenShare } from '@tabler/icons-react';
+import { Avatar, Badge, Group, Stack, Text, Tooltip } from '@mantine/core';
+import { IconMicrophoneOff, IconHeadphonesOff } from '@tabler/icons-react';
 import type { VoiceParticipant } from '../../lib/voiceService';
+import { useStreamViewerStore } from '../../stores/streamViewer';
+import { useVoiceStore } from '../../stores/voiceStore';
 
 interface VoiceParticipantsListProps {
   participants: VoiceParticipant[];
@@ -8,6 +10,9 @@ interface VoiceParticipantsListProps {
 }
 
 export function VoiceParticipantsList({ participants, compact }: VoiceParticipantsListProps) {
+  const openStream = useStreamViewerStore((s) => s.openStream);
+  const channelId = useVoiceStore((s) => s.channelId);
+
   if (participants.length === 0) return null;
 
   return (
@@ -44,9 +49,22 @@ export function VoiceParticipantsList({ participants, compact }: VoiceParticipan
               <IconMicrophoneOff size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
             </Tooltip>
           )}
+          {p.isDeafened && (
+            <Tooltip label="Deafened" position="right" withArrow>
+              <IconHeadphonesOff size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+            </Tooltip>
+          )}
           {p.isStreaming && (
-            <Tooltip label="Screen Sharing" position="right" withArrow>
-              <IconScreenShare size={12} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+            <Tooltip label="Watch Stream" position="right" withArrow>
+              <Badge
+                size="xs"
+                variant="filled"
+                color="red"
+                style={{ fontSize: '0.55rem', cursor: 'pointer', flexShrink: 0 }}
+                onClick={() => channelId && openStream(p.id, p.username, channelId)}
+              >
+                LIVE
+              </Badge>
             </Tooltip>
           )}
         </Group>

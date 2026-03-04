@@ -250,7 +250,7 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
   const Icon = getChannelIcon(channel);
   const unreadEntry = useUnreadStore((s) => s.unreads[channel.id]);
   const hasUnread = (unreadEntry?.count ?? 0) > 0;
-  const isVoiceType = channel.type === 'voice' || channel.type === 'temp_voice' || channel.type === 'temp_voice_generator';
+  const isVoiceType = channel.type === 'voice' || channel.type === 'temp_voice' || channel.type === 'temp_voice_generator' || channel.type === 'music';
   const [hovered, setHovered] = useState(false);
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
 
@@ -260,10 +260,10 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
   const voiceParticipants = useVoiceStore((s) => s.participants);
 
   const handleClick = () => {
-    if (isVoiceType && channel.type !== 'temp_voice_generator') {
-      // Join voice channel
+    if (isVoiceType) {
+      // Join voice channel (server handles temp_voice_generator automatically)
       if (voiceChannelId !== channel.id) {
-        voiceJoin(channel.id);
+        voiceJoin(channel.id, channel.name);
       }
     } else {
       onClick();
