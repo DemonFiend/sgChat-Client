@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
-export type ChannelType = 'text' | 'voice' | 'category' | 'announcement' | 'music' | 'temp_voice_generator' | 'temp_voice';
+export type ChannelType = 'text' | 'voice' | 'announcement' | 'music' | 'temp_voice_generator' | 'temp_voice';
 
 export interface Channel {
   id: string;

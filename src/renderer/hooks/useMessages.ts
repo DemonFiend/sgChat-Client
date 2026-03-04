@@ -34,14 +34,17 @@ export interface Message {
 export function useMessages(channelId: string | null) {
   return useInfiniteQuery({
     queryKey: ['messages', channelId],
-    queryFn: ({ pageParam }) => {
+    queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams({ limit: '50' });
       if (pageParam) params.set('before', pageParam);
-      return api.get<Message[]>(`/api/channels/${channelId}/messages?${params}`);
+      const res = await api.get<{ messages: Message[]; hash: string }>(
+        `/api/channels/${channelId}/messages?${params}`,
+      );
+      return res.messages;
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => {
-      if (lastPage.length < 50) return undefined;
+      if (!lastPage || lastPage.length < 50) return undefined;
       return lastPage[lastPage.length - 1]?.id;
     },
     enabled: !!channelId,

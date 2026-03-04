@@ -28,7 +28,7 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
   const addReaction = useAddReaction(channelId);
   const removeReaction = useRemoveReaction(channelId);
 
-  const isOwn = currentUser?.id === message.author.id;
+  const isOwn = currentUser?.id === message.author?.id;
   const isEdited = message.updated_at && message.updated_at !== message.created_at;
 
   const handleStartEdit = () => {
@@ -61,7 +61,7 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
     setReplyTo({
       id: message.id,
       content: message.content,
-      author: { id: message.author.id, username: message.author.username },
+      author: { id: message.author?.id ?? '', username: message.author?.username ?? 'Unknown' },
     });
   };
 
@@ -234,7 +234,7 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
           marginBottom: 16,
           borderLeft: '3px solid var(--border)',
         }}>
-          <Text size="xs" fw={600} mb={2}>{message.author.username}</Text>
+          <Text size="xs" fw={600} mb={2}>{message.author?.username ?? 'Unknown'}</Text>
           <Text size="xs" c="dimmed" lineClamp={3}>{message.content}</Text>
         </div>
         <Group justify="flex-end" gap={8}>

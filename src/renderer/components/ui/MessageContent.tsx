@@ -91,7 +91,7 @@ function ImageRenderer({ src, compact }: { src: string; compact?: boolean }) {
   const maxH = compact ? 150 : 300;
 
   return (
-    <div style={{ margin: '4px 0' }}>
+    <div style={{ margin: '4px 0', position: 'relative', display: 'inline-block' }}>
       <Image
         src={src}
         alt="Shared image"

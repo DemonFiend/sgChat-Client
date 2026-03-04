@@ -138,7 +138,7 @@ function MessageList({ channelId }: { channelId: string }) {
   const groups: Message[][] = [];
   for (const msg of messages) {
     const lastGroup = groups[groups.length - 1];
-    if (lastGroup && lastGroup[0].author.id === msg.author.id) {
+    if (lastGroup && lastGroup[0].author?.id && msg.author?.id && lastGroup[0].author.id === msg.author.id) {
       const timeDiff = new Date(msg.created_at).getTime() - new Date(lastGroup[lastGroup.length - 1].created_at).getTime();
       if (timeDiff < 5 * 60 * 1000) { // 5 min grouping
         lastGroup.push(msg);

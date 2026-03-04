@@ -6,6 +6,7 @@ import {
   IconLink, IconBell, IconCrown, IconInfoCircle,
 } from '@tabler/icons-react';
 import { useChannels, type Channel, type ChannelType } from '../../hooks/useChannels';
+import { useCategories } from '../../hooks/useCategories';
 import { useUIStore } from '../../stores/uiStore';
 import { useServers } from '../../hooks/useServers';
 import { useUnreadStore } from '../../stores/unreadStore';
@@ -19,7 +20,6 @@ import { ChannelSettingsModal } from '../ui/ChannelSettingsModal';
 const CHANNEL_ICONS: Record<ChannelType, typeof IconHash> = {
   text: IconHash,
   voice: IconVolume,
-  category: IconHash, // not rendered directly
   announcement: IconSpeakerphone,
   music: IconMusic,
   temp_voice_generator: IconPlus,
@@ -37,6 +37,7 @@ export function ChannelSidebar() {
   const setActiveChannel = useUIStore((s) => s.setActiveChannel);
   const { data: servers } = useServers();
   const { data: channels } = useChannels(activeServerId);
+  const { data: fetchedCategories } = useCategories(activeServerId);
   const unreads = useUnreadStore((s) => s.unreads);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -73,9 +74,9 @@ export function ChannelSidebar() {
   // Sort all channels by position
   const sorted = [...(channels || [])].sort((a, b) => a.position - b.position);
 
-  // Group channels by category
-  const categories = sorted.filter((c) => c.type === 'category');
-  const uncategorized = sorted.filter((c) => c.type !== 'category' && !c.category_id);
+  // Categories come from a separate API — group channels by category_id
+  const sortedCategories = [...(fetchedCategories || [])].sort((a, b) => a.position - b.position);
+  const uncategorized = sorted.filter((c) => !c.category_id);
 
   const serverMotd = activeServer?.motd;
 
@@ -179,9 +180,9 @@ export function ChannelSidebar() {
           ))}
 
           {/* Categorized channels */}
-          {categories.map((category) => {
+          {sortedCategories.map((category) => {
             const categoryChannels = sorted.filter(
-              (c) => c.category_id === category.id && c.type !== 'category'
+              (c) => c.category_id === category.id
             );
             const isCollapsed = collapsedCategories.has(category.id);
             const categoryChannelIds = categoryChannels.map((c) => c.id);
@@ -309,7 +310,7 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
         <Text size="sm" truncate style={{ flex: 1 }}>
           {channel.name}
         </Text>
-        {hovered && channel.type !== 'category' && (
+        {hovered && (
           <Tooltip label="Edit Channel" withArrow position="top">
             <ActionIcon
               variant="subtle"

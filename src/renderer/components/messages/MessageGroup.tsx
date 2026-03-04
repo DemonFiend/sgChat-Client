@@ -28,20 +28,20 @@ export function MessageGroup({ messages, channelId }: MessageGroupProps) {
     >
       {/* Avatar */}
       <Avatar
-        src={firstMsg.author.avatar_url}
+        src={firstMsg.author?.avatar_url}
         size={40}
         radius="xl"
         color="brand"
         style={{ flexShrink: 0, marginTop: 2 }}
       >
-        {firstMsg.author.username.charAt(0).toUpperCase()}
+        {(firstMsg.author?.username ?? '?').charAt(0).toUpperCase()}
       </Avatar>
 
       {/* Content */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <Group gap={8} align="baseline">
           <Text fw={600} size="sm" style={{ color: 'var(--text-primary)' }}>
-            {firstMsg.author.username}
+            {firstMsg.author?.username ?? 'Unknown User'}
           </Text>
           <Text size="xs" c="dimmed">
             {timeStr}

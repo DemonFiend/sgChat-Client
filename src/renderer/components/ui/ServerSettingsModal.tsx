@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   ActionIcon, Avatar, Badge, Button, ColorInput, CopyButton, Group, Modal,
-  NavLink, NumberInput, ScrollArea, Stack, Switch, Table, Text, TextInput,
+  NavLink, NumberInput, ScrollArea, Select, Stack, Switch, Table, Text, TextInput,
   Textarea, Tooltip, UnstyledButton,
 } from '@mantine/core';
 import {
@@ -447,12 +447,17 @@ function ChannelsTab({ serverId }: { serverId: string }) {
   });
 
   const [newName, setNewName] = useState('');
-  const [newType, setNewType] = useState<'text' | 'voice'>('text');
+  const [newType, setNewType] = useState<'text' | 'voice' | 'announcement' | 'music' | 'temp_voice_generator'>('text');
   const [creating, setCreating] = useState(false);
 
+  const { data: fetchedCategories } = useQuery({
+    queryKey: ['categories', serverId],
+    queryFn: () => api.get<{ id: string; name: string; position: number }[]>(`/api/servers/${serverId}/categories`),
+  });
+
   const sorted = [...(channels || [])].sort((a, b) => a.position - b.position);
-  const categories = sorted.filter((c) => c.type === 'category');
-  const uncategorized = sorted.filter((c) => c.type !== 'category' && !c.category_id);
+  const sortedCategories = [...(fetchedCategories || [])].sort((a, b) => a.position - b.position);
+  const uncategorized = sorted.filter((c) => !c.category_id);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -512,20 +517,20 @@ function ChannelsTab({ serverId }: { serverId: string }) {
           onChange={(e) => setNewName(e.currentTarget.value)}
           style={{ flex: 1 }}
         />
-        <Button
-          variant={newType === 'text' ? 'filled' : 'outline'}
+        <Select
+          label="Type"
+          value={newType}
+          onChange={(val) => val && setNewType(val as typeof newType)}
+          data={[
+            { value: 'text', label: 'Text' },
+            { value: 'voice', label: 'Voice' },
+            { value: 'announcement', label: 'Announcement' },
+            { value: 'music', label: 'Music' },
+            { value: 'temp_voice_generator', label: 'Temp VC' },
+          ]}
           size="xs"
-          onClick={() => setNewType('text')}
-        >
-          Text
-        </Button>
-        <Button
-          variant={newType === 'voice' ? 'filled' : 'outline'}
-          size="xs"
-          onClick={() => setNewType('voice')}
-        >
-          Voice
-        </Button>
+          style={{ width: 140 }}
+        />
         <Button
           leftSection={<IconPlus size={14} />}
           onClick={handleCreate}
@@ -544,8 +549,8 @@ function ChannelsTab({ serverId }: { serverId: string }) {
             {uncategorized.map(renderChannel)}
           </>
         )}
-        {categories.map((cat) => {
-          const children = sorted.filter((c) => c.category_id === cat.id && c.type !== 'category');
+        {sortedCategories.map((cat) => {
+          const children = sorted.filter((c) => c.category_id === cat.id);
           return (
             <div key={cat.id}>
               <Group gap={8} px={4} py={6}>
@@ -747,9 +752,12 @@ function BansTab({ serverId }: { serverId: string }) {
 interface AuditEntry {
   id: string;
   action: string;
-  user: { id: string; username: string };
-  target?: { id: string; type: string; name?: string };
+  user_id: string | null;
+  actor_username: string | null;
+  target_type?: string;
+  target_id?: string;
   changes?: Record<string, any>;
+  reason?: string;
   created_at: string;
 }
 
@@ -779,12 +787,9 @@ function AuditLogTab({ serverId }: { serverId: string }) {
             >
               <div style={{ flex: 1, minWidth: 0 }}>
                 <Text size="sm">
-                  <Text component="span" fw={600}>{entry.user.username}</Text>
+                  <Text component="span" fw={600}>{entry.actor_username || 'System'}</Text>
                   {' '}
                   <Text component="span" c="dimmed">{entry.action.replace(/_/g, ' ')}</Text>
-                  {entry.target?.name && (
-                    <Text component="span" fw={500}>{' '}{entry.target.name}</Text>
-                  )}
                 </Text>
               </div>
               <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
