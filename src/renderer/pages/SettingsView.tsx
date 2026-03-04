@@ -5,7 +5,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import { useThemeStore, type ThemeName, themeNames } from '../stores/themeStore';
 import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
-import { switchInputDevice, switchOutputDevice, setGlobalOutputVolume } from '../lib/voiceService';
+import { switchInputDevice, switchOutputDevice, setGlobalOutputVolume, applyAudioProcessingSettings } from '../lib/voiceService';
 import { VoiceBar } from '../components/voice/VoiceBar';
 import { AvatarPicker } from '../components/ui/AvatarPicker';
 
@@ -351,6 +351,7 @@ function VoiceSettings() {
   const outputVolume = useVoiceSettingsStore((s) => s.outputVolume);
   const noiseSuppression = useVoiceSettingsStore((s) => s.noiseSuppression);
   const echoCancellation = useVoiceSettingsStore((s) => s.echoCancellation);
+  const autoGainControl = useVoiceSettingsStore((s) => s.autoGainControl);
   const vad = useVoiceSettingsStore((s) => s.vad);
   const setInputDeviceSetting = useVoiceSettingsStore((s) => s.setInputDevice);
   const setOutputDeviceSetting = useVoiceSettingsStore((s) => s.setOutputDevice);
@@ -358,7 +359,9 @@ function VoiceSettings() {
   const setOutputVolumeSetting = useVoiceSettingsStore((s) => s.setOutputVolume);
   const setNoiseSuppressionSetting = useVoiceSettingsStore((s) => s.setNoiseSuppression);
   const setEchoCancellationSetting = useVoiceSettingsStore((s) => s.setEchoCancellation);
+  const setAutoGainControlSetting = useVoiceSettingsStore((s) => s.setAutoGainControl);
   const setVadSetting = useVoiceSettingsStore((s) => s.setVad);
+  const validateDevices = useVoiceSettingsStore((s) => s.validateDevices);
 
   const [inputDevices, setInputDevices] = useState<{ value: string; label: string }[]>([
     { value: 'default', label: 'Default — System Microphone' },
@@ -367,7 +370,7 @@ function VoiceSettings() {
     { value: 'default', label: 'Default — System Speakers' },
   ]);
 
-  // Enumerate real audio devices
+  // Enumerate real audio devices and validate saved selections
   useEffect(() => {
     async function loadDevices() {
       try {
@@ -376,24 +379,38 @@ function VoiceSettings() {
         stream.getTracks().forEach((t) => t.stop());
 
         const devices = await navigator.mediaDevices.enumerateDevices();
+        const inputs = devices.filter(
+          (d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications',
+        );
+        const outputs = devices.filter(
+          (d) => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications',
+        );
+
         setInputDevices([
           { value: 'default', label: 'Default' },
-          ...devices
-            .filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications')
-            .map((d) => ({ value: d.deviceId, label: d.label || `Microphone ${d.deviceId.slice(0, 8)}` })),
+          ...inputs.map((d) => ({ value: d.deviceId, label: d.label || `Microphone ${d.deviceId.slice(0, 8)}` })),
         ]);
         setOutputDevices([
           { value: 'default', label: 'Default' },
-          ...devices
-            .filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications')
-            .map((d) => ({ value: d.deviceId, label: d.label || `Speaker ${d.deviceId.slice(0, 8)}` })),
+          ...outputs.map((d) => ({ value: d.deviceId, label: d.label || `Speaker ${d.deviceId.slice(0, 8)}` })),
         ]);
+
+        // Validate saved device IDs — reset to default if device was unplugged
+        validateDevices(
+          inputs.map((d) => d.deviceId),
+          outputs.map((d) => d.deviceId),
+        );
       } catch {
         // Permission denied or no devices — keep defaults
       }
     }
     loadDevices();
-  }, []);
+
+    // Re-validate when devices change (plug/unplug)
+    const onChange = () => { loadDevices(); };
+    navigator.mediaDevices.addEventListener('devicechange', onChange);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', onChange);
+  }, [validateDevices]);
 
   const handleInputDeviceChange = (deviceId: string | null) => {
     if (!deviceId) return;
@@ -445,9 +462,9 @@ function VoiceSettings() {
       const constraints: MediaStreamConstraints = {
         audio: {
           deviceId: inputDevice !== 'default' ? { exact: inputDevice } : undefined,
-          echoCancellation: echoCancellation,
-          noiseSuppression: noiseSuppression,
-          autoGainControl: true,
+          echoCancellation,
+          noiseSuppression,
+          autoGainControl,
         },
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -466,7 +483,7 @@ function VoiceSettings() {
     } catch {
       // Permission denied or device error
     }
-  }, [inputDevice, echoCancellation, noiseSuppression, updateMicLevel]);
+  }, [inputDevice, echoCancellation, noiseSuppression, autoGainControl, updateMicLevel]);
 
   // Cleanup on unmount
   useEffect(() => () => { stopMicTest(); }, [stopMicTest]);
@@ -563,14 +580,30 @@ function VoiceSettings() {
         label="Noise Suppression"
         description="Reduce background noise from your microphone"
         checked={noiseSuppression}
-        onChange={(e) => setNoiseSuppressionSetting(e.currentTarget.checked)}
+        onChange={(e) => {
+          setNoiseSuppressionSetting(e.currentTarget.checked);
+          applyAudioProcessingSettings();
+        }}
       />
 
       <Switch
         label="Echo Cancellation"
         description="Prevent echo from speakers feeding back into microphone"
         checked={echoCancellation}
-        onChange={(e) => setEchoCancellationSetting(e.currentTarget.checked)}
+        onChange={(e) => {
+          setEchoCancellationSetting(e.currentTarget.checked);
+          applyAudioProcessingSettings();
+        }}
+      />
+
+      <Switch
+        label="Automatic Gain Control"
+        description="Automatically adjust microphone volume to a consistent level"
+        checked={autoGainControl}
+        onChange={(e) => {
+          setAutoGainControlSetting(e.currentTarget.checked);
+          applyAudioProcessingSettings();
+        }}
       />
     </Stack>
   );

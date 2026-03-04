@@ -6,6 +6,7 @@ import {
 } from 'livekit-client';
 import { api } from './api';
 import { useAuthStore } from '../stores/authStore';
+import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
 import { soundService } from './soundService';
 
 let currentRoom: Room | null = null;
@@ -84,9 +85,25 @@ export async function joinVoiceChannel(channelId: string): Promise<{
       return { success: false, error: 'Server returned incomplete voice connection data' };
     }
 
+    // Read voice settings for audio capture defaults
+    const voiceSettings = useVoiceSettingsStore.getState();
+
     const room = new Room({
       adaptiveStream: true,
       dynacast: true,
+      audioCaptureDefaults: {
+        deviceId: voiceSettings.inputDevice !== 'default' ? voiceSettings.inputDevice : undefined,
+        autoGainControl: voiceSettings.autoGainControl,
+        echoCancellation: voiceSettings.echoCancellation,
+        noiseSuppression: voiceSettings.noiseSuppression,
+      },
+      audioOutput: {
+        deviceId: voiceSettings.outputDevice !== 'default' ? voiceSettings.outputDevice : undefined,
+      },
+      publishDefaults: {
+        dtx: true,  // Discontinuous Transmission — save bandwidth during silence
+        red: true,  // Redundant encoding — resilience against packet loss
+      },
     });
 
     // Audio track subscribed
@@ -289,14 +306,49 @@ export async function switchOutputDevice(deviceId: string): Promise<void> {
 
 export function setGlobalOutputVolume(volume: number): void {
   if (!currentRoom) return;
-  const normalized = Math.max(0, Math.min(200, volume)) / 100;
+  const globalNorm = Math.max(0, Math.min(200, volume)) / 100;
   for (const participant of currentRoom.remoteParticipants.values()) {
+    const userVol = (userVolumes.get(participant.identity) ?? 100) / 100;
+    const finalVol = Math.min(2, globalNorm * userVol);
     for (const pub of participant.audioTrackPublications.values()) {
       if (pub.track) {
         pub.track.attachedElements.forEach((el) => {
-          (el as HTMLMediaElement).volume = normalized;
+          (el as HTMLMediaElement).volume = finalVol;
         });
       }
+    }
+  }
+}
+
+/**
+ * Apply updated audio processing settings to the active room's local microphone track.
+ * Call this when noise suppression, echo cancellation, AGC, or VAD toggles change.
+ */
+export async function applyAudioProcessingSettings(): Promise<void> {
+  if (!currentRoom) return;
+  const { noiseSuppression, echoCancellation, autoGainControl, inputDevice } =
+    useVoiceSettingsStore.getState();
+
+  const localPub = currentRoom.localParticipant.getTrackPublication(Track.Source.Microphone);
+  if (!localPub?.track?.mediaStreamTrack) return;
+
+  try {
+    await localPub.track.mediaStreamTrack.applyConstraints({
+      echoCancellation,
+      noiseSuppression,
+      autoGainControl,
+      deviceId: inputDevice !== 'default' ? { exact: inputDevice } : undefined,
+    });
+  } catch {
+    // Constraint not supported — restart track with new settings instead
+    if (currentRoom.localParticipant.isMicrophoneEnabled) {
+      await currentRoom.localParticipant.setMicrophoneEnabled(false);
+      await currentRoom.localParticipant.setMicrophoneEnabled(true, {
+        deviceId: inputDevice !== 'default' ? inputDevice : undefined,
+        autoGainControl,
+        echoCancellation,
+        noiseSuppression,
+      });
     }
   }
 }
