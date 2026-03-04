@@ -62,10 +62,26 @@ export async function joinVoiceChannel(channelId: string): Promise<{
 }> {
   try {
     const response = await api.post<{
-      livekit_token: string;
-      livekit_url: string;
-      permissions: { can_speak: boolean; can_video: boolean; can_stream: boolean };
+      livekit_token?: string;
+      livekit_url?: string;
+      token?: string;
+      url?: string;
+      permissions: {
+        can_speak?: boolean; can_video?: boolean; can_stream?: boolean;
+        canSpeak?: boolean; canVideo?: boolean; canStream?: boolean;
+      };
     }>(`/api/voice/join/${channelId}`);
+
+    // Server returns different keys for temp_voice_generator vs regular channels
+    const livekitToken = response.livekit_token || response.token;
+    const livekitUrl = response.livekit_url || response.url;
+    const canSpeak = response.permissions.can_speak ?? response.permissions.canSpeak ?? false;
+    const canVideo = response.permissions.can_video ?? response.permissions.canVideo ?? false;
+    const canStream = response.permissions.can_stream ?? response.permissions.canStream ?? false;
+
+    if (!livekitToken || !livekitUrl) {
+      return { success: false, error: 'Server returned incomplete voice connection data' };
+    }
 
     const room = new Room({
       adaptiveStream: true,
@@ -133,10 +149,14 @@ export async function joinVoiceChannel(channelId: string): Promise<{
       currentRoom = null;
     });
 
-    await room.connect(response.livekit_url, response.livekit_token);
+    await room.connect(livekitUrl, livekitToken);
 
-    if (response.permissions.can_speak) {
-      await room.localParticipant.setMicrophoneEnabled(true);
+    if (canSpeak) {
+      try {
+        await room.localParticipant.setMicrophoneEnabled(true);
+      } catch {
+        // Token may restrict publishing (e.g. AFK channels) — silently continue
+      }
     }
 
     currentRoom = room;
@@ -145,11 +165,7 @@ export async function joinVoiceChannel(channelId: string): Promise<{
 
     return {
       success: true,
-      permissions: {
-        canSpeak: response.permissions.can_speak,
-        canVideo: response.permissions.can_video,
-        canStream: response.permissions.can_stream,
-      },
+      permissions: { canSpeak, canVideo, canStream },
     };
   } catch (err: any) {
     return { success: false, error: err.message || 'Failed to join voice channel' };
