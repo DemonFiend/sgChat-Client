@@ -1,12 +1,20 @@
 import { Text } from '@mantine/core';
 import { useTypingStore } from '../../stores/typingStore';
 
+const TYPING_TIMEOUT = 8000;
+
 interface TypingIndicatorProps {
   channelId: string;
 }
 
 export function TypingIndicator({ channelId }: TypingIndicatorProps) {
-  const typing = useTypingStore((s) => s.getTyping(channelId));
+  // Select the raw array from state — stable reference (same object until that channel's typing changes).
+  // Do NOT call s.getTyping() here: .filter() creates a new array every call,
+  // which breaks useSyncExternalStore's Object.is check → infinite re-render loop (React error #185).
+  const typingEntries = useTypingStore((s) => s.typing[channelId]);
+  const typing = typingEntries
+    ? typingEntries.filter((t) => Date.now() - t.timestamp < TYPING_TIMEOUT)
+    : [];
 
   if (typing.length === 0) return <div style={{ height: 20, flexShrink: 0 }} />;
 
