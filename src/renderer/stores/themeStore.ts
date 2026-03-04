@@ -15,10 +15,10 @@ function applyTheme(theme: ThemeName) {
 }
 
 function getInitialTheme(): ThemeName {
-  if (typeof localStorage === 'undefined') return 'midnight';
+  if (typeof localStorage === 'undefined') return 'green';
   const stored = localStorage.getItem(STORAGE_KEY) as ThemeName | null;
   if (stored && ALL_THEMES.includes(stored)) return stored;
-  return 'midnight';
+  return 'green';
 }
 
 const initial = getInitialTheme();

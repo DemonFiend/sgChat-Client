@@ -29,7 +29,8 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
   const removeReaction = useRemoveReaction(channelId);
 
   const isOwn = currentUser?.id === message.author?.id;
-  const isEdited = message.updated_at && message.updated_at !== message.created_at;
+  const isSystemMessage = !!message.system_event || !message.author;
+  const isEdited = message.edited_at && message.edited_at !== message.created_at;
 
   const handleStartEdit = () => {
     setEditContent(message.content);
@@ -92,8 +93,8 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
         </Group>
       )}
 
-      {/* Action toolbar (shows on hover) */}
-      {hovered && !editing && (
+      {/* Action toolbar (shows on hover, hidden for system messages) */}
+      {hovered && !editing && !isSystemMessage && (
         <Group
           gap={2}
           style={{
@@ -176,9 +177,9 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
       )}
 
       {/* Attachments */}
-      {message.attachments?.map((att, i) => (
+      {(Array.isArray(message.attachments) ? message.attachments : []).map((att, i) => (
         <div key={i} style={{ marginTop: 4 }}>
-          {att.content_type?.startsWith('image/') ? (
+          {att.mime_type?.startsWith('image/') ? (
             <img
               src={att.url}
               alt={att.filename}

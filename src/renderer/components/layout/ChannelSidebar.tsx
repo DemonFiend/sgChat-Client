@@ -11,8 +11,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useServers } from '../../hooks/useServers';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { UserPanel } from './UserPanel';
-import { VoiceBar } from '../voice/VoiceBar';
+import { UserInfoPanel } from './UserInfoPanel';
+import { VoicePanel } from '../voice/VoicePanel';
 import { VoiceParticipantsList } from '../ui/VoiceParticipantsList';
 import { ServerSettingsModal } from '../ui/ServerSettingsModal';
 import { ChannelSettingsModal } from '../ui/ChannelSettingsModal';
@@ -239,9 +239,9 @@ export function ChannelSidebar() {
         </Stack>
       </ScrollArea>
 
-      {/* Voice bar + User panel at bottom */}
-      <VoiceBar compact />
-      <UserPanel />
+      {/* Voice panel + User info at bottom */}
+      <VoicePanel />
+      <UserInfoPanel />
     </div>
   );
 }

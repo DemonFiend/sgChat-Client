@@ -1,8 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActionIcon, Badge, Group, Indicator, Text, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings } from '@tabler/icons-react';
+import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog } from '@tabler/icons-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
+import { useServers } from '../../hooks/useServers';
+import { canManageServer } from '../../stores/permissions';
+import { ServerSettingsModal } from '../ui/ServerSettingsModal';
 
 const electronAPI = (window as any).electronAPI;
 
@@ -15,8 +18,13 @@ const NAV_TABS = [
 export function TitleBar() {
   const view = useUIStore((s) => s.view);
   const setView = useUIStore((s) => s.setView);
+  const activeServerId = useUIStore((s) => s.activeServerId);
   const unreads = useUnreadStore((s) => s.unreads);
   const totalUnread = Object.values(unreads).reduce((sum, e) => sum + e.count, 0);
+  const { data: servers } = useServers();
+  const activeServer = servers?.find((s) => s.id === activeServerId);
+  const showServerSettings = view === 'servers' && !!activeServerId && canManageServer(activeServer?.owner_id);
+  const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
 
   // Update window title with unread count
   useEffect(() => {
@@ -90,6 +98,20 @@ export function TitleBar() {
 
       {/* Right: Settings + window controls */}
       <Group gap={0} className="no-drag">
+        {showServerSettings && (
+          <Tooltip label="Server Settings" position="bottom" withArrow>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size={36}
+              radius={0}
+              onClick={() => setServerSettingsOpen(true)}
+              style={{ borderRadius: 0 }}
+            >
+              <IconServerCog size={14} />
+            </ActionIcon>
+          </Tooltip>
+        )}
         <Tooltip label="Settings" position="bottom" withArrow>
           <ActionIcon
             variant={view === 'settings' ? 'light' : 'subtle'}
@@ -139,6 +161,14 @@ export function TitleBar() {
           </ActionIcon>
         </Tooltip>
       </Group>
+
+      {activeServerId && (
+        <ServerSettingsModal
+          opened={serverSettingsOpen}
+          onClose={() => setServerSettingsOpen(false)}
+          serverId={activeServerId}
+        />
+      )}
     </div>
   );
 }

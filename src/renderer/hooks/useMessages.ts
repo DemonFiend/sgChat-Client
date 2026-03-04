@@ -5,6 +5,7 @@ import { queryClient } from '../lib/queryClient';
 export interface MessageReaction {
   emoji: string;
   count: number;
+  users: string[];
   me: boolean;
 }
 
@@ -20,15 +21,18 @@ export interface Message {
   author: {
     id: string;
     username: string;
-    avatar_url?: string;
-  };
+    display_name: string;
+    avatar_url: string | null;
+    role_color: string | null;
+  } | null;
   channel_id: string;
   created_at: string;
-  updated_at?: string;
-  reply_to_id?: string;
+  edited_at: string | null;
+  reply_to_id: string | null;
   reply_to?: MessageReply;
-  reactions?: MessageReaction[];
-  attachments?: Array<{ url: string; filename: string; content_type: string }>;
+  reactions: MessageReaction[];
+  attachments: Array<{ id: string; url: string; filename: string; size: number; mime_type: string }>;
+  system_event: string | null;
 }
 
 export function useMessages(channelId: string | null) {
@@ -40,7 +44,16 @@ export function useMessages(channelId: string | null) {
       const res = await api.get<{ messages: Message[]; hash: string }>(
         `/api/channels/${channelId}/messages?${params}`,
       );
-      return res.messages;
+      // Server may return attachments/reactions as JSON strings — normalize to arrays
+      return (res.messages || []).map((msg) => ({
+        ...msg,
+        attachments: typeof msg.attachments === 'string'
+          ? (() => { try { return JSON.parse(msg.attachments as unknown as string); } catch { return []; } })()
+          : msg.attachments,
+        reactions: typeof msg.reactions === 'string'
+          ? (() => { try { return JSON.parse(msg.reactions as unknown as string); } catch { return []; } })()
+          : msg.reactions,
+      }));
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => {
