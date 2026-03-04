@@ -5,9 +5,9 @@ import { useVoiceStore } from '../../stores/voiceStore';
 export function ScreenShareButton({ size = 28 }: { size?: number }) {
   const isSharing = useVoiceStore((s) => s.screenShare.isSharing);
   const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
-  const permissions = useVoiceStore((s) => s.permissions);
+  const canStream = useVoiceStore((s) => s.permissions?.canStream ?? false);
 
-  if (!permissions?.canStream) return null;
+  if (!canStream) return null;
 
   return (
     <Tooltip label={isSharing ? 'Stop Sharing' : 'Share Screen'} position="top" withArrow>

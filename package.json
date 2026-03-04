@@ -7,6 +7,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "dev:debug": "vite serve src/renderer --config vite.config.ts --mode development",
     "build:main": "esbuild src/main/index.ts --bundle --platform=node --outdir=dist/main --external:electron --format=cjs --sourcemap",
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --outdir=dist/preload --external:electron --format=cjs --sourcemap",
     "build:renderer": "vite build",

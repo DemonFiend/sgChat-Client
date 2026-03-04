@@ -15,7 +15,8 @@ const NAV_TABS = [
 export function TitleBar() {
   const view = useUIStore((s) => s.view);
   const setView = useUIStore((s) => s.setView);
-  const totalUnread = useUnreadStore((s) => s.getTotalUnread());
+  const unreads = useUnreadStore((s) => s.unreads);
+  const totalUnread = Object.values(unreads).reduce((sum, e) => sum + e.count, 0);
 
   // Update window title with unread count
   useEffect(() => {

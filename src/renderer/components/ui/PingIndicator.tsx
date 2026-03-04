@@ -1,6 +1,6 @@
 import { Tooltip } from '@mantine/core';
 import { IconWifi, IconWifiOff } from '@tabler/icons-react';
-import { useVoiceStore, type ConnectionQualityState } from '../../stores/voiceStore';
+import { useVoiceStore } from '../../stores/voiceStore';
 
 const qualityColors: Record<string, string> = {
   excellent: 'var(--status-online)',
@@ -21,17 +21,19 @@ interface PingIndicatorProps {
 }
 
 export function PingIndicator({ size = 14 }: PingIndicatorProps) {
-  const quality = useVoiceStore((s) => s.connectionQuality);
+  // Select primitives — connectionQuality is an object that gets replaced every 2s,
+  // selecting the whole object would cause unnecessary re-renders.
+  const qualityLevel = useVoiceStore((s) => s.connectionQuality.quality);
   const connected = useVoiceStore((s) => s.connected);
 
   if (!connected) return null;
 
-  const color = qualityColors[quality.quality] || 'var(--text-muted)';
-  const label = `Connection: ${qualityLabels[quality.quality] || 'Unknown'}`;
+  const color = qualityColors[qualityLevel] || 'var(--text-muted)';
+  const label = `Connection: ${qualityLabels[qualityLevel] || 'Unknown'}`;
 
   return (
     <Tooltip label={label} position="top" withArrow>
-      {quality.quality === 'lost' ? (
+      {qualityLevel === 'lost' ? (
         <IconWifiOff size={size} style={{ color, flexShrink: 0 }} />
       ) : (
         <IconWifi size={size} style={{ color, flexShrink: 0 }} />

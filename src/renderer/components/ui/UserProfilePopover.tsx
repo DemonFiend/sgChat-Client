@@ -29,7 +29,7 @@ export function UserProfilePopover({
   onRemoveFriend,
   onClose,
 }: UserProfilePopoverProps) {
-  const status = usePresenceStore((s) => s.getStatus(userId));
+  const status = usePresenceStore((s) => s.statuses[userId] || 'offline');
   const statusComment = usePresenceStore((s) => s.statusComments[userId]);
   const statusColor = { online: 'green', idle: 'yellow', dnd: 'red', offline: 'gray' }[status] || 'gray';
 

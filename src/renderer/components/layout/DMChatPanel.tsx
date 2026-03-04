@@ -34,7 +34,7 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
 
   const conversation = conversations?.find((c) => c.id === conversationId);
   const otherUser = conversation?.participants.find((p) => p.id !== user?.id) || conversation?.participants[0];
-  const status = usePresenceStore((s) => otherUser ? s.getStatus(otherUser.id) : 'offline');
+  const status = usePresenceStore((s) => (otherUser ? s.statuses[otherUser.id] : undefined) || 'offline');
   const statusColor = STATUS_COLORS[status] || 'gray';
 
   const handleSendMessage = (content: string) => {

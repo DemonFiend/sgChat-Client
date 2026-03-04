@@ -94,7 +94,7 @@ function FriendRow({ friend, loading, onSelect }: {
   loading: boolean;
   onSelect: () => void;
 }) {
-  const status = usePresenceStore((s) => s.getStatus(friend.id));
+  const status = usePresenceStore((s) => s.statuses[friend.id] || 'offline');
   const statusColor = STATUS_COLORS[status] || 'gray';
 
   return (

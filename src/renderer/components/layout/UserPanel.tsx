@@ -26,8 +26,8 @@ export function UserPanel() {
   const deafened = useVoiceStore((s) => s.deafened);
   const toggleMute = useVoiceStore((s) => s.toggleMute);
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
-  const currentStatus = usePresenceStore((s) => user ? s.getStatus(user.id) : 'offline');
-  const statusComment = usePresenceStore((s) => user ? (s.statusComments[user.id] || '') : '');
+  const currentStatus = usePresenceStore((s) => (user ? s.statuses[user.id] : undefined) || 'offline');
+  const statusComment = usePresenceStore((s) => (user ? s.statusComments[user.id] : undefined) || '');
 
   if (!user) return null;
 

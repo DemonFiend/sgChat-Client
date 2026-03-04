@@ -247,8 +247,8 @@ export function ChannelSidebar() {
 
 function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel; active: boolean; onClick: () => void; serverId: string }) {
   const Icon = getChannelIcon(channel);
-  const unread = useUnreadStore((s) => s.getUnread(channel.id));
-  const hasUnread = unread.count > 0;
+  const unreadEntry = useUnreadStore((s) => s.unreads[channel.id]);
+  const hasUnread = (unreadEntry?.count ?? 0) > 0;
   const isVoiceType = channel.type === 'voice' || channel.type === 'temp_voice' || channel.type === 'temp_voice_generator';
   const [hovered, setHovered] = useState(false);
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
@@ -321,9 +321,9 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
             </ActionIcon>
           </Tooltip>
         )}
-        {!hovered && unread.mentions > 0 && (
+        {!hovered && (unreadEntry?.mentions ?? 0) > 0 && (
           <Badge size="xs" variant="filled" color="red" circle>
-            {unread.mentions}
+            {unreadEntry!.mentions}
           </Badge>
         )}
       </UnstyledButton>

@@ -134,7 +134,7 @@ function DMItem({ conversation, otherUser, active, onClick }: {
   active: boolean;
   onClick: () => void;
 }) {
-  const status = usePresenceStore((s) => s.getStatus(otherUser.id));
+  const status = usePresenceStore((s) => s.statuses[otherUser.id] || 'offline');
   const statusColor = STATUS_COLORS[status] || 'gray';
   const [hovered, setHovered] = useState(false);
 

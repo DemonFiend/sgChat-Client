@@ -139,10 +139,8 @@ function FriendItem({ friend, onRemove }: { friend: Friend; onRemove: () => void
   const setView = useUIStore((s) => s.setView);
   const setActiveDM = useUIStore((s) => s.setActiveDM);
   const [hovered, setHovered] = useState(false);
-  const statusColor = usePresenceStore((s) => {
-    const status = s.getStatus(friend.id);
-    return { online: 'green', idle: 'yellow', dnd: 'red', offline: 'gray' }[status] || 'gray';
-  });
+  const status = usePresenceStore((s) => s.statuses[friend.id] || 'offline');
+  const statusColor = { online: 'green', idle: 'yellow', dnd: 'red', offline: 'gray' }[status] || 'gray';
 
   const openDM = async () => {
     try {

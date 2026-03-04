@@ -133,7 +133,7 @@ export function MemberList() {
 }
 
 function MemberItem({ member, offline, roleColor }: { member: Member; offline?: boolean; roleColor?: string }) {
-  const status = usePresenceStore((s) => s.getStatus(member.id));
+  const status = usePresenceStore((s) => s.statuses[member.id] || 'offline');
   const statusColor = { online: 'green', idle: 'yellow', dnd: 'red', offline: 'gray' }[status] || 'gray';
 
   return (
