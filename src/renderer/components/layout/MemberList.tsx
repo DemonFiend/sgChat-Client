@@ -37,6 +37,8 @@ export function MemberList() {
     enabled: !!activeServerId && memberListVisible,
   });
 
+  const statuses = usePresenceStore((s) => s.statuses);
+
   if (!memberListVisible || !activeServerId) return null;
 
   if (membersLoading) {
@@ -60,8 +62,6 @@ export function MemberList() {
       </div>
     );
   }
-
-  const statuses = usePresenceStore((s) => s.statuses);
 
   // Group members by their highest hoisted role
   const hoistedRoles = (roles || [])

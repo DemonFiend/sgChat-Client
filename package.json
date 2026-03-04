@@ -10,7 +10,8 @@
     "build:main": "esbuild src/main/index.ts --bundle --platform=node --outdir=dist/main --external:electron --format=cjs --sourcemap",
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --outdir=dist/preload --external:electron --format=cjs --sourcemap",
     "build:renderer": "vite build",
-    "build": "npm run build:main && npm run build:preload && npm run build:renderer",
+    "lint": "eslint src/renderer/",
+    "build": "npm run lint && npm run build:main && npm run build:preload && npm run build:renderer",
     "start": "npm run build && electron .",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
@@ -35,6 +36,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react-swc": "^4.2.3",
@@ -42,10 +44,13 @@
     "electron": "^33.3.1",
     "electron-builder": "^25.1.8",
     "esbuild": "^0.24.2",
+    "eslint": "^9.39.3",
+    "eslint-plugin-react-hooks": "^7.0.1",
     "postcss": "^8.5.8",
     "postcss-preset-mantine": "^1.18.0",
     "postcss-simple-vars": "^7.0.1",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.56.1",
     "vite": "^7.3.1"
   }
 }

@@ -37,6 +37,7 @@ export function ChannelSidebar() {
   const { data: channels } = useChannels(activeServerId);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [motdVisible, setMotdVisible] = useState(true);
 
   const activeServer = servers?.find((s) => s.id === activeServerId);
 
@@ -73,7 +74,6 @@ export function ChannelSidebar() {
   const categories = sorted.filter((c) => c.type === 'category');
   const uncategorized = sorted.filter((c) => c.type !== 'category' && !c.category_id);
 
-  const [motdVisible, setMotdVisible] = useState(true);
   const serverMotd = activeServer?.motd;
 
   return (

@@ -20,16 +20,15 @@ export function UserPanel() {
   const setView = useUIStore((s) => s.setView);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [customStatus, setCustomStatus] = useState('');
-
-  if (!user) return null;
-
-  const currentStatus = usePresenceStore((s) => s.getStatus(user.id));
-  const statusComment = usePresenceStore((s) => s.statusComments[user.id] || '');
-  const statusColor = { online: 'green', idle: 'yellow', dnd: 'red', offline: 'gray' }[currentStatus] || 'gray';
-
   const updateStatus = useAuthStore((s) => s.updateStatus);
   const updateCustomStatus = useAuthStore((s) => s.updateCustomStatus);
   const { muted, deafened, toggleMute, toggleDeafen } = useVoiceStore();
+  const currentStatus = usePresenceStore((s) => user ? s.getStatus(user.id) : 'offline');
+  const statusComment = usePresenceStore((s) => user ? (s.statusComments[user.id] || '') : '');
+
+  if (!user) return null;
+
+  const statusColor = { online: 'green', idle: 'yellow', dnd: 'red', offline: 'gray' }[currentStatus] || 'gray';
 
   const handleStatusChange = (status: string) => {
     emitPresenceUpdate(status);
