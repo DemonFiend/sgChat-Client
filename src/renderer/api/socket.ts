@@ -269,8 +269,8 @@ function handleEvent(type: string, data: any): void {
       const voiceStore = useVoiceStore.getState();
       if (voiceStore.connected) {
         voiceStore.leave().then(() => {
-          if (data.channel_id) {
-            voiceStore.join(data.channel_id, data.channel_name);
+          if (data.to_channel_id) {
+            voiceStore.join(data.to_channel_id, data.to_channel_name);
           }
         });
       }
