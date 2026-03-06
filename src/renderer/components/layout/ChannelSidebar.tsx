@@ -352,16 +352,21 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
   const updateNotifSetting = useChannelNotificationStore((s) => s.updateSetting);
   const removeNotifSetting = useChannelNotificationStore((s) => s.removeSetting);
 
-  // Seed unread count from server read state on mount
+  // Seed unread count from server read state on mount (once per channel)
   const { data: readState } = useChannelReadState(channel.type === 'text' || channel.type === 'announcement' ? channel.id : null);
+  const seededRef = useRef(false);
   useEffect(() => {
-    if (readState?.unread_count && readState.unread_count > 0 && !unreadEntry) {
-      useUnreadStore.getState().increment(channel.id);
+    // Reset seed flag when channel changes
+    seededRef.current = false;
+  }, [channel.id]);
+  useEffect(() => {
+    if (readState?.unread_count && readState.unread_count > 0 && !seededRef.current) {
+      seededRef.current = true;
       useUnreadStore.setState((s) => ({
         unreads: { ...s.unreads, [channel.id]: { count: readState.unread_count!, mentions: 0 } },
       }));
     }
-  }, [readState?.unread_count, channel.id, unreadEntry]);
+  }, [readState?.unread_count, channel.id]);
 
   const voiceJoin = useVoiceStore((s) => s.join);
   const voiceChannelId = useVoiceStore((s) => s.channelId);
