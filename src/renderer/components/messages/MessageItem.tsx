@@ -1,12 +1,14 @@
-import { useRef, useState } from 'react';
-import { ActionIcon, Button, Group, Modal, Text, Textarea, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconArrowBackUp, IconEdit, IconMoodSmile, IconPin, IconPinnedOff, IconTrash } from '@tabler/icons-react';
+import { useMemo, useRef, useState } from 'react';
+import { ActionIcon, Button, Group, Image, Modal, Text, Textarea, Tooltip, UnstyledButton } from '@mantine/core';
+import { IconArrowBackUp, IconEdit, IconExternalLink, IconMoodSmile, IconPin, IconPinnedOff, IconTrash } from '@tabler/icons-react';
 import { useEditMessage, useDeleteMessage, useAddReaction, useRemoveReaction, usePinMessage, useUnpinMessage, type Message } from '../../hooks/useMessages';
+import { useMessagePreview } from '../../hooks/useServerInfo';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { MessageContent } from '../ui/MessageContent';
 import { ReactionPicker } from '../ui/ReactionPicker';
 import { ReactionDisplay } from '../ui/ReactionDisplay';
+import { isImageUrl } from '../../lib/imageUtils';
 
 interface MessageItemProps {
   message: Message;
@@ -67,6 +69,14 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
       author: { id: message.author?.id ?? '', username: message.author?.username ?? 'Unknown' },
     });
   };
+
+  // Detect non-image URLs for embed previews
+  const hasNonImageUrl = useMemo(() => {
+    const urlRegex = /https?:\/\/[^\s]+/g;
+    const matches = message.content.match(urlRegex);
+    if (!matches) return false;
+    return matches.some((url) => !isImageUrl(url));
+  }, [message.content]);
 
   const handleReactionToggle = (emoji: string, hasReacted: boolean) => {
     if (hasReacted) {
@@ -221,6 +231,9 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
         </div>
       ))}
 
+      {/* URL embed preview */}
+      {hasNonImageUrl && <EmbedPreview messageId={message.id} />}
+
       {/* Reactions */}
       {message.reactions && message.reactions.length > 0 && (
         <ReactionDisplay reactions={message.reactions} onToggle={handleReactionToggle} />
@@ -262,6 +275,69 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
           </Button>
         </Group>
       </Modal>
+    </div>
+  );
+}
+
+function EmbedPreview({ messageId }: { messageId: string }) {
+  const { data: preview } = useMessagePreview(messageId);
+
+  if (!preview || (!preview.title && !preview.description)) return null;
+
+  return (
+    <div
+      style={{
+        marginTop: 6,
+        maxWidth: 420,
+        borderRadius: 8,
+        border: '1px solid var(--border)',
+        background: 'var(--bg-secondary)',
+        overflow: 'hidden',
+        borderLeft: '3px solid var(--accent)',
+      }}
+    >
+      {preview.image && (
+        <Image
+          src={preview.image}
+          alt=""
+          mah={180}
+          fit="cover"
+          style={{ borderBottom: '1px solid var(--border)' }}
+          fallbackSrc=""
+        />
+      )}
+      <div style={{ padding: '10px 12px' }}>
+        {preview.site_name && (
+          <Text size="xs" c="dimmed" mb={2} tt="uppercase" fw={600} style={{ letterSpacing: '0.3px' }}>
+            {preview.site_name}
+          </Text>
+        )}
+        {preview.title && (
+          <Text
+            size="sm"
+            fw={600}
+            lineClamp={2}
+            component="a"
+            href={preview.url}
+            target="_blank"
+            rel="noopener"
+            style={{
+              color: 'var(--accent)',
+              textDecoration: 'none',
+              display: 'block',
+              marginBottom: 4,
+            }}
+          >
+            {preview.title}
+            <IconExternalLink size={12} style={{ display: 'inline', marginLeft: 4, verticalAlign: 'middle', opacity: 0.6 }} />
+          </Text>
+        )}
+        {preview.description && (
+          <Text size="xs" c="dimmed" lineClamp={3} style={{ lineHeight: 1.4 }}>
+            {preview.description}
+          </Text>
+        )}
+      </div>
     </div>
   );
 }

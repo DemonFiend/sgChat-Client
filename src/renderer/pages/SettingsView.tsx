@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import { useThemeStore, type ThemeName, themeNames } from '../stores/themeStore';
 import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
+import { useServerVersion } from '../hooks/useServerInfo';
 import { switchInputDevice, switchOutputDevice, setGlobalOutputVolume, applyAudioProcessingSettings } from '../lib/voiceService';
 import { VoiceBar } from '../components/voice/VoiceBar';
 import { AvatarPicker } from '../components/ui/AvatarPicker';
@@ -18,6 +19,7 @@ export function SettingsView() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const setView = useUIStore((s) => s.setView);
+  const { data: serverVersion } = useServerVersion();
 
   return (
     <div style={{ flex: 1, display: 'flex', background: 'var(--bg-secondary)' }}>
@@ -99,6 +101,13 @@ export function SettingsView() {
             />
           </Stack>
         </ScrollArea>
+        {serverVersion && (
+          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+            <Text size="xs" c="dimmed">
+              Server v{serverVersion.version}{serverVersion.node ? ` (${serverVersion.node})` : ''}
+            </Text>
+          </div>
+        )}
         <VoiceBar compact />
       </div>
 

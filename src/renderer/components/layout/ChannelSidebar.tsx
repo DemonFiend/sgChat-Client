@@ -7,6 +7,7 @@ import {
 } from '@tabler/icons-react';
 import { useChannels, type Channel, type ChannelType } from '../../hooks/useChannels';
 import { useCategories } from '../../hooks/useCategories';
+import { useChannelReadState } from '../../hooks/useServerInfo';
 import { useUIStore } from '../../stores/uiStore';
 import { useServers } from '../../hooks/useServers';
 import { useUnreadStore } from '../../stores/unreadStore';
@@ -16,6 +17,7 @@ import { VoicePanel } from '../voice/VoicePanel';
 import { VoiceParticipantsList } from '../ui/VoiceParticipantsList';
 import { ServerSettingsModal } from '../ui/ServerSettingsModal';
 import { ChannelSettingsModal } from '../ui/ChannelSettingsModal';
+import { CategorySettingsModal } from '../ui/CategorySettingsModal';
 
 const CHANNEL_ICONS: Record<ChannelType, typeof IconHash> = {
   text: IconHash,
@@ -42,6 +44,7 @@ export function ChannelSidebar() {
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [motdVisible, setMotdVisible] = useState(true);
+  const [categorySettingsId, setCategorySettingsId] = useState<string | null>(null);
 
   const activeServer = servers?.find((s) => s.id === activeServerId);
 
@@ -190,37 +193,53 @@ export function ChannelSidebar() {
 
             return (
               <div key={category.id}>
-                <UnstyledButton
-                  onClick={() => toggleCategory(category.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 2,
-                    padding: '6px 4px',
-                    width: '100%',
-                  }}
-                >
-                  {isCollapsed ? (
-                    <IconChevronRight size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                  ) : (
-                    <IconChevronDown size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                  )}
-                  <Text
-                    size="xs"
-                    fw={700}
-                    tt="uppercase"
-                    c="dimmed"
-                    style={{ letterSpacing: '0.5px', flex: 1 }}
-                    truncate
+                <Group gap={0} style={{ width: '100%' }} wrap="nowrap">
+                  <UnstyledButton
+                    onClick={() => toggleCategory(category.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2,
+                      padding: '6px 4px',
+                      flex: 1,
+                      minWidth: 0,
+                    }}
                   >
-                    {category.name}
-                  </Text>
-                  {isCollapsed && categoryUnreadCount > 0 && (
-                    <Badge size="xs" variant="filled" color="brand" circle>
-                      {categoryUnreadCount}
-                    </Badge>
-                  )}
-                </UnstyledButton>
+                    {isCollapsed ? (
+                      <IconChevronRight size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                    ) : (
+                      <IconChevronDown size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                    )}
+                    <Text
+                      size="xs"
+                      fw={700}
+                      tt="uppercase"
+                      c="dimmed"
+                      style={{ letterSpacing: '0.5px', flex: 1 }}
+                      truncate
+                    >
+                      {category.name}
+                    </Text>
+                    {isCollapsed && categoryUnreadCount > 0 && (
+                      <Badge size="xs" variant="filled" color="brand" circle>
+                        {categoryUnreadCount}
+                      </Badge>
+                    )}
+                  </UnstyledButton>
+                  <Tooltip label="Category Settings" withArrow position="right">
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      size={18}
+                      onClick={(e) => { e.stopPropagation(); setCategorySettingsId(category.id); }}
+                      style={{ opacity: 0.5, flexShrink: 0 }}
+                      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
+                    >
+                      <IconSettings size={12} />
+                    </ActionIcon>
+                  </Tooltip>
+                </Group>
                 {!isCollapsed && categoryChannels.map((channel) => (
                   <ChannelItem
                     key={channel.id}
@@ -242,6 +261,16 @@ export function ChannelSidebar() {
       {/* Voice panel + User info at bottom */}
       <VoicePanel />
       <UserInfoPanel />
+
+      {/* Category settings modal */}
+      {categorySettingsId && (
+        <CategorySettingsModal
+          opened={!!categorySettingsId}
+          onClose={() => setCategorySettingsId(null)}
+          categoryId={categorySettingsId}
+          serverId={activeServerId}
+        />
+      )}
     </div>
   );
 }
@@ -253,6 +282,18 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
   const isVoiceType = channel.type === 'voice' || channel.type === 'temp_voice' || channel.type === 'temp_voice_generator' || channel.type === 'music';
   const [hovered, setHovered] = useState(false);
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
+
+  // Seed unread count from server read state on mount
+  const { data: readState } = useChannelReadState(channel.type === 'text' || channel.type === 'announcement' ? channel.id : null);
+  useEffect(() => {
+    if (readState?.unread_count && readState.unread_count > 0 && !unreadEntry) {
+      useUnreadStore.getState().increment(channel.id);
+      // Set the correct count by replacing via direct state update
+      useUnreadStore.setState((s) => ({
+        unreads: { ...s.unreads, [channel.id]: { count: readState.unread_count!, mentions: 0 } },
+      }));
+    }
+  }, [readState?.unread_count, channel.id, unreadEntry]);
 
   // For voice channels, handle click differently
   const voiceJoin = useVoiceStore((s) => s.join);
@@ -326,6 +367,16 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
           <Badge size="xs" variant="filled" color="red" circle>
             {unreadEntry!.mentions}
           </Badge>
+        )}
+        {!hovered && !active && hasUnread && (unreadEntry?.mentions ?? 0) === 0 && (
+          <div style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: 'var(--text-primary)',
+            flexShrink: 0,
+            opacity: 0.6,
+          }} />
         )}
       </UnstyledButton>
 

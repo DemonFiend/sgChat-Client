@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { ActionIcon, Avatar, Badge, Group, Indicator, ScrollArea, Stack, Text, TextInput, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconPlus, IconSearch, IconUsers, IconX } from '@tabler/icons-react';
+import { IconPhone, IconPlus, IconSearch, IconUsers, IconX } from '@tabler/icons-react';
 import { useDMConversations, type DMConversation } from '../../hooks/useDMConversations';
+import { useDMVoiceStatus } from '../../hooks/useServerInfo';
 import { useAuthStore } from '../../stores/authStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useUIStore } from '../../stores/uiStore';
-import { UserPanel } from './UserPanel';
+import { UserInfoPanel } from './UserInfoPanel';
 import { VoiceBar } from '../voice/VoiceBar';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -123,7 +124,7 @@ export function DMSidebar({ onCreateDM }: DMSidebarProps) {
       </ScrollArea>
 
       <VoiceBar compact />
-      <UserPanel />
+      <UserInfoPanel />
     </div>
   );
 }
@@ -137,6 +138,8 @@ function DMItem({ conversation, otherUser, active, onClick }: {
   const status = usePresenceStore((s) => s.statuses[otherUser.id] || 'offline');
   const statusColor = STATUS_COLORS[status] || 'gray';
   const [hovered, setHovered] = useState(false);
+  const { data: voiceStatus } = useDMVoiceStatus(conversation.id);
+  const hasActiveCall = voiceStatus?.active === true;
 
   return (
     <UnstyledButton
@@ -168,6 +171,11 @@ function DMItem({ conversation, otherUser, active, onClick }: {
           </Text>
         )}
       </div>
+      {hasActiveCall && (
+        <Tooltip label="Call in progress" withArrow position="right">
+          <IconPhone size={14} style={{ color: 'var(--accent)', flexShrink: 0, animation: 'pulse 2s infinite' }} />
+        </Tooltip>
+      )}
     </UnstyledButton>
   );
 }
