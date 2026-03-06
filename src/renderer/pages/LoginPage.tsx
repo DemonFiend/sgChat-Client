@@ -57,7 +57,8 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: Logi
     <div style={styles.container}>
       <div style={styles.dragRegion} />
       <div style={styles.card}>
-        <h1 style={styles.title}>Welcome back!</h1>
+        <h1 style={styles.logo}>sgChat</h1>
+        <h2 style={styles.title}>Welcome back!</h2>
         <p style={styles.subtitle}>We're so excited to see you again!</p>
 
         <label style={styles.label}>Email</label>
@@ -139,6 +140,13 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 400,
     padding: '0 2rem',
     textAlign: 'center' as const,
+  },
+  logo: {
+    color: 'var(--accent)',
+    fontSize: '2.5rem',
+    fontWeight: 700,
+    letterSpacing: '-0.5px',
+    marginBottom: '0.5rem',
   },
   title: {
     color: 'var(--text-primary)',

@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { ActionIcon, Avatar, Group, Indicator, Menu, Text, TextInput, Tooltip } from '@mantine/core';
-import { IconMicrophone, IconHeadphones, IconSettings, IconCircleFilled } from '@tabler/icons-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { ActionIcon, Avatar, Button, Group, Indicator, Menu, Popover, Select, Stack, Text, TextInput, Tooltip } from '@mantine/core';
+import { IconMicrophone, IconHeadphones, IconSettings, IconCircleFilled, IconDeviceGamepad2, IconX } from '@tabler/icons-react';
 import { useAuthStore } from '../../stores/authStore';
 import { usePresenceStore } from '../../stores/presenceStore';
+import { useActivityStore, type UserActivity } from '../../stores/activityStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { emitPresenceUpdate } from '../../api/socket';
+import { emitPresenceUpdate, emitActivityUpdate, emitActivityClear } from '../../api/socket';
 import { api } from '../../lib/api';
 
 const STATUS_OPTIONS = [
@@ -28,6 +29,31 @@ export function UserPanel() {
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const currentStatus = usePresenceStore((s) => (user ? s.statuses[user.id] : undefined) || 'offline');
   const statusComment = usePresenceStore((s) => (user ? s.statusComments[user.id] : undefined) || '');
+  const myActivity = useActivityStore((s) => s.myActivity);
+  const setMyActivity = useActivityStore((s) => s.setMyActivity);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [activityType, setActivityType] = useState<string>('playing');
+  const [activityName, setActivityName] = useState('');
+  const [activityDetails, setActivityDetails] = useState('');
+
+  // Activity heartbeat — re-send every 10 min to prevent server auto-clear
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (myActivity) {
+      heartbeatRef.current = setInterval(() => {
+        emitActivityUpdate({
+          type: myActivity.type,
+          name: myActivity.name,
+          details: myActivity.details,
+          state: myActivity.state,
+          started_at: myActivity.started_at,
+        });
+      }, 10 * 60 * 1000);
+    }
+    return () => {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    };
+  }, [myActivity]);
 
   if (!user) return null;
 
@@ -46,6 +72,33 @@ export function UserPanel() {
     }
     setStatusMenuOpen(false);
   };
+
+  const handleSetActivity = () => {
+    if (!activityName.trim()) return;
+    const activity: UserActivity = {
+      type: activityType as UserActivity['type'],
+      name: activityName.trim(),
+      details: activityDetails.trim() || null,
+      started_at: new Date().toISOString(),
+    };
+    setMyActivity(activity);
+    useActivityStore.getState().updateActivity(user.id, activity);
+    emitActivityUpdate(activity);
+    setActivityOpen(false);
+  };
+
+  const handleClearActivity = () => {
+    setMyActivity(null);
+    useActivityStore.getState().updateActivity(user.id, null);
+    emitActivityClear();
+    setActivityOpen(false);
+    setActivityName('');
+    setActivityDetails('');
+  };
+
+  const displayText = myActivity
+    ? `${({ playing: 'Playing', listening: 'Listening to', watching: 'Watching', streaming: 'Streaming', competing: 'Competing in', custom: '' }[myActivity.type] || '')} ${myActivity.name}`.trim()
+    : statusComment || 'Online';
 
   return (
     <div style={{
@@ -103,10 +156,60 @@ export function UserPanel() {
         </Menu.Dropdown>
       </Menu>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <Text size="xs" fw={600} truncate>{user.username}</Text>
-        <Text size="xs" c="dimmed" truncate>{statusComment || 'Online'}</Text>
-      </div>
+      <Popover opened={activityOpen} onChange={setActivityOpen} position="top-start" withArrow width={260}>
+        <Popover.Target>
+          <div
+            style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+            onClick={() => setActivityOpen((v) => !v)}
+          >
+            <Text size="xs" fw={600} truncate>{user.username}</Text>
+            <Text size="xs" c={myActivity ? 'var(--accent)' : 'dimmed'} truncate>{displayText}</Text>
+          </div>
+        </Popover.Target>
+        <Popover.Dropdown style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+          <Stack gap={8}>
+            <Text size="xs" fw={700} tt="uppercase" c="dimmed">Set Activity</Text>
+            <Select
+              size="xs"
+              value={activityType}
+              onChange={(v) => v && setActivityType(v)}
+              data={[
+                { value: 'playing', label: 'Playing' },
+                { value: 'listening', label: 'Listening to' },
+                { value: 'watching', label: 'Watching' },
+                { value: 'streaming', label: 'Streaming' },
+                { value: 'competing', label: 'Competing in' },
+                { value: 'custom', label: 'Custom' },
+              ]}
+            />
+            <TextInput
+              size="xs"
+              placeholder="Activity name..."
+              value={activityName}
+              onChange={(e) => setActivityName(e.currentTarget.value)}
+              maxLength={128}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSetActivity(); }}
+            />
+            <TextInput
+              size="xs"
+              placeholder="Details (optional)"
+              value={activityDetails}
+              onChange={(e) => setActivityDetails(e.currentTarget.value)}
+              maxLength={128}
+            />
+            <Group gap={4}>
+              <Button size="xs" onClick={handleSetActivity} disabled={!activityName.trim()} style={{ flex: 1 }}>
+                {myActivity ? 'Update' : 'Start'}
+              </Button>
+              {myActivity && (
+                <Button size="xs" variant="light" color="red" onClick={handleClearActivity}>
+                  <IconX size={14} />
+                </Button>
+              )}
+            </Group>
+          </Stack>
+        </Popover.Dropdown>
+      </Popover>
 
       <Group gap={2}>
         <Tooltip label={muted ? 'Unmute' : 'Mute'} position="top" withArrow>

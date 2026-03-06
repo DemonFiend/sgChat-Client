@@ -30,6 +30,17 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       '\n\nComponent Stack:', stack,
       '\n\nFull Error:', error,
     );
+
+    // Submit crash report to server
+    const electronAPI = (window as any).electronAPI;
+    if (electronAPI?.crashReport?.submit) {
+      electronAPI.crashReport.submit({
+        error_type: 'ReactErrorBoundary',
+        error_message: error.message || 'Unknown React error',
+        stack_trace: `${error.stack || ''}\n\nComponent Stack:${stack}`,
+        metadata: { source: 'renderer' },
+      }).catch(() => {});
+    }
   }
 
   private copyErrorDetails = () => {

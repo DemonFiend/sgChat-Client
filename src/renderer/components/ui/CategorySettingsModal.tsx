@@ -1,34 +1,30 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ActionIcon, Badge, Button, Divider, Group, Modal, ScrollArea, Select, Stack, Text,
-  TextInput, Textarea, Tooltip,
+  ActionIcon, Badge, Button, Divider, Group, Modal, ScrollArea, Stack, Text,
+  TextInput, Tooltip,
 } from '@mantine/core';
 import { IconPlus, IconTrash, IconChevronDown, IconChevronUp } from '@tabler/icons-react';
 import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
-import { useUIStore } from '../../stores/uiStore';
 import { ChannelPermissionEditor } from './PermissionEditor';
 
-interface ChannelSettingsModalProps {
+interface CategorySettingsModalProps {
   opened: boolean;
   onClose: () => void;
-  channelId: string;
+  categoryId: string;
   serverId: string;
 }
 
-interface ChannelData {
+interface CategoryData {
   id: string;
   name: string;
-  topic?: string;
-  type: string;
   position: number;
-  category_id?: string;
 }
 
 interface PermissionOverride {
   id: string;
-  channel_id: string;
+  category_id: string;
   type: 'role' | 'user';
   target_id: string;
   target_name: string;
@@ -46,11 +42,11 @@ interface Role {
   position: number;
 }
 
-export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: ChannelSettingsModalProps) {
-  const { data: channel } = useQuery({
-    queryKey: ['channel', channelId],
-    queryFn: () => api.get<ChannelData>(`/api/channels/${channelId}`),
-    enabled: opened && !!channelId,
+export function CategorySettingsModal({ opened, onClose, categoryId, serverId }: CategorySettingsModalProps) {
+  const { data: categories } = useQuery({
+    queryKey: ['categories', serverId],
+    queryFn: () => api.get<CategoryData[]>(`/api/servers/${serverId}/categories`),
+    enabled: opened && !!serverId,
   });
 
   const { data: roles } = useQuery({
@@ -59,42 +55,36 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
     enabled: opened && !!serverId,
   });
 
+  const category = categories?.find((c) => c.id === categoryId);
+
   const [activeTab, setActiveTab] = useState<'general' | 'permissions'>('general');
   const [name, setName] = useState('');
-  const [topic, setTopic] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [overrides, setOverrides] = useState<PermissionOverride[]>([]);
   const [expandedOverrideId, setExpandedOverrideId] = useState<string | null>(null);
 
-  const setActiveChannel = useUIStore((s) => s.setActiveChannel);
-
   useEffect(() => {
-    if (channel) {
-      setName(channel.name || '');
-      setTopic(channel.topic || '');
+    if (category) {
+      setName(category.name || '');
     }
-  }, [channel]);
+  }, [category]);
 
-  // Fetch permission overrides when modal opens
+  // Fetch permission overrides
   useEffect(() => {
-    if (opened && channelId) {
-      api.get<{ overrides: PermissionOverride[] }>(`/api/channels/${channelId}/permissions`)
+    if (opened && categoryId && serverId) {
+      api.get<{ overrides: PermissionOverride[] }>(`/api/servers/${serverId}/categories/${categoryId}/permissions`)
         .then((data) => setOverrides(data.overrides || []))
         .catch(() => {});
     }
-  }, [opened, channelId]);
+  }, [opened, categoryId, serverId]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.patch(`/api/channels/${channelId}`, {
-        name: name.trim().toLowerCase().replace(/\s+/g, '-'),
-        topic: topic.trim(),
-      });
-      queryClient.invalidateQueries({ queryKey: ['channels', serverId] });
-      queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
+      await api.patch(`/api/servers/${serverId}/categories/${categoryId}`, { name: name.trim() });
+      queryClient.invalidateQueries({ queryKey: ['categories', serverId] });
       onClose();
     } catch {
       // silently fail
@@ -106,9 +96,9 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      await api.delete(`/api/channels/${channelId}`);
+      await api.delete(`/api/servers/${serverId}/categories/${categoryId}`);
+      queryClient.invalidateQueries({ queryKey: ['categories', serverId] });
       queryClient.invalidateQueries({ queryKey: ['channels', serverId] });
-      setActiveChannel(null);
       onClose();
     } catch {
       // silently fail
@@ -119,18 +109,17 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
 
   const handleAddRoleOverride = async (roleId: string) => {
     try {
-      await api.put(`/api/channels/${channelId}/permissions/roles/${roleId}`, {
+      await api.put(`/api/servers/${serverId}/categories/${categoryId}/permissions/roles/${roleId}`, {
         text_allow: '0', text_deny: '0', voice_allow: '0', voice_deny: '0',
       });
-      const data = await api.get<{ overrides: PermissionOverride[] }>(`/api/channels/${channelId}/permissions`);
+      const data = await api.get<{ overrides: PermissionOverride[] }>(`/api/servers/${serverId}/categories/${categoryId}/permissions`);
       setOverrides(data.overrides || []);
     } catch { /* silently fail */ }
   };
 
   const handleRemoveOverride = async (override: PermissionOverride) => {
     try {
-      const path = override.type === 'role' ? 'roles' : 'users';
-      await api.delete(`/api/channels/${channelId}/permissions/${path}/${override.target_id}`);
+      await api.delete(`/api/servers/${serverId}/categories/${categoryId}/permissions/roles/${override.target_id}`);
       setOverrides((prev) => prev.filter((o) => o.id !== override.id));
       if (expandedOverrideId === override.id) setExpandedOverrideId(null);
     } catch { /* silently fail */ }
@@ -144,7 +133,7 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
     <Modal
       opened={opened}
       onClose={onClose}
-      title={`Channel Settings — #${channel?.name || ''}`}
+      title={`Category Settings — ${category?.name || ''}`}
       centered
       size="lg"
     >
@@ -179,20 +168,9 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
       {activeTab === 'general' && (
         <Stack gap={16}>
           <TextInput
-            label="Channel Name"
+            label="Category Name"
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
-            description="Lowercase, no spaces (hyphens will replace spaces)"
-          />
-
-          <Textarea
-            label="Channel Topic"
-            description="Describe what this channel is for"
-            value={topic}
-            onChange={(e) => setTopic(e.currentTarget.value)}
-            minRows={2}
-            maxRows={4}
-            autosize
           />
 
           <Group>
@@ -203,7 +181,6 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
 
           <Divider style={{ borderColor: 'var(--border)' }} />
 
-          {/* Danger zone */}
           <div style={{
             padding: 12,
             borderRadius: 6,
@@ -218,11 +195,11 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
                 leftSection={<IconTrash size={14} />}
                 onClick={() => setDeleteConfirm(true)}
               >
-                Delete Channel
+                Delete Category
               </Button>
             ) : (
               <Stack gap={8}>
-                <Text size="sm">Are you sure? This will permanently delete <strong>#{channel?.name}</strong> and all its messages.</Text>
+                <Text size="sm">Are you sure? Channels in this category will become uncategorized.</Text>
                 <Group gap={8}>
                   <Button color="red" onClick={handleDelete} loading={deleting}>
                     Yes, Delete
@@ -239,6 +216,10 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
 
       {activeTab === 'permissions' && (
         <Stack gap={16}>
+          <Text size="xs" c="dimmed">
+            Category permissions apply to all channels within. Shows both text and voice permissions since categories contain both types.
+          </Text>
+
           {/* Existing overrides */}
           {overrides.length > 0 ? (
             <Stack gap={4}>
@@ -288,15 +269,19 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
                     }}>
                       <ScrollArea.Autosize mah={400}>
                         <ChannelPermissionEditor
-                          channelType={channel?.type || 'text'}
+                          channelType="category"
                           textAllow={override.text_allow}
                           textDeny={override.text_deny}
                           voiceAllow={override.voice_allow}
                           voiceDeny={override.voice_deny}
                           onSave={async (values) => {
-                            const path = override.type === 'role' ? 'roles' : 'users';
-                            await api.put(`/api/channels/${channelId}/permissions/${path}/${override.target_id}`, values);
-                            const data = await api.get<{ overrides: PermissionOverride[] }>(`/api/channels/${channelId}/permissions`);
+                            await api.put(
+                              `/api/servers/${serverId}/categories/${categoryId}/permissions/roles/${override.target_id}`,
+                              values,
+                            );
+                            const data = await api.get<{ overrides: PermissionOverride[] }>(
+                              `/api/servers/${serverId}/categories/${categoryId}/permissions`,
+                            );
                             setOverrides(data.overrides || []);
                           }}
                         />
@@ -308,7 +293,7 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
             </Stack>
           ) : (
             <Text size="sm" c="dimmed" style={{ fontStyle: 'italic', textAlign: 'center', padding: 16 }}>
-              No permission overrides configured for this channel.
+              No permission overrides configured for this category.
             </Text>
           )}
 

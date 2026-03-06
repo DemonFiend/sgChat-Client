@@ -13,6 +13,7 @@ import { useServers } from '../hooks/useServers';
 import { useAuthStore } from '../stores/authStore';
 import { useServerPopupStore } from '../stores/serverPopup';
 import { api } from '../lib/api';
+import { queryClient } from '../lib/queryClient';
 
 export function ServerView() {
   const activeServerId = useUIStore((s) => s.activeServerId);
@@ -81,9 +82,8 @@ export function ServerView() {
         onClose={() => setClaimModalOpen(false)}
         onSuccess={() => {
           setClaimModalOpen(false);
-          if (activeServerId) {
-            api.get(`/api/servers/${activeServerId}`); // Refresh server data
-          }
+          queryClient.invalidateQueries({ queryKey: ['server', activeServerId] });
+          queryClient.invalidateQueries({ queryKey: ['servers'] });
         }}
       />
 

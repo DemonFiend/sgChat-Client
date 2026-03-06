@@ -107,6 +107,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     isSupported: () => ipcRenderer.invoke('app-audio:isSupported'),
   },
 
+  // Crash reporting
+  crashReport: {
+    submit: (report: { error_type: string; error_message: string; stack_trace: string; metadata?: Record<string, unknown> }) =>
+      ipcRenderer.invoke('crash-report:submit', report),
+  },
+
+  // Update checker
+  updates: {
+    onUpdateAvailable: (callback: (release: any) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, release: any) => callback(release);
+      ipcRenderer.on('update:available', handler);
+      return () => ipcRenderer.removeListener('update:available', handler);
+    },
+    dismiss: (version: string) => ipcRenderer.invoke('update:dismiss', version),
+    download: (url: string) => ipcRenderer.invoke('update:download', url),
+  },
+
+  // Shortcuts (dynamic keybind registration)
+  shortcuts: {
+    update: (keybinds: Record<string, string>) => ipcRenderer.invoke('shortcuts:update', keybinds),
+    set: (action: string, combo: string) => ipcRenderer.invoke('shortcuts:set', action, combo),
+  },
+
   // Crypto (payload encryption)
   crypto: {
     negotiate: () => ipcRenderer.invoke('crypto:negotiate'),

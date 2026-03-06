@@ -16,8 +16,11 @@ function getOrCreateAudio(sound: string): HTMLAudioElement | null {
 
   let audio = audioCache.get(sound);
   if (!audio) {
-    audio = new Audio(url);
+    audio = document.createElement('audio');
+    audio.src = url;
     audio.preload = 'auto';
+    audio.style.display = 'none';
+    document.body.appendChild(audio);
     audioCache.set(sound, audio);
   }
   return audio;
@@ -28,10 +31,11 @@ export const soundService = {
     const audio = getOrCreateAudio(sound);
     if (!audio) return;
 
-    // Clone for overlapping playback
-    const clone = audio.cloneNode(true) as HTMLAudioElement;
-    clone.volume = globalVolume;
-    clone.play().catch(() => {});
+    audio.volume = globalVolume;
+    audio.currentTime = 0;
+    audio.play().catch((err) => {
+      console.warn(`[soundService] Failed to play "${sound}":`, err.message);
+    });
   },
 
   playVoiceJoin() {
@@ -44,6 +48,20 @@ export const soundService = {
 
   playNotification() {
     this.play('notification');
+  },
+
+  /** Play a one-shot sound from an arbitrary URL (e.g. custom join/leave sound). */
+  playUrl(url: string) {
+    const audio = document.createElement('audio');
+    audio.src = url;
+    audio.volume = globalVolume;
+    audio.style.display = 'none';
+    document.body.appendChild(audio);
+    audio.play().catch((err) => {
+      console.warn(`[soundService] Failed to play URL "${url}":`, err.message);
+    });
+    audio.addEventListener('ended', () => audio.remove(), { once: true });
+    audio.addEventListener('error', () => audio.remove(), { once: true });
   },
 
   setVolume(volume: number) {

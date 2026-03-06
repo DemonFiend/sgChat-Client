@@ -32,7 +32,7 @@ export function useDMMessages(conversationId: string | null) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => {
       if (lastPage.length < 50) return undefined;
-      return lastPage[lastPage.length - 1]?.id;
+      return lastPage[0]?.id; // oldest message in the ASC page — fetch messages before it
     },
     enabled: !!conversationId,
   });

@@ -34,7 +34,8 @@ export function ForgotPasswordPage({ onBack }: ForgotPasswordPageProps) {
       <div style={styles.container}>
         <div style={styles.dragRegion} />
         <div style={styles.card}>
-          <h1 style={styles.title}>Check your email</h1>
+          <h1 style={styles.logo}>sgChat</h1>
+          <h2 style={styles.title}>Check your email</h2>
           <p style={styles.subtitle}>
             If an account with that email exists, we've sent a password reset link.
             Check your inbox and follow the instructions.
@@ -51,7 +52,8 @@ export function ForgotPasswordPage({ onBack }: ForgotPasswordPageProps) {
     <div style={styles.container}>
       <div style={styles.dragRegion} />
       <div style={styles.card}>
-        <h1 style={styles.title}>Forgot your password?</h1>
+        <h1 style={styles.logo}>sgChat</h1>
+        <h2 style={styles.title}>Forgot your password?</h2>
         <p style={styles.subtitle}>
           Enter the email associated with your account and we'll send you a reset link.
         </p>
@@ -109,6 +111,13 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 400,
     padding: '0 2rem',
     textAlign: 'center' as const,
+  },
+  logo: {
+    color: 'var(--accent)',
+    fontSize: '2.5rem',
+    fontWeight: 700,
+    letterSpacing: '-0.5px',
+    marginBottom: '0.5rem',
   },
   title: {
     color: 'var(--text-primary)',

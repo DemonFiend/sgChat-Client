@@ -68,7 +68,7 @@ export function GifPicker({ isOpen, onClose, onSelect, anchorRef }: GifPickerPro
       setGifs([]);
       setError(null);
     }
-  }, [isOpen]);
+  }, [isOpen, fetchGifs]);
 
   // Debounced search
   useEffect(() => {
@@ -91,7 +91,7 @@ export function GifPicker({ isOpen, onClose, onSelect, anchorRef }: GifPickerPro
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [searchQuery]);
+  }, [searchQuery, isOpen, fetchGifs]);
 
   const handleGifClick = (gif: GifItem) => {
     onSelect(gif.url);

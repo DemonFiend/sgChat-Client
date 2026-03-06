@@ -1,10 +1,11 @@
-import { Button, Divider, Group, NavLink, Progress, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton } from '@mantine/core';
-import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay } from '@tabler/icons-react';
+import { ActionIcon, Button, Divider, Group, Kbd, NavLink, Progress, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton } from '@mantine/core';
+import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay, IconRefresh } from '@tabler/icons-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import { useThemeStore, type ThemeName, themeNames } from '../stores/themeStore';
 import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
+import { useKeybindsStore, KEYBIND_LABELS, DEFAULT_KEYBINDS } from '../stores/keybindsStore';
 import { useServerVersion } from '../hooks/useServerInfo';
 import { switchInputDevice, switchOutputDevice, setGlobalOutputVolume, applyAudioProcessingSettings } from '../lib/voiceService';
 import { VoiceBar } from '../components/voice/VoiceBar';
@@ -335,19 +336,104 @@ function NotificationSettings() {
 }
 
 function KeybindSettings() {
+  const keybinds = useKeybindsStore((s) => s.keybinds);
+  const loaded = useKeybindsStore((s) => s.loaded);
+  const fetchKeybinds = useKeybindsStore((s) => s.fetchKeybinds);
+  const updateKeybind = useKeybindsStore((s) => s.updateKeybind);
+  const resetKeybind = useKeybindsStore((s) => s.resetKeybind);
+  const [recording, setRecording] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!loaded) fetchKeybinds();
+  }, [loaded, fetchKeybinds]);
+
+  const handleKeyRecord = useCallback((e: React.KeyboardEvent) => {
+    if (!recording) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Build combo string
+    const parts: string[] = [];
+    if (e.ctrlKey) parts.push('Ctrl');
+    if (e.shiftKey) parts.push('Shift');
+    if (e.altKey) parts.push('Alt');
+    if (e.metaKey) parts.push('Meta');
+
+    const key = e.key;
+    // Ignore standalone modifier keys
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(key)) return;
+
+    // Normalize key name
+    const keyName = key.length === 1 ? key.toUpperCase() : key;
+    parts.push(keyName);
+
+    const combo = parts.join('+');
+    updateKeybind(recording, combo);
+    setRecording(null);
+  }, [recording, updateKeybind]);
+
+  const actions = Object.keys(KEYBIND_LABELS);
+
   return (
     <Stack gap={24}>
       <Text size="xl" fw={700}>Keybinds</Text>
-      <Stack gap={8}>
-        <Group justify="space-between" py={8}>
-          <Text size="sm">Toggle Mute</Text>
-          <Text size="sm" c="dimmed" style={{ fontFamily: 'monospace' }}>Ctrl+Shift+M</Text>
-        </Group>
-        <Divider style={{ borderColor: 'var(--border)' }} />
-        <Group justify="space-between" py={8}>
-          <Text size="sm">Toggle Deafen</Text>
-          <Text size="sm" c="dimmed" style={{ fontFamily: 'monospace' }}>Ctrl+Shift+D</Text>
-        </Group>
+      <Text c="dimmed" size="sm">Click a keybind to record a new shortcut. Press Escape to cancel.</Text>
+      <Stack gap={0}>
+        {actions.map((action, i) => {
+          const combo = keybinds[action] || '';
+          const isRecording = recording === action;
+          const isDefault = combo === (DEFAULT_KEYBINDS[action] || '');
+
+          return (
+            <div key={action}>
+              <Group justify="space-between" py={10}>
+                <Text size="sm">{KEYBIND_LABELS[action]}</Text>
+                <Group gap={4}>
+                  <UnstyledButton
+                    onKeyDown={handleKeyRecord}
+                    onClick={() => {
+                      if (isRecording) {
+                        setRecording(null);
+                      } else {
+                        setRecording(action);
+                      }
+                    }}
+                    onBlur={() => { if (isRecording) setRecording(null); }}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: 4,
+                      border: isRecording
+                        ? '1px solid var(--accent)'
+                        : '1px solid var(--border)',
+                      background: isRecording ? 'var(--bg-active)' : 'var(--bg-hover)',
+                      minWidth: 120,
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      outline: 'none',
+                    }}
+                    tabIndex={0}
+                  >
+                    <Text size="xs" style={{ fontFamily: 'monospace' }} c={isRecording ? 'var(--accent)' : combo ? undefined : 'dimmed'}>
+                      {isRecording ? 'Press keys...' : combo || 'Not set'}
+                    </Text>
+                  </UnstyledButton>
+                  {!isDefault && combo && (
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      size={24}
+                      onClick={() => resetKeybind(action)}
+                      title="Reset to default"
+                    >
+                      <IconRefresh size={12} />
+                    </ActionIcon>
+                  )}
+                </Group>
+              </Group>
+              {i < actions.length - 1 && <Divider style={{ borderColor: 'var(--border)' }} />}
+            </div>
+          );
+        })}
       </Stack>
     </Stack>
   );

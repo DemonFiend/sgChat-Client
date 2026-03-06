@@ -2,10 +2,12 @@ import { io, Socket } from 'socket.io-client';
 import { queryClient } from '../lib/queryClient';
 import { toastStore } from '../stores/toastNotifications';
 import { usePresenceStore } from '../stores/presenceStore';
+import { useActivityStore } from '../stores/activityStore';
 import { useTypingStore } from '../stores/typingStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useUnreadStore } from '../stores/unreadStore';
 import { useUIStore } from '../stores/uiStore';
+import { useChannelNotificationStore } from '../stores/channelNotificationStore';
 import { useAuthStore } from '../stores/authStore';
 import { soundService } from '../lib/soundService';
 import { cacheParticipantInfo, updateServerVoiceState } from '../lib/voiceService';
@@ -220,14 +222,20 @@ function handleEvent(type: string, data: any): void {
       // Increment unread if not the active channel
       const activeChannelId = useUIStore.getState().activeChannelId;
       if (data.channel_id !== activeChannelId) {
-        useUnreadStore.getState().increment(data.channel_id, !!data.mentions_user);
-        // Toast for mentions
-        if (data.mentions_user) {
+        const isMention = !!data.mentions_user;
+        const isEveryone = !!data.mentions_everyone;
+        const isRole = !!data.mentions_roles;
+        useUnreadStore.getState().increment(data.channel_id, isMention);
+        // Toast if channel notification settings allow it
+        const shouldShow = useChannelNotificationStore.getState().shouldNotify(
+          data.channel_id, isMention, isEveryone, isRole,
+        );
+        if (shouldShow && (isMention || isEveryone)) {
           const author = data.author?.username || 'Someone';
           const content = data.content?.slice(0, 80) || '';
           toastStore.addToast({
             type: 'mention',
-            title: `@${author} mentioned you`,
+            title: isMention ? `@${author} mentioned you` : `@${author} in #channel`,
             message: content,
             avatarUrl: data.author?.avatar_url,
           });
@@ -399,6 +407,7 @@ function handleEvent(type: string, data: any): void {
     // Notifications
     case 'notification.new':
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      soundService.playNotification();
       if (data.data?.title || data.type) {
         toastStore.addToast({
           type: 'system',
@@ -435,9 +444,18 @@ function handleEvent(type: string, data: any): void {
     // Presence — update Zustand directly (ephemeral)
     case 'presence.update':
       usePresenceStore.getState().updatePresence(data.user_id, data.status);
+      // presence.update may include activity
+      if ('activity' in data) {
+        useActivityStore.getState().updateActivity(data.user_id, data.activity || null);
+      }
       break;
     case 'status_comment.update':
       usePresenceStore.getState().updateStatusComment(data.user_id, data.status_comment);
+      break;
+
+    // Activity / Rich Presence
+    case 'activity.update':
+      useActivityStore.getState().updateActivity(data.user_id, data.activity || null);
       break;
 
     // Typing — update Zustand directly (ephemeral)
@@ -492,27 +510,42 @@ function handleEvent(type: string, data: any): void {
       }
       const currentUserId = useAuthStore.getState().user?.id;
       const voiceState = useVoiceStore.getState();
-      if (
-        voiceState.connected &&
-        data.user?.id !== currentUserId &&
+      const isSelf = data.user?.id === currentUserId;
+      // Play join sound for everyone in the channel including the joining user.
+      // For self: voiceState may still be 'connecting' (API returned but store
+      //   hasn't set connected yet), so accept connectionState === 'connecting'.
+      // For others: require connected + same channel.
+      const shouldPlay =
         !isAfkChannel(data.channel_id) &&
-        (!voiceState.channelId || !isAfkChannel(voiceState.channelId))
-      ) {
-        soundService.playVoiceJoin();
+        (isSelf
+          ? voiceState.connectionState === 'connecting' || (voiceState.connected && data.channel_id === voiceState.channelId)
+          : voiceState.connected && data.channel_id === voiceState.channelId);
+      if (shouldPlay) {
+        if (data.custom_sound_url) {
+          soundService.playUrl(data.custom_sound_url);
+        } else {
+          soundService.playVoiceJoin();
+        }
       }
       break;
     }
     case 'voice.leave': {
       queryClient.invalidateQueries({ queryKey: ['channels'] });
       const currentUserId2 = useAuthStore.getState().user?.id;
+      const leavingUserId = data.user?.id || data.user_id;
       const voiceState2 = useVoiceStore.getState();
+      // Leave sound plays only for users remaining in the channel, not the leaving user
       if (
         voiceState2.connected &&
-        data.user?.id !== currentUserId2 &&
-        !isAfkChannel(data.channel_id) &&
-        (!voiceState2.channelId || !isAfkChannel(voiceState2.channelId))
+        leavingUserId !== currentUserId2 &&
+        data.channel_id === voiceState2.channelId &&
+        !isAfkChannel(data.channel_id)
       ) {
-        soundService.playVoiceLeave();
+        if (data.custom_sound_url) {
+          soundService.playUrl(data.custom_sound_url);
+        } else {
+          soundService.playVoiceLeave();
+        }
       }
       break;
     }
@@ -647,5 +680,31 @@ export async function emitVoiceActivity(): Promise<void> {
     socket.emit('voice:activity', await cryptoEncrypt({}));
   } else {
     socket.emit('voice:activity', {});
+  }
+}
+
+export async function emitActivityUpdate(activity: {
+  type: string;
+  name: string;
+  details?: string | null;
+  state?: string | null;
+  started_at?: string | null;
+  large_image_url?: string | null;
+  small_image_url?: string | null;
+}): Promise<void> {
+  if (!socket) return;
+  if (hasCryptoSession()) {
+    socket.emit('activity:update', await cryptoEncrypt(activity));
+  } else {
+    socket.emit('activity:update', activity);
+  }
+}
+
+export async function emitActivityClear(): Promise<void> {
+  if (!socket) return;
+  if (hasCryptoSession()) {
+    socket.emit('activity:clear', await cryptoEncrypt({}));
+  } else {
+    socket.emit('activity:clear', {});
   }
 }

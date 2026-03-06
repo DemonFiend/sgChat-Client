@@ -10,7 +10,7 @@ const preloadEntry = 'src/preload/index.ts';
 const esbuildOptions = {
   bundle: true,
   platform: 'node',
-  external: ['electron'],
+  external: ['electron', 'application-loopback'],
   format: 'cjs',
   sourcemap: true,
 };

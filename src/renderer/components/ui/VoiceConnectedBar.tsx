@@ -10,12 +10,11 @@ export function VoiceConnectedBar({ compact }: VoiceConnectedBarProps) {
   const connected = useVoiceStore((s) => s.connected);
   const channelName = useVoiceStore((s) => s.channelName);
   const connectionState = useVoiceStore((s) => s.connectionState);
+  const qualityStabilized = useVoiceStore((s) => s.qualityStabilized);
 
   if (!connected && connectionState !== 'connecting' && connectionState !== 'reconnecting') {
     return null;
   }
-
-  const qualityStabilized = useVoiceStore((s) => s.qualityStabilized);
 
   const statusLabel =
     connectionState === 'connecting' ? 'Connecting...' :

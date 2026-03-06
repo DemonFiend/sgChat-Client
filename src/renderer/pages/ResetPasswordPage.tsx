@@ -47,7 +47,8 @@ export function ResetPasswordPage({ token, onBack }: ResetPasswordPageProps) {
       <div style={styles.container}>
         <div style={styles.dragRegion} />
         <div style={styles.card}>
-          <h1 style={styles.title}>Password reset!</h1>
+          <h1 style={styles.logo}>sgChat</h1>
+          <h2 style={styles.title}>Password reset!</h2>
           <p style={styles.subtitle}>
             Your password has been successfully reset. You can now log in with your new password.
           </p>
@@ -63,7 +64,8 @@ export function ResetPasswordPage({ token, onBack }: ResetPasswordPageProps) {
     <div style={styles.container}>
       <div style={styles.dragRegion} />
       <div style={styles.card}>
-        <h1 style={styles.title}>Reset your password</h1>
+        <h1 style={styles.logo}>sgChat</h1>
+        <h2 style={styles.title}>Reset your password</h2>
         <p style={styles.subtitle}>
           Enter a new password for your account.
         </p>
@@ -130,6 +132,13 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 400,
     padding: '0 2rem',
     textAlign: 'center' as const,
+  },
+  logo: {
+    color: 'var(--accent)',
+    fontSize: '2.5rem',
+    fontWeight: 700,
+    letterSpacing: '-0.5px',
+    marginBottom: '0.5rem',
   },
   title: {
     color: 'var(--text-primary)',

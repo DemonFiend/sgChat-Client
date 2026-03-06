@@ -1,8 +1,11 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Avatar, Badge, Group, HoverCard, Indicator, ScrollArea, Skeleton, Stack, Text } from '@mantine/core';
+import { IconDeviceGamepad2, IconHeadphones, IconEye, IconBroadcast, IconTrophy, IconSparkles } from '@tabler/icons-react';
 import { api } from '../../lib/api';
 import { useUIStore } from '../../stores/uiStore';
 import { usePresenceStore } from '../../stores/presenceStore';
+import { useActivityStore, type UserActivity } from '../../stores/activityStore';
 
 interface Role {
   id: string;
@@ -10,6 +13,7 @@ interface Role {
   color?: string;
   position: number;
   hoist?: boolean;
+  is_hoisted?: boolean;
 }
 
 interface Member {
@@ -18,6 +22,7 @@ interface Member {
   display_name?: string;
   avatar_url?: string;
   roles?: Role[];
+  status?: string;
   custom_status?: string;
   joined_at?: string;
 }
@@ -28,7 +33,14 @@ export function MemberList() {
 
   const { data: members, isLoading: membersLoading } = useQuery({
     queryKey: ['members', activeServerId],
-    queryFn: () => api.get<Member[]>(`/api/servers/${activeServerId}/members`),
+    queryFn: async () => {
+      const raw = await api.get<any[]>(`/api/servers/${activeServerId}/members`);
+      return raw.map((m) => ({
+        ...m,
+        id: m.user_id || m.id, // Server returns user_id, normalize to id
+        roles: typeof m.roles === 'string' ? JSON.parse(m.roles) : (m.roles || []),
+      })) as Member[];
+    },
     enabled: !!activeServerId && memberListVisible,
   });
 
@@ -39,6 +51,18 @@ export function MemberList() {
   });
 
   const statuses = usePresenceStore((s) => s.statuses);
+
+  // Seed presenceStore + activityStore with data from the members API response
+  useEffect(() => {
+    if (!members) return;
+    const { updatePresence, updateStatusComment } = usePresenceStore.getState();
+    const { updateActivity } = useActivityStore.getState();
+    for (const m of members) {
+      if (m.status) updatePresence(m.id, m.status);
+      if (m.custom_status) updateStatusComment(m.id, m.custom_status);
+      if ((m as any).activity) updateActivity(m.id, (m as any).activity);
+    }
+  }, [members]);
 
   if (!memberListVisible || !activeServerId) return null;
 
@@ -66,7 +90,7 @@ export function MemberList() {
 
   // Group members by their highest hoisted role
   const hoistedRoles = (roles || [])
-    .filter((r) => r.hoist)
+    .filter((r) => r.hoist || r.is_hoisted)
     .sort((a, b) => b.position - a.position);
 
   const grouped: { role: Role | null; label: string; members: Member[] }[] = [];
@@ -132,8 +156,39 @@ export function MemberList() {
   );
 }
 
+const ACTIVITY_ICONS: Record<string, typeof IconDeviceGamepad2> = {
+  playing: IconDeviceGamepad2,
+  listening: IconHeadphones,
+  watching: IconEye,
+  streaming: IconBroadcast,
+  competing: IconTrophy,
+  custom: IconSparkles,
+};
+
+function ActivityLine({ activity }: { activity: UserActivity }) {
+  const Icon = ACTIVITY_ICONS[activity.type] || IconSparkles;
+  const prefix = {
+    playing: 'Playing',
+    listening: 'Listening to',
+    watching: 'Watching',
+    streaming: 'Streaming',
+    competing: 'Competing in',
+    custom: '',
+  }[activity.type] || '';
+
+  return (
+    <Group gap={4} wrap="nowrap">
+      <Icon size={12} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+      <Text size="xs" c="dimmed" truncate>
+        {prefix ? `${prefix} ` : ''}{activity.name}
+      </Text>
+    </Group>
+  );
+}
+
 function MemberItem({ member, offline, roleColor }: { member: Member; offline?: boolean; roleColor?: string }) {
   const status = usePresenceStore((s) => s.statuses[member.id] || 'offline');
+  const activity = useActivityStore((s) => s.activities[member.id]);
   const statusColor = { online: 'green', idle: 'yellow', dnd: 'red', offline: 'gray' }[status] || 'gray';
 
   return (
@@ -165,9 +220,11 @@ function MemberItem({ member, offline, roleColor }: { member: Member; offline?: 
             >
               {member.display_name || member.username}
             </Text>
-            {member.custom_status && (
+            {activity ? (
+              <ActivityLine activity={activity} />
+            ) : member.custom_status ? (
               <Text size="xs" c="dimmed" truncate>{member.custom_status}</Text>
-            )}
+            ) : null}
           </div>
         </Group>
       </HoverCard.Target>
@@ -178,8 +235,18 @@ function MemberItem({ member, offline, roleColor }: { member: Member; offline?: 
   );
 }
 
+function formatElapsed(startedAt: string): string {
+  const ms = Date.now() - new Date(startedAt).getTime();
+  const minutes = Math.floor(ms / 60000);
+  const hours = Math.floor(minutes / 60);
+  if (hours > 0) return `${hours}h ${minutes % 60}m elapsed`;
+  if (minutes > 0) return `${minutes}m elapsed`;
+  return 'Just started';
+}
+
 function UserProfileCard({ member, status }: { member: Member; status: string }) {
   const statusLabel = { online: 'Online', idle: 'Idle', dnd: 'Do Not Disturb', offline: 'Offline' }[status] || 'Offline';
+  const activity = useActivityStore((s) => s.activities[member.id]);
 
   return (
     <Stack gap={8}>
@@ -200,6 +267,29 @@ function UserProfileCard({ member, status }: { member: Member; status: string })
       )}
 
       <Text size="xs" c="dimmed">{statusLabel}</Text>
+
+      {/* Activity card */}
+      {activity && (
+        <div style={{
+          background: 'var(--bg-hover)',
+          borderRadius: 6,
+          padding: '8px 10px',
+          borderLeft: '3px solid var(--accent)',
+        }}>
+          <ActivityLine activity={activity} />
+          {activity.details && (
+            <Text size="xs" c="dimmed" mt={2}>{activity.details}</Text>
+          )}
+          {activity.state && (
+            <Text size="xs" c="dimmed">{activity.state}</Text>
+          )}
+          {activity.started_at && (
+            <Text size="xs" c="dimmed" mt={2} style={{ fontSize: 10 }}>
+              {formatElapsed(activity.started_at)}
+            </Text>
+          )}
+        </div>
+      )}
 
       {member.roles && member.roles.length > 0 && (
         <Group gap={4}>

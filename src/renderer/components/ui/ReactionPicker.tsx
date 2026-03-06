@@ -49,13 +49,16 @@ export function ReactionPicker({ isOpen, onClose, onSelect, anchorRef, position 
     return EMOJI_CATEGORIES.flatMap((cat) => cat.emojis);
   }, [searchQuery]);
 
-  const currentEmojis = filteredEmojis || EMOJI_CATEGORIES[activeCategory]?.emojis || [];
+  const currentEmojis = useMemo(
+    () => filteredEmojis || EMOJI_CATEGORIES[activeCategory]?.emojis || [],
+    [filteredEmojis, activeCategory],
+  );
 
-  const handleEmojiClick = (emoji: string) => {
+  const handleEmojiClick = useCallback((emoji: string) => {
     onSelect(emoji);
     onClose();
     setSearchQuery('');
-  };
+  }, [onSelect, onClose]);
 
   const handleGridKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -86,7 +89,7 @@ export function ReactionPicker({ isOpen, onClose, onSelect, anchorRef, position 
       const buttons = gridRef.current?.querySelectorAll<HTMLElement>('[role="option"]');
       buttons?.[next]?.focus();
     },
-    [focusedIndex, currentEmojis],
+    [focusedIndex, currentEmojis, handleEmojiClick],
   );
 
   const getPosition = (): React.CSSProperties => {

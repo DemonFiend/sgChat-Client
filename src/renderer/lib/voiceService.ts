@@ -292,10 +292,18 @@ export async function joinVoiceChannel(channelId: string): Promise<{
     });
 
     room.on(RoomEvent.ParticipantConnected, () => {
+      // Play stream-join sound when we're screen sharing and a viewer joins
+      if (room.localParticipant.isScreenShareEnabled) {
+        soundService.play('stream-join');
+      }
       emit('participant-update', getParticipants(room));
     });
 
     room.on(RoomEvent.ParticipantDisconnected, () => {
+      // Play stream-leave sound when we're screen sharing and a viewer leaves
+      if (room.localParticipant.isScreenShareEnabled) {
+        soundService.play('stream-leave');
+      }
       emit('participant-update', getParticipants(room));
     });
 
@@ -339,7 +347,7 @@ export async function joinVoiceChannel(channelId: string): Promise<{
     }
 
     currentRoom = room;
-    soundService.playVoiceJoin();
+    // Join sound is played via the socket voice.join event handler (supports custom sounds + AFK check)
     setupActivityTracking();
     emit('connected', { channelId });
     emit('participant-update', getParticipants(room));
@@ -356,7 +364,7 @@ export async function joinVoiceChannel(channelId: string): Promise<{
 export async function leaveVoiceChannel(): Promise<void> {
   teardownActivityTracking();
   if (currentRoom) {
-    soundService.playVoiceLeave();
+    // Leave sound is NOT played for the leaving user — only remaining users hear it via socket event
 
     // Clean up per-app audio capture
     if (appAudioTrackPublication) {

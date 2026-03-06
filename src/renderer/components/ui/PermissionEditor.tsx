@@ -1,134 +1,267 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { ActionIcon, Group, Stack, Text, Tooltip } from '@mantine/core';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { ActionIcon, Group, Loader, Stack, Text } from '@mantine/core';
 import { IconCheck, IconMinus, IconX } from '@tabler/icons-react';
 
-interface PermissionEntry {
-  key: string;
-  label: string;
-  description: string;
-  category: 'general' | 'text' | 'voice';
+interface ChannelPermissionEditorProps {
+  channelType: string;
+  textAllow: string;
+  textDeny: string;
+  voiceAllow: string;
+  voiceDeny: string;
+  onSave: (values: {
+    text_allow: string;
+    text_deny: string;
+    voice_allow: string;
+    voice_deny: string;
+  }) => Promise<void>;
 }
 
-const PERMISSION_ENTRIES: PermissionEntry[] = [
-  { key: 'view_channels', label: 'View Channels', description: 'Allows viewing channels', category: 'general' },
-  { key: 'manage_channels', label: 'Manage Channels', description: 'Create, edit, and delete channels', category: 'general' },
-  { key: 'manage_roles', label: 'Manage Roles', description: 'Create and edit roles below theirs', category: 'general' },
-  { key: 'manage_server', label: 'Manage Server', description: 'Edit server name, icon, and settings', category: 'general' },
-  { key: 'create_invites', label: 'Create Invites', description: 'Create invite links', category: 'general' },
-  { key: 'kick_members', label: 'Kick Members', description: 'Remove members from the server', category: 'general' },
-  { key: 'ban_members', label: 'Ban Members', description: 'Permanently ban members', category: 'general' },
-  { key: 'manage_nicknames', label: 'Manage Nicknames', description: 'Change other members\' nicknames', category: 'general' },
-  { key: 'view_audit_log', label: 'View Audit Log', description: 'View the server audit log', category: 'general' },
-  { key: 'send_messages', label: 'Send Messages', description: 'Send messages in text channels', category: 'text' },
-  { key: 'manage_messages', label: 'Manage Messages', description: 'Delete or pin other users\' messages', category: 'text' },
-  { key: 'attach_files', label: 'Attach Files', description: 'Upload files and images', category: 'text' },
-  { key: 'add_reactions', label: 'Add Reactions', description: 'Add reactions to messages', category: 'text' },
-  { key: 'mention_everyone', label: 'Mention @everyone', description: 'Use @everyone and @here', category: 'text' },
-  { key: 'connect', label: 'Connect', description: 'Join voice channels', category: 'voice' },
-  { key: 'speak', label: 'Speak', description: 'Speak in voice channels', category: 'voice' },
-  { key: 'mute_members', label: 'Mute Members', description: 'Server mute other members', category: 'voice' },
-  { key: 'deafen_members', label: 'Deafen Members', description: 'Server deafen other members', category: 'voice' },
-  { key: 'move_members', label: 'Move Members', description: 'Move members between channels', category: 'voice' },
+type PermState = 'allow' | 'neutral' | 'deny';
+
+const TEXT_PERMS = [
+  { bit: 0, label: 'View Channel', description: 'See the channel in the list' },
+  { bit: 1, label: 'Send Messages', description: 'Send messages in channels' },
+  { bit: 2, label: 'Send TTS', description: 'Send text-to-speech messages' },
+  { bit: 3, label: 'Read History', description: 'Read past messages' },
+  { bit: 4, label: 'Embed Links', description: 'Post links with previews' },
+  { bit: 5, label: 'Attach Files', description: 'Upload files and images' },
+  { bit: 6, label: 'External Emojis', description: 'Use emojis from other servers' },
+  { bit: 7, label: 'External Stickers', description: 'Use stickers from other servers' },
+  { bit: 8, label: 'Add Reactions', description: 'React to messages' },
+  { bit: 9, label: 'Mention @everyone', description: 'Use @everyone and @here' },
+  { bit: 10, label: 'Mention Roles', description: 'Mention any role' },
+  { bit: 11, label: 'Manage Messages', description: "Delete/pin others' messages" },
+  { bit: 12, label: 'Delete Own Messages', description: 'Delete own messages' },
+  { bit: 13, label: 'Edit Own Messages', description: 'Edit own messages' },
+  { bit: 14, label: 'Create Public Threads', description: 'Create public threads' },
+  { bit: 15, label: 'Create Private Threads', description: 'Create private threads' },
+  { bit: 16, label: 'Send in Threads', description: 'Send messages in threads' },
+  { bit: 17, label: 'Manage Threads', description: 'Archive and delete threads' },
+  { bit: 18, label: 'App Commands', description: 'Use slash commands' },
+  { bit: 19, label: 'Manage Webhooks', description: 'Manage channel webhooks' },
+  { bit: 20, label: 'Bypass Slowmode', description: 'Ignore slowmode restrictions' },
 ];
 
-type PermissionState = 'allow' | 'neutral' | 'deny';
+const VOICE_PERMS = [
+  { bit: 0, label: 'Connect', description: 'Join voice channels' },
+  { bit: 1, label: 'View Channel', description: 'See the voice channel' },
+  { bit: 2, label: 'Speak', description: 'Transmit audio' },
+  { bit: 3, label: 'Video', description: 'Share camera' },
+  { bit: 4, label: 'Stream', description: 'Screen share' },
+  { bit: 5, label: 'Voice Activity', description: 'Use voice activity detection' },
+  { bit: 6, label: 'Priority Speaker', description: "Lower others' volume when speaking" },
+  { bit: 7, label: 'Use Soundboard', description: 'Play soundboard sounds' },
+  { bit: 8, label: 'External Sounds', description: 'Use sounds from other servers' },
+  { bit: 9, label: 'Mute Members', description: 'Server mute others' },
+  { bit: 10, label: 'Deafen Members', description: 'Server deafen others' },
+  { bit: 11, label: 'Move Members', description: 'Move members between channels' },
+  { bit: 12, label: 'Disconnect Members', description: 'Disconnect from voice' },
+  { bit: 13, label: 'Request to Speak', description: 'Request in stage channels' },
+  { bit: 14, label: 'Manage Stage', description: 'Manage stage speakers' },
+  { bit: 15, label: 'Manage Voice Channel', description: 'Edit voice channel settings' },
+  { bit: 16, label: 'Set Voice Status', description: 'Set a custom voice channel status' },
+];
 
-interface PermissionEditorProps {
-  permissions: Record<string, PermissionState>;
-  onChange: (permissions: Record<string, PermissionState>) => void;
-  channelType?: 'text' | 'voice';
-}
+export function ChannelPermissionEditor({
+  channelType,
+  textAllow: textAllowProp,
+  textDeny: textDenyProp,
+  voiceAllow: voiceAllowProp,
+  voiceDeny: voiceDenyProp,
+  onSave,
+}: ChannelPermissionEditorProps) {
+  const [textAllow, setTextAllow] = useState(BigInt(textAllowProp || '0'));
+  const [textDeny, setTextDeny] = useState(BigInt(textDenyProp || '0'));
+  const [voiceAllow, setVoiceAllow] = useState(BigInt(voiceAllowProp || '0'));
+  const [voiceDeny, setVoiceDeny] = useState(BigInt(voiceDenyProp || '0'));
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
-export function PermissionEditor({ permissions, onChange, channelType }: PermissionEditorProps) {
-  const entries = useMemo(() => {
-    if (!channelType) return PERMISSION_ENTRIES;
-    return PERMISSION_ENTRIES.filter(
-      (e) => e.category === 'general' || e.category === channelType,
-    );
-  }, [channelType]);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstRender = useRef(true);
 
-  const categories = useMemo(() => {
-    const grouped: Record<string, PermissionEntry[]> = {};
-    for (const entry of entries) {
-      if (!grouped[entry.category]) grouped[entry.category] = [];
-      grouped[entry.category].push(entry);
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    };
+  }, []);
+
+  const showText = channelType === 'text' || channelType === 'announcement' || channelType === 'category';
+  const showVoice = channelType === 'voice' || channelType === 'temp_voice_generator' || channelType === 'music' || channelType === 'category';
+
+  const scheduleAutoSave = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    setSaveStatus('saving');
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        await onSave({
+          text_allow: textAllow.toString(),
+          text_deny: textDeny.toString(),
+          voice_allow: voiceAllow.toString(),
+          voice_deny: voiceDeny.toString(),
+        });
+        setSaveStatus('saved');
+        savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch {
+        setSaveStatus('error');
+        savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000);
+      }
+    }, 600);
+  }, [textAllow, textDeny, voiceAllow, voiceDeny, onSave]);
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
     }
-    return grouped;
-  }, [entries]);
+    scheduleAutoSave();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- scheduleAutoSave intentionally excluded; we only want to fire on state changes
+  }, [textAllow, textDeny, voiceAllow, voiceDeny]);
 
-  const handleToggle = (key: string) => {
-    const current = permissions[key] || 'neutral';
-    const next: PermissionState =
-      current === 'neutral' ? 'allow' : current === 'allow' ? 'deny' : 'neutral';
-    onChange({ ...permissions, [key]: next });
+  const getState = (allow: bigint, deny: bigint, bit: number): PermState => {
+    const flag = 1n << BigInt(bit);
+    if ((allow & flag) !== 0n) return 'allow';
+    if ((deny & flag) !== 0n) return 'deny';
+    return 'neutral';
   };
 
-  const categoryLabels: Record<string, string> = {
-    general: 'General Permissions',
-    text: 'Text Channel Permissions',
-    voice: 'Voice Channel Permissions',
+  const setState = (
+    setAllow: React.Dispatch<React.SetStateAction<bigint>>,
+    setDenyFn: React.Dispatch<React.SetStateAction<bigint>>,
+    bit: number,
+    state: PermState,
+  ) => {
+    const flag = 1n << BigInt(bit);
+    switch (state) {
+      case 'allow':
+        setAllow((prev) => prev | flag);
+        setDenyFn((prev) => prev & ~flag);
+        break;
+      case 'neutral':
+        setAllow((prev) => prev & ~flag);
+        setDenyFn((prev) => prev & ~flag);
+        break;
+      case 'deny':
+        setAllow((prev) => prev & ~flag);
+        setDenyFn((prev) => prev | flag);
+        break;
+    }
   };
 
   return (
-    <Stack gap={16}>
-      {Object.entries(categories).map(([cat, catEntries]) => (
-        <div key={cat}>
-          <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb={8}>
-            {categoryLabels[cat] || cat}
-          </Text>
+    <Stack gap={12} py={8}>
+      <Group justify="flex-end" gap={4}>
+        {saveStatus === 'saving' && (
+          <Group gap={4}>
+            <Loader size={12} />
+            <Text size="xs" c="dimmed">Saving...</Text>
+          </Group>
+        )}
+        {saveStatus === 'saved' && (
+          <Group gap={4}>
+            <IconCheck size={12} color="var(--mantine-color-green-5)" />
+            <Text size="xs" c="green">Saved</Text>
+          </Group>
+        )}
+        {saveStatus === 'error' && (
+          <Group gap={4}>
+            <IconX size={12} color="var(--mantine-color-red-5)" />
+            <Text size="xs" c="red">Failed to save</Text>
+          </Group>
+        )}
+      </Group>
+
+      {showText && (
+        <>
+          <Text size="xs" fw={700} tt="uppercase" c="dimmed">Text Channel Permissions</Text>
           <Stack gap={2}>
-            {catEntries.map((entry) => (
+            {TEXT_PERMS.map((perm) => (
               <PermissionRow
-                key={entry.key}
-                entry={entry}
-                state={permissions[entry.key] || 'neutral'}
-                onToggle={() => handleToggle(entry.key)}
+                key={`text-${perm.bit}`}
+                label={perm.label}
+                description={perm.description}
+                state={getState(textAllow, textDeny, perm.bit)}
+                onStateChange={(s) => setState(setTextAllow, setTextDeny, perm.bit, s)}
               />
             ))}
           </Stack>
-        </div>
-      ))}
+        </>
+      )}
+
+      {showVoice && (
+        <>
+          <Text size="xs" fw={700} tt="uppercase" c="dimmed">Voice Channel Permissions</Text>
+          <Stack gap={2}>
+            {VOICE_PERMS.map((perm) => (
+              <PermissionRow
+                key={`voice-${perm.bit}`}
+                label={perm.label}
+                description={perm.description}
+                state={getState(voiceAllow, voiceDeny, perm.bit)}
+                onStateChange={(s) => setState(setVoiceAllow, setVoiceDeny, perm.bit, s)}
+              />
+            ))}
+          </Stack>
+        </>
+      )}
     </Stack>
   );
 }
 
 function PermissionRow({
-  entry,
+  label,
+  description,
   state,
-  onToggle,
+  onStateChange,
 }: {
-  entry: PermissionEntry;
-  state: PermissionState;
-  onToggle: () => void;
+  label: string;
+  description: string;
+  state: PermState;
+  onStateChange: (state: PermState) => void;
 }) {
   return (
     <Group
       gap={8}
       px={8}
-      py={6}
-      style={{ borderRadius: 4, background: 'var(--bg-hover)' }}
+      py={4}
+      style={{ borderRadius: 4 }}
       wrap="nowrap"
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <Text size="sm">{entry.label}</Text>
-        <Text size="xs" c="dimmed">{entry.description}</Text>
+        <Text size="sm">{label}</Text>
+        <Text size="xs" c="dimmed" truncate>{description}</Text>
       </div>
-      <Tooltip label={state === 'allow' ? 'Allowed' : state === 'deny' ? 'Denied' : 'Neutral'} withArrow>
+      <Group gap={2} wrap="nowrap">
         <ActionIcon
-          variant={state === 'neutral' ? 'subtle' : 'filled'}
-          color={state === 'allow' ? 'green' : state === 'deny' ? 'red' : 'gray'}
-          size={28}
-          onClick={onToggle}
+          variant={state === 'deny' ? 'filled' : 'subtle'}
+          color={state === 'deny' ? 'red' : 'gray'}
+          size={24}
+          onClick={() => onStateChange(state === 'deny' ? 'neutral' : 'deny')}
         >
-          {state === 'allow' ? (
-            <IconCheck size={14} />
-          ) : state === 'deny' ? (
-            <IconX size={14} />
-          ) : (
-            <IconMinus size={14} />
-          )}
+          <IconX size={12} />
         </ActionIcon>
-      </Tooltip>
+        <ActionIcon
+          variant={state === 'neutral' ? 'light' : 'subtle'}
+          color="gray"
+          size={24}
+          onClick={() => onStateChange('neutral')}
+          style={state === 'neutral' ? { outline: '1px solid var(--border)' } : undefined}
+        >
+          <IconMinus size={12} />
+        </ActionIcon>
+        <ActionIcon
+          variant={state === 'allow' ? 'filled' : 'subtle'}
+          color={state === 'allow' ? 'green' : 'gray'}
+          size={24}
+          onClick={() => onStateChange(state === 'allow' ? 'neutral' : 'allow')}
+        >
+          <IconCheck size={12} />
+        </ActionIcon>
+      </Group>
     </Group>
   );
 }

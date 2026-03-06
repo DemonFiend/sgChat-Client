@@ -3,8 +3,10 @@ import { ActionIcon, Avatar, Badge, Collapse, Group, Indicator, Menu, ScrollArea
 import {
   IconHash, IconVolume, IconChevronDown, IconChevronRight,
   IconSpeakerphone, IconMusic, IconPlus, IconMoon, IconSettings,
-  IconLink, IconBell, IconCrown, IconInfoCircle,
+  IconLink, IconBell, IconBellOff, IconBellRinging, IconCrown, IconInfoCircle,
+  IconCheck,
 } from '@tabler/icons-react';
+import { useChannelNotificationStore, type NotificationLevel } from '../../stores/channelNotificationStore';
 import { useChannels, type Channel, type ChannelType } from '../../hooks/useChannels';
 import { useCategories } from '../../hooks/useCategories';
 import { useChannelReadState } from '../../hooks/useServerInfo';
@@ -47,6 +49,13 @@ export function ChannelSidebar() {
   const [categorySettingsId, setCategorySettingsId] = useState<string | null>(null);
 
   const activeServer = servers?.find((s) => s.id === activeServerId);
+  const channelNotifLoaded = useChannelNotificationStore((s) => s.loaded);
+  const fetchChannelNotifSettings = useChannelNotificationStore((s) => s.fetchAll);
+
+  // Fetch channel notification settings on mount
+  useEffect(() => {
+    if (!channelNotifLoaded) fetchChannelNotifSettings();
+  }, [channelNotifLoaded, fetchChannelNotifSettings]);
 
   const toggleCategory = useCallback((categoryId: string) => {
     setCollapsedCategories((prev) => {
@@ -275,6 +284,13 @@ export function ChannelSidebar() {
   );
 }
 
+const NOTIF_LEVEL_OPTIONS: { value: NotificationLevel; label: string; icon: typeof IconBell }[] = [
+  { value: 'default', label: 'Default', icon: IconBell },
+  { value: 'all', label: 'All Messages', icon: IconBellRinging },
+  { value: 'mentions', label: 'Mentions Only', icon: IconBell },
+  { value: 'none', label: 'Nothing', icon: IconBellOff },
+];
+
 function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel; active: boolean; onClick: () => void; serverId: string }) {
   const Icon = getChannelIcon(channel);
   const unreadEntry = useUnreadStore((s) => s.unreads[channel.id]);
@@ -282,27 +298,30 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
   const isVoiceType = channel.type === 'voice' || channel.type === 'temp_voice' || channel.type === 'temp_voice_generator' || channel.type === 'music';
   const [hovered, setHovered] = useState(false);
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
+  const [notifMenuOpen, setNotifMenuOpen] = useState(false);
+
+  const notifLevel = useChannelNotificationStore((s) => s.settings[channel.id]?.level || 'default');
+  const notifSetting = useChannelNotificationStore((s) => s.settings[channel.id]);
+  const updateNotifSetting = useChannelNotificationStore((s) => s.updateSetting);
+  const removeNotifSetting = useChannelNotificationStore((s) => s.removeSetting);
 
   // Seed unread count from server read state on mount
   const { data: readState } = useChannelReadState(channel.type === 'text' || channel.type === 'announcement' ? channel.id : null);
   useEffect(() => {
     if (readState?.unread_count && readState.unread_count > 0 && !unreadEntry) {
       useUnreadStore.getState().increment(channel.id);
-      // Set the correct count by replacing via direct state update
       useUnreadStore.setState((s) => ({
         unreads: { ...s.unreads, [channel.id]: { count: readState.unread_count!, mentions: 0 } },
       }));
     }
   }, [readState?.unread_count, channel.id, unreadEntry]);
 
-  // For voice channels, handle click differently
   const voiceJoin = useVoiceStore((s) => s.join);
   const voiceChannelId = useVoiceStore((s) => s.channelId);
   const voiceParticipants = useVoiceStore((s) => s.participants);
 
   const handleClick = () => {
     if (isVoiceType) {
-      // Join voice channel (server handles temp_voice_generator automatically)
       if (voiceChannelId !== channel.id) {
         voiceJoin(channel.id, channel.name);
       }
@@ -311,83 +330,131 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setNotifMenuOpen(true);
+  };
+
   const isInThisVoiceChannel = voiceChannelId === channel.id;
+  const isMuted = notifLevel === 'none';
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <UnstyledButton
-        onClick={handleClick}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '6px 8px',
-          borderRadius: 4,
-          background: active ? 'var(--bg-active)' : hovered ? 'var(--bg-hover)' : 'transparent',
-          color: active || hasUnread ? 'var(--text-primary)' : 'var(--text-muted)',
-          fontWeight: hasUnread ? 600 : 400,
-          transition: 'background 0.1s',
-          position: 'relative',
-          width: '100%',
-        }}
-      >
-        {/* Unread pill indicator */}
-        {hasUnread && !active && (
-          <div style={{
-            position: 'absolute',
-            left: -4,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 4,
-            height: 8,
-            borderRadius: '0 4px 4px 0',
-            background: 'var(--text-primary)',
-          }} />
-        )}
-        <Icon size={18} style={{ flexShrink: 0, opacity: 0.7 }} />
-        <Text size="sm" truncate style={{ flex: 1 }}>
-          {channel.name}
-        </Text>
-        {hovered && (
-          <Tooltip label="Edit Channel" withArrow position="top">
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              size={20}
-              onClick={(e) => { e.stopPropagation(); setChannelSettingsOpen(true); }}
+      <Menu opened={notifMenuOpen} onChange={setNotifMenuOpen} position="right-start" withArrow>
+        <Menu.Target>
+          <UnstyledButton
+            onClick={handleClick}
+            onContextMenu={handleContextMenu}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 8px',
+              borderRadius: 4,
+              background: active ? 'var(--bg-active)' : hovered ? 'var(--bg-hover)' : 'transparent',
+              color: active || hasUnread ? 'var(--text-primary)' : 'var(--text-muted)',
+              fontWeight: hasUnread ? 600 : 400,
+              transition: 'background 0.1s',
+              position: 'relative',
+              width: '100%',
+              opacity: isMuted ? 0.5 : 1,
+            }}
+          >
+            {hasUnread && !active && (
+              <div style={{
+                position: 'absolute',
+                left: -4,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                width: 4,
+                height: 8,
+                borderRadius: '0 4px 4px 0',
+                background: 'var(--text-primary)',
+              }} />
+            )}
+            <Icon size={18} style={{ flexShrink: 0, opacity: 0.7 }} />
+            <Text size="sm" truncate style={{ flex: 1 }}>
+              {channel.name}
+            </Text>
+            {isMuted && !hovered && (
+              <IconBellOff size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+            )}
+            {hovered && (
+              <Tooltip label="Edit Channel" withArrow position="top">
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size={20}
+                  onClick={(e) => { e.stopPropagation(); setChannelSettingsOpen(true); }}
+                >
+                  <IconSettings size={12} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+            {!hovered && !isMuted && (unreadEntry?.mentions ?? 0) > 0 && (
+              <Badge size="xs" variant="filled" color="red" circle>
+                {unreadEntry!.mentions}
+              </Badge>
+            )}
+            {!hovered && !isMuted && !active && hasUnread && (unreadEntry?.mentions ?? 0) === 0 && (
+              <div style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: 'var(--text-primary)',
+                flexShrink: 0,
+                opacity: 0.6,
+              }} />
+            )}
+          </UnstyledButton>
+        </Menu.Target>
+        <Menu.Dropdown style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+          <Menu.Label>Notification Settings</Menu.Label>
+          {NOTIF_LEVEL_OPTIONS.map((opt) => (
+            <Menu.Item
+              key={opt.value}
+              leftSection={<opt.icon size={14} />}
+              rightSection={notifLevel === opt.value ? <IconCheck size={14} style={{ color: 'var(--accent)' }} /> : null}
+              onClick={() => {
+                if (opt.value === 'default') {
+                  removeNotifSetting(channel.id);
+                } else {
+                  updateNotifSetting(channel.id, { level: opt.value });
+                }
+              }}
             >
-              <IconSettings size={12} />
-            </ActionIcon>
-          </Tooltip>
-        )}
-        {!hovered && (unreadEntry?.mentions ?? 0) > 0 && (
-          <Badge size="xs" variant="filled" color="red" circle>
-            {unreadEntry!.mentions}
-          </Badge>
-        )}
-        {!hovered && !active && hasUnread && (unreadEntry?.mentions ?? 0) === 0 && (
-          <div style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: 'var(--text-primary)',
-            flexShrink: 0,
-            opacity: 0.6,
-          }} />
-        )}
-      </UnstyledButton>
+              {opt.label}
+            </Menu.Item>
+          ))}
+          <Menu.Divider />
+          <Menu.Item
+            leftSection={notifSetting?.suppress_everyone ? <IconCheck size={14} /> : <div style={{ width: 14 }} />}
+            onClick={() => updateNotifSetting(channel.id, { suppress_everyone: !notifSetting?.suppress_everyone })}
+          >
+            Suppress @everyone
+          </Menu.Item>
+          <Menu.Item
+            leftSection={notifSetting?.suppress_roles ? <IconCheck size={14} /> : <div style={{ width: 14 }} />}
+            onClick={() => updateNotifSetting(channel.id, { suppress_roles: !notifSetting?.suppress_roles })}
+          >
+            Suppress @role
+          </Menu.Item>
+          <Menu.Divider />
+          <Menu.Item leftSection={<IconSettings size={14} />} onClick={() => setChannelSettingsOpen(true)}>
+            Channel Settings
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
 
-      {/* Voice channel participants inline */}
       {isVoiceType && isInThisVoiceChannel && voiceParticipants.length > 0 && (
         <div style={{ paddingLeft: 28, paddingTop: 2, paddingBottom: 2 }}>
           <VoiceParticipantsList participants={voiceParticipants} compact />
         </div>
       )}
 
-      {/* Channel settings modal */}
       <ChannelSettingsModal
         opened={channelSettingsOpen}
         onClose={() => setChannelSettingsOpen(false)}

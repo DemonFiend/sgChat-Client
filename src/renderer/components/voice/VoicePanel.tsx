@@ -37,6 +37,7 @@ export function VoicePanel() {
   const ping = useVoiceStore((s) => s.connectionQuality.ping);
   const error = useVoiceStore((s) => s.error);
   const initListeners = useVoiceStore((s) => s.initListeners);
+  const qualityStabilized = useVoiceStore((s) => s.qualityStabilized);
   const [soundboardOpen, setSoundboardOpen] = useState(false);
 
   // Initialize voice event listeners (quality polling, participant updates, reconnection)
@@ -73,8 +74,6 @@ export function VoicePanel() {
       </div>
     );
   }
-
-  const qualityStabilized = useVoiceStore((s) => s.qualityStabilized);
   const statusLabel =
     connectionState === 'connecting' ? 'Connecting...' :
     connectionState === 'reconnecting' ? 'Reconnecting...' :

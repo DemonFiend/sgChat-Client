@@ -23,8 +23,10 @@ export function TypingIndicator({ channelId }: TypingIndicatorProps) {
     text = `${typing[0].username} is typing...`;
   } else if (typing.length === 2) {
     text = `${typing[0].username} and ${typing[1].username} are typing...`;
+  } else if (typing.length === 3) {
+    text = `${typing[0].username}, ${typing[1].username}, and ${typing[2].username} are typing...`;
   } else {
-    text = 'Several people are typing...';
+    text = `Chat Party! (${typing.length}+ People are typing...)`;
   }
 
   return (

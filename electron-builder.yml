@@ -11,6 +11,10 @@ files:
   - pages/**/*
   - resources/**/*
   - package.json
+  - node_modules/application-loopback/**/*
+
+asarUnpack:
+  - node_modules/application-loopback/bin/**/*
 
 win:
   target:

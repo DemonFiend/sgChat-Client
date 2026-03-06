@@ -12,6 +12,8 @@ import { AppLayout } from './layouts/AppLayout';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { SessionExpiredOverlay } from './components/ui/SessionExpiredOverlay';
 import { NotificationToast } from './components/ui/NotificationToast';
+import { ScreenSharePicker } from './components/ui/ScreenSharePicker';
+import { UpdateModal } from './components/ui/UpdateModal';
 
 type AuthView = 'loading' | 'server-setup' | 'login' | 'register' | 'forgot-password' | 'reset-password' | 'app';
 
@@ -87,6 +89,8 @@ export function App() {
         <AuthRouter />
         <SessionExpiredOverlay />
         <NotificationToast />
+        <ScreenSharePicker />
+        <UpdateModal />
       </QueryClientProvider>
     </ErrorBoundary>
   );
