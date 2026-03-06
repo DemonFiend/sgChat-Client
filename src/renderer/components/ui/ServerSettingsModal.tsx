@@ -14,6 +14,8 @@ import {
 import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { ServerPopupConfigForm } from './ServerPopupConfigForm';
+import { TransferOwnershipModal } from './TransferOwnershipModal';
+import { useAuthStore } from '../../stores/authStore';
 
 interface ServerSettingsModalProps {
   opened: boolean;
@@ -630,6 +632,14 @@ function MembersTab({ serverId }: { serverId: string }) {
     queryFn: () => api.get<Role[]>(`/api/servers/${serverId}/roles`),
   });
 
+  const { data: server } = useQuery({
+    queryKey: ['server', serverId],
+    queryFn: () => api.get<any>(`/api/servers/${serverId}`),
+  });
+
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const isOwner = server?.owner_id === currentUserId;
+  const [transferOpen, setTransferOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
@@ -732,6 +742,32 @@ function MembersTab({ serverId }: { serverId: string }) {
           <MemberRolePanel serverId={serverId} memberId={selectedMemberId} allRoles={assignableRoles} />
         )}
       </div>
+
+      {/* Transfer Ownership — owner only */}
+      {isOwner && (
+        <>
+          <Divider label="Danger Zone" labelPosition="left" color="red" />
+          <Button
+            color="red"
+            variant="outline"
+            onClick={() => setTransferOpen(true)}
+          >
+            Transfer Ownership
+          </Button>
+          <TransferOwnershipModal
+            opened={transferOpen}
+            onClose={() => setTransferOpen(false)}
+            serverId={serverId}
+            currentOwnerId={currentUserId!}
+            members={(members || []).map((m) => ({
+              id: m.user_id || m.id,
+              username: m.username,
+              display_name: m.display_name,
+              avatar_url: m.avatar_url,
+            }))}
+          />
+        </>
+      )}
     </Stack>
   );
 }

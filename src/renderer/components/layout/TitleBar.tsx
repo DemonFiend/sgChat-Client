@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { ActionIcon, Badge, Group, Text, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog } from '@tabler/icons-react';
+import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog, IconBell } from '@tabler/icons-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
+import { useNotificationStore } from '../../stores/notificationStore';
+import { useUnreadNotificationCount } from '../../hooks/useNotifications';
 import { useServers } from '../../hooks/useServers';
 import { canManageServer } from '../../stores/permissions';
 import { ServerSettingsModal } from '../ui/ServerSettingsModal';
 import { ServerSwitcher } from '../ui/ServerSwitcher';
+import { NotificationPanel } from '../ui/NotificationPanel';
 
 const electronAPI = (window as any).electronAPI;
 
@@ -28,6 +31,8 @@ export function TitleBar() {
   const activeServer = servers?.find((s) => s.id === activeServerId);
   const showServerSettings = view === 'servers' && !!activeServerId && canManageServer(activeServer?.owner_id);
   const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
+  const toggleNotifPanel = useNotificationStore((s) => s.togglePanel);
+  const { data: unreadNotifCount } = useUnreadNotificationCount();
 
   // Update window title with total unread count (DMs + mentions)
   const totalBadge = totalDMUnread + totalMentions;
@@ -152,6 +157,34 @@ export function TitleBar() {
             Settings
           </UnstyledButton>
 
+          {/* Notification bell */}
+          <UnstyledButton
+            onClick={toggleNotifPanel}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: '4px 8px',
+              borderRadius: 16,
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              position: 'relative',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            <IconBell size={14} />
+            {(unreadNotifCount ?? 0) > 0 && (
+              <Badge
+                size="xs"
+                variant="filled"
+                color="red"
+                circle
+                style={{ position: 'absolute', top: -4, right: -4, fontSize: '0.6rem', minWidth: 16, height: 16 }}
+              >
+                {(unreadNotifCount ?? 0) > 99 ? '99+' : unreadNotifCount}
+              </Badge>
+            )}
+          </UnstyledButton>
+
         </Group>
       </div>
 
@@ -202,6 +235,7 @@ export function TitleBar() {
           serverId={activeServerId}
         />
       )}
+      <NotificationPanel />
     </div>
   );
 }

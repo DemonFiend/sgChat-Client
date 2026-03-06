@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Avatar, Badge, Group, HoverCard, Indicator, ScrollArea, Skeleton, Stack, Text } from '@mantine/core';
 import { IconDeviceGamepad2, IconHeadphones, IconEye, IconBroadcast, IconTrophy, IconSparkles } from '@tabler/icons-react';
@@ -6,6 +6,10 @@ import { api } from '../../lib/api';
 import { useUIStore } from '../../stores/uiStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useActivityStore, type UserActivity } from '../../stores/activityStore';
+import { useAuthStore } from '../../stores/authStore';
+import { UserContextMenu } from '../ui/UserContextMenu';
+import { useSendFriendRequest, useFriends, useRemoveFriend, useBlockUser } from '../../hooks/useFriends';
+import { queryClient } from '../../lib/queryClient';
 
 interface Role {
   id: string;
@@ -30,6 +34,20 @@ interface Member {
 export function MemberList() {
   const activeServerId = useUIStore((s) => s.activeServerId);
   const memberListVisible = useUIStore((s) => s.memberListVisible);
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const { data: friends } = useFriends();
+  const sendFriendRequest = useSendFriendRequest();
+  const removeFriend = useRemoveFriend();
+  const blockUser = useBlockUser();
+
+  // Context menu state
+  const [ctxMenu, setCtxMenu] = useState<{ userId: string; username: string; x: number; y: number } | null>(null);
+  const friendIds = new Set((friends || []).map((f: any) => f.friend_id || f.id));
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, member: Member) => {
+    e.preventDefault();
+    setCtxMenu({ userId: member.id, username: member.username, x: e.clientX, y: e.clientY });
+  }, []);
 
   const { data: members, isLoading: membersLoading } = useQuery({
     queryKey: ['members', activeServerId],
@@ -146,12 +164,54 @@ export function MemberList() {
                   member={member}
                   offline={group.label === 'Offline'}
                   roleColor={group.role?.color}
+                  onContextMenu={(e) => handleContextMenu(e, member)}
                 />
               ))}
             </div>
           ))}
         </Stack>
       </ScrollArea>
+
+      {/* Right-click context menu */}
+      {ctxMenu && (
+        <UserContextMenu
+          userId={ctxMenu.userId}
+          username={ctxMenu.username}
+          isCurrentUser={ctxMenu.userId === currentUserId}
+          isFriend={friendIds.has(ctxMenu.userId)}
+          opened={true}
+          position={{ x: ctxMenu.x, y: ctxMenu.y }}
+          onClose={() => setCtxMenu(null)}
+          onSendMessage={() => {
+            useUIStore.getState().setView('dms');
+            setCtxMenu(null);
+          }}
+          onAddFriend={() => {
+            sendFriendRequest.mutate(ctxMenu.username);
+            setCtxMenu(null);
+          }}
+          onRemoveFriend={() => {
+            removeFriend.mutate(ctxMenu.userId);
+            setCtxMenu(null);
+          }}
+          onBlockUser={() => {
+            blockUser.mutate(ctxMenu.userId);
+            setCtxMenu(null);
+          }}
+          onKick={activeServerId ? () => {
+            api.post(`/api/servers/${activeServerId}/members/${ctxMenu.userId}/kick`).then(() => {
+              queryClient.invalidateQueries({ queryKey: ['members', activeServerId] });
+            }).catch(() => {});
+            setCtxMenu(null);
+          } : undefined}
+          onBan={activeServerId ? () => {
+            api.post(`/api/servers/${activeServerId}/members/${ctxMenu.userId}/ban`).then(() => {
+              queryClient.invalidateQueries({ queryKey: ['members', activeServerId] });
+            }).catch(() => {});
+            setCtxMenu(null);
+          } : undefined}
+        />
+      )}
     </div>
   );
 }
@@ -186,7 +246,7 @@ function ActivityLine({ activity }: { activity: UserActivity }) {
   );
 }
 
-function MemberItem({ member, offline, roleColor }: { member: Member; offline?: boolean; roleColor?: string }) {
+function MemberItem({ member, offline, roleColor, onContextMenu }: { member: Member; offline?: boolean; roleColor?: string; onContextMenu?: (e: React.MouseEvent) => void }) {
   const status = usePresenceStore((s) => s.statuses[member.id] || 'offline');
   const activity = useActivityStore((s) => s.activities[member.id]);
   const statusColor = { online: 'green', idle: 'yellow', dnd: 'red', offline: 'gray' }[status] || 'gray';
@@ -206,6 +266,7 @@ function MemberItem({ member, offline, roleColor }: { member: Member; offline?: 
           }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          onContextMenu={onContextMenu}
         >
           <Indicator color={statusColor} size={8} offset={3} position="bottom-end" withBorder>
             <Avatar src={member.avatar_url} size={32} radius="xl" color="brand">

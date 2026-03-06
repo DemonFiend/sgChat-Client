@@ -21,6 +21,14 @@ export function AppLayout() {
     return () => disconnectSocket();
   }, []);
 
+  // Periodically clear expired custom status (every 30s)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      useAuthStore.getState().clearExpiredCustomStatus();
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Seed presenceStore with the current user's own status from authStore
   useEffect(() => {
     if (user) {

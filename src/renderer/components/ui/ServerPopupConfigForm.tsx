@@ -8,7 +8,9 @@ interface ServerPopupConfigFormProps {
 
 export function ServerPopupConfigForm({ serverId }: ServerPopupConfigFormProps) {
   const config = useServerConfigStore((s) => s.config);
+  const isLoading = useServerConfigStore((s) => s.isLoading);
   const isSaving = useServerConfigStore((s) => s.isSaving);
+  const fetchConfig = useServerConfigStore((s) => s.fetchConfig);
   const updatePopupConfig = useServerConfigStore((s) => s.updatePopupConfig);
 
   const [enabled, setEnabled] = useState(false);
@@ -16,6 +18,11 @@ export function ServerPopupConfigForm({ serverId }: ServerPopupConfigFormProps) 
   const [body, setBody] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [saved, setSaved] = useState(false);
+
+  // Fetch server config when tab mounts
+  useEffect(() => {
+    fetchConfig(serverId);
+  }, [serverId, fetchConfig]);
 
   useEffect(() => {
     if (config?.popup_config) {

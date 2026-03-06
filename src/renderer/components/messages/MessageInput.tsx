@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { ActionIcon, Group, Text, Textarea, Tooltip, UnstyledButton } from '@mantine/core';
 import { IconGif, IconPaperclip, IconMoodSmile, IconSend, IconX } from '@tabler/icons-react';
 import { useSendMessage } from '../../hooks/useMessages';
-import { emitTypingStart } from '../../api/socket';
+import { emitTypingStart, emitTypingStop } from '../../api/socket';
 import { useUIStore } from '../../stores/uiStore';
 import { api } from '../../lib/api';
 import { GifPicker } from '../ui/GifPicker';
@@ -53,6 +53,8 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
 
     setContent('');
     setReplyTo(null);
+    lastTypingEmit.current = 0;
+    emitTypingStop(channelId);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -165,6 +167,7 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
           value={content}
           onChange={(e) => handleChange(e.currentTarget.value)}
           onKeyDown={handleKeyDown}
+          onBlur={() => { if (lastTypingEmit.current > 0) { emitTypingStop(channelId); lastTypingEmit.current = 0; } }}
           placeholder={replyTo ? `Reply to @${replyTo.author.username}` : `Message #${channelName}`}
           autosize
           minRows={1}
