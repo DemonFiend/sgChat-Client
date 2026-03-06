@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { ActionIcon, Avatar, Badge, Collapse, Group, Indicator, Menu, ScrollArea, Stack, Text, Tooltip, UnstyledButton } from '@mantine/core';
+import { Reorder } from 'framer-motion';
 import {
   IconHash, IconVolume, IconChevronDown, IconChevronRight,
   IconSpeakerphone, IconMusic, IconPlus, IconMoon, IconSettings,
@@ -14,6 +15,10 @@ import { useUIStore } from '../../stores/uiStore';
 import { useServers } from '../../hooks/useServers';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { hasPermission } from '../../stores/permissions';
+import { api } from '../../lib/api';
+import { queryClient } from '../../lib/queryClient';
+import { toastStore } from '../../stores/toastNotifications';
 import { UserInfoPanel } from './UserInfoPanel';
 import { VoicePanel } from '../voice/VoicePanel';
 import { VoiceParticipantsList } from '../ui/VoiceParticipantsList';
@@ -28,6 +33,7 @@ const CHANNEL_ICONS: Record<ChannelType, typeof IconHash> = {
   music: IconMusic,
   temp_voice_generator: IconPlus,
   temp_voice: IconVolume,
+  stage: IconSpeakerphone,
 };
 
 function getChannelIcon(channel: Channel) {
@@ -89,6 +95,33 @@ export function ChannelSidebar() {
   // Categories come from a separate API — group channels by category_id
   const sortedCategories = [...(fetchedCategories || [])].sort((a, b) => a.position - b.position);
   const uncategorized = sorted.filter((c) => !c.category_id);
+
+  // Local category order for drag-and-drop reorder
+  const [localCategories, setLocalCategories] = useState(sortedCategories);
+  const prevCategoriesRef = useRef(sortedCategories);
+  useEffect(() => {
+    // Sync local state when fetched data changes (but not during drag)
+    if (JSON.stringify(prevCategoriesRef.current.map(c => c.id)) !== JSON.stringify(sortedCategories.map(c => c.id))) {
+      setLocalCategories(sortedCategories);
+    }
+    prevCategoriesRef.current = sortedCategories;
+  }, [sortedCategories]);
+
+  const canReorder = hasPermission('manage_channels');
+
+  const handleCategoryReorder = useCallback((newOrder: typeof localCategories) => {
+    if (!canReorder || !activeServerId) return;
+    const prevOrder = localCategories;
+    setLocalCategories(newOrder);
+    api.post(`/api/servers/${activeServerId}/categories/reorder`, {
+      categories: newOrder.map((c, i) => ({ id: c.id, position: i })),
+    }).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['categories', activeServerId] });
+    }).catch(() => {
+      setLocalCategories(prevOrder);
+      toastStore.addToast({ type: 'warning', title: 'Reorder Failed', message: 'Could not save category order.' });
+    });
+  }, [canReorder, activeServerId, localCategories]);
 
   const serverMotd = activeServer?.motd;
 
@@ -191,79 +224,93 @@ export function ChannelSidebar() {
             />
           ))}
 
-          {/* Categorized channels */}
-          {sortedCategories.map((category) => {
-            const categoryChannels = sorted.filter(
-              (c) => c.category_id === category.id
-            );
-            const isCollapsed = collapsedCategories.has(category.id);
-            const categoryChannelIds = categoryChannels.map((c) => c.id);
-            const categoryUnreadCount = categoryChannelIds.reduce((sum, id) => sum + (unreads[id]?.count || 0), 0);
+          {/* Categorized channels (drag-to-reorder when permitted) */}
+          <Reorder.Group
+            axis="y"
+            values={localCategories}
+            onReorder={handleCategoryReorder}
+            as="div"
+            style={{ listStyle: 'none', padding: 0, margin: 0 }}
+          >
+            {localCategories.map((category) => {
+              const categoryChannels = sorted.filter(
+                (c) => c.category_id === category.id
+              );
+              const isCollapsed = collapsedCategories.has(category.id);
+              const categoryChannelIds = categoryChannels.map((c) => c.id);
+              const categoryUnreadCount = categoryChannelIds.reduce((sum, id) => sum + (unreads[id]?.count || 0), 0);
 
-            return (
-              <div key={category.id}>
-                <Group gap={0} style={{ width: '100%' }} wrap="nowrap">
-                  <UnstyledButton
-                    onClick={() => toggleCategory(category.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 2,
-                      padding: '6px 4px',
-                      flex: 1,
-                      minWidth: 0,
-                    }}
-                  >
-                    {isCollapsed ? (
-                      <IconChevronRight size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                    ) : (
-                      <IconChevronDown size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                    )}
-                    <Text
-                      size="xs"
-                      fw={700}
-                      tt="uppercase"
-                      c="dimmed"
-                      style={{ letterSpacing: '0.5px', flex: 1 }}
-                      truncate
+              return (
+                <Reorder.Item
+                  key={category.id}
+                  value={category}
+                  as="div"
+                  dragListener={canReorder}
+                  style={{ cursor: canReorder ? 'grab' : 'default' }}
+                >
+                  <Group gap={0} style={{ width: '100%' }} wrap="nowrap">
+                    <UnstyledButton
+                      onClick={() => toggleCategory(category.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 2,
+                        padding: '6px 4px',
+                        flex: 1,
+                        minWidth: 0,
+                      }}
                     >
-                      {category.name}
-                    </Text>
-                    {isCollapsed && categoryUnreadCount > 0 && (
-                      <Badge size="xs" variant="filled" color="brand" circle>
-                        {categoryUnreadCount}
-                      </Badge>
-                    )}
-                  </UnstyledButton>
-                  <Tooltip label="Category Settings" withArrow position="right">
-                    <ActionIcon
-                      variant="subtle"
-                      color="gray"
-                      size={18}
-                      onClick={(e) => { e.stopPropagation(); setCategorySettingsId(category.id); }}
-                      style={{ opacity: 0.5, flexShrink: 0 }}
-                      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
-                    >
-                      <IconSettings size={12} />
-                    </ActionIcon>
-                  </Tooltip>
-                </Group>
-                {!isCollapsed && categoryChannels.map((channel) => (
-                  <ChannelItem
-                    key={channel.id}
-                    channel={channel}
-                    active={activeChannelId === channel.id}
-                    serverId={activeServerId}
-                    onClick={() => {
-                      setActiveChannel(channel.id);
-                      useUnreadStore.getState().markRead(channel.id);
-                    }}
-                  />
-                ))}
-              </div>
-            );
-          })}
+                      {isCollapsed ? (
+                        <IconChevronRight size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                      ) : (
+                        <IconChevronDown size={10} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                      )}
+                      <Text
+                        size="xs"
+                        fw={700}
+                        tt="uppercase"
+                        c="dimmed"
+                        style={{ letterSpacing: '0.5px', flex: 1 }}
+                        truncate
+                      >
+                        {category.name}
+                      </Text>
+                      {isCollapsed && categoryUnreadCount > 0 && (
+                        <Badge size="xs" variant="filled" color="brand" circle>
+                          {categoryUnreadCount}
+                        </Badge>
+                      )}
+                    </UnstyledButton>
+                    <Tooltip label="Category Settings" withArrow position="right">
+                      <ActionIcon
+                        variant="subtle"
+                        color="gray"
+                        size={18}
+                        onClick={(e) => { e.stopPropagation(); setCategorySettingsId(category.id); }}
+                        style={{ opacity: 0.5, flexShrink: 0 }}
+                        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
+                      >
+                        <IconSettings size={12} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Group>
+                  {!isCollapsed && categoryChannels.map((channel) => (
+                    <ChannelItem
+                      key={channel.id}
+                      channel={channel}
+                      active={activeChannelId === channel.id}
+                      serverId={activeServerId}
+                      onClick={() => {
+                        setActiveChannel(channel.id);
+                        useUnreadStore.getState().markRead(channel.id);
+                      }}
+                    />
+                  ))}
+                </Reorder.Item>
+              );
+            })}
+          </Reorder.Group>
         </Stack>
       </ScrollArea>
 
@@ -295,7 +342,7 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
   const Icon = getChannelIcon(channel);
   const unreadEntry = useUnreadStore((s) => s.unreads[channel.id]);
   const hasUnread = (unreadEntry?.count ?? 0) > 0;
-  const isVoiceType = channel.type === 'voice' || channel.type === 'temp_voice' || channel.type === 'temp_voice_generator' || channel.type === 'music';
+  const isVoiceType = channel.type === 'voice' || channel.type === 'temp_voice' || channel.type === 'temp_voice_generator' || channel.type === 'music' || channel.type === 'stage';
   const [hovered, setHovered] = useState(false);
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
   const [notifMenuOpen, setNotifMenuOpen] = useState(false);
@@ -323,7 +370,7 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
   const handleClick = () => {
     if (isVoiceType) {
       if (voiceChannelId !== channel.id) {
-        voiceJoin(channel.id, channel.name);
+        voiceJoin(channel.id, channel.name, channel.type);
       }
     } else {
       onClick();

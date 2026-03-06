@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Avatar, Badge, Group, HoverCard, Indicator, ScrollArea, Skeleton, Stack, Text } from '@mantine/core';
+import { Avatar, Badge, Button, Group, HoverCard, Indicator, Modal, ScrollArea, Select, Skeleton, Stack, Text } from '@mantine/core';
 import { IconDeviceGamepad2, IconHeadphones, IconEye, IconBroadcast, IconTrophy, IconSparkles } from '@tabler/icons-react';
 import { api } from '../../lib/api';
 import { useUIStore } from '../../stores/uiStore';
+import { toastStore } from '../../stores/toastNotifications';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useActivityStore, type UserActivity } from '../../stores/activityStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -42,6 +43,8 @@ export function MemberList() {
 
   // Context menu state
   const [ctxMenu, setCtxMenu] = useState<{ userId: string; username: string; x: number; y: number } | null>(null);
+  const [timeoutTarget, setTimeoutTarget] = useState<{ userId: string; username: string } | null>(null);
+  const [timeoutDuration, setTimeoutDuration] = useState<string | null>('300');
   const friendIds = new Set((friends || []).map((f: any) => f.friend_id || f.id));
 
   const handleContextMenu = useCallback((e: React.MouseEvent, member: Member) => {
@@ -198,6 +201,18 @@ export function MemberList() {
             blockUser.mutate(ctxMenu.userId);
             setCtxMenu(null);
           }}
+          onWarn={activeServerId ? () => {
+            api.post(`/api/servers/${activeServerId}/members/${ctxMenu.userId}/warn`).then(() => {
+              toastStore.addToast({ type: 'system', title: 'Warning Sent', message: `Warned ${ctxMenu.username}` });
+            }).catch((err) => {
+              toastStore.addToast({ type: 'warning', title: 'Warn Failed', message: (err as any)?.message || 'Unknown error' });
+            });
+            setCtxMenu(null);
+          } : undefined}
+          onTimeout={activeServerId ? () => {
+            setTimeoutTarget({ userId: ctxMenu.userId, username: ctxMenu.username });
+            setCtxMenu(null);
+          } : undefined}
           onKick={activeServerId ? () => {
             api.post(`/api/servers/${activeServerId}/members/${ctxMenu.userId}/kick`).then(() => {
               queryClient.invalidateQueries({ queryKey: ['members', activeServerId] });
@@ -212,6 +227,49 @@ export function MemberList() {
           } : undefined}
         />
       )}
+
+      {/* Timeout duration modal */}
+      <Modal
+        opened={!!timeoutTarget}
+        onClose={() => setTimeoutTarget(null)}
+        title={`Timeout ${timeoutTarget?.username}`}
+        size="xs"
+        centered
+        styles={{ content: { background: 'var(--bg-primary)' }, header: { background: 'var(--bg-primary)' } }}
+      >
+        <Stack gap={12}>
+          <Select
+            label="Duration"
+            value={timeoutDuration}
+            onChange={setTimeoutDuration}
+            data={[
+              { value: '300', label: '5 minutes' },
+              { value: '600', label: '10 minutes' },
+              { value: '1800', label: '30 minutes' },
+              { value: '3600', label: '1 hour' },
+              { value: '86400', label: '1 day' },
+              { value: '604800', label: '1 week' },
+            ]}
+          />
+          <Button
+            color="orange"
+            onClick={() => {
+              if (!timeoutTarget || !activeServerId || !timeoutDuration) return;
+              api.post(`/api/servers/${activeServerId}/members/${timeoutTarget.userId}/timeout`, {
+                duration: parseInt(timeoutDuration),
+              }).then(() => {
+                toastStore.addToast({ type: 'system', title: 'Timeout Applied', message: `${timeoutTarget.username} has been timed out` });
+                queryClient.invalidateQueries({ queryKey: ['members', activeServerId] });
+              }).catch((err) => {
+                toastStore.addToast({ type: 'warning', title: 'Timeout Failed', message: (err as any)?.message || 'Unknown error' });
+              });
+              setTimeoutTarget(null);
+            }}
+          >
+            Confirm Timeout
+          </Button>
+        </Stack>
+      </Modal>
     </div>
   );
 }

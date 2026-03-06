@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ActionIcon, Badge, Button, Divider, Group, Modal, ScrollArea, Select, Stack, Text,
+  ActionIcon, Badge, Button, Divider, Group, Loader, Modal, NumberInput, ScrollArea, Select, Stack, Switch, Text,
   TextInput, Textarea, Tooltip,
 } from '@mantine/core';
 import { IconPlus, IconTrash, IconChevronDown, IconChevronUp } from '@tabler/icons-react';
@@ -9,6 +9,8 @@ import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { useUIStore } from '../../stores/uiStore';
 import { ChannelPermissionEditor } from './PermissionEditor';
+import { SegmentBrowser } from './SegmentBrowser';
+import { toastStore } from '../../stores/toastNotifications';
 
 interface ChannelSettingsModalProps {
   opened: boolean;
@@ -59,7 +61,7 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
     enabled: opened && !!serverId,
   });
 
-  const [activeTab, setActiveTab] = useState<'general' | 'permissions'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'permissions' | 'segments' | 'retention'>('general');
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
   const [saving, setSaving] = useState(false);
@@ -173,6 +175,30 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
           }}
         >
           Permissions
+        </Button>
+        <Button
+          variant="subtle"
+          color={activeTab === 'segments' ? 'violet' : 'gray'}
+          size="sm"
+          onClick={() => setActiveTab('segments')}
+          style={{
+            borderBottom: activeTab === 'segments' ? '2px solid var(--mantine-color-violet-5)' : '2px solid transparent',
+            borderRadius: 0,
+          }}
+        >
+          Segments
+        </Button>
+        <Button
+          variant="subtle"
+          color={activeTab === 'retention' ? 'violet' : 'gray'}
+          size="sm"
+          onClick={() => setActiveTab('retention')}
+          style={{
+            borderBottom: activeTab === 'retention' ? '2px solid var(--mantine-color-violet-5)' : '2px solid transparent',
+            borderRadius: 0,
+          }}
+        >
+          Retention
         </Button>
       </Group>
 
@@ -341,6 +367,89 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
           )}
         </Stack>
       )}
+
+      {activeTab === 'segments' && (
+        <SegmentBrowser channelId={channelId} />
+      )}
+
+      {activeTab === 'retention' && (
+        <ChannelRetentionTab channelId={channelId} />
+      )}
     </Modal>
+  );
+}
+
+function ChannelRetentionTab({ channelId }: { channelId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['channel-retention', channelId],
+    queryFn: () => api.get<any>(`/api/channels/${channelId}/retention`),
+    enabled: !!channelId,
+  });
+
+  const [retentionDays, setRetentionDays] = useState<number | string>('');
+  const [sizeLimitMb, setSizeLimitMb] = useState<number | string>('');
+  const [retentionNever, setRetentionNever] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (data) {
+      setRetentionDays(data.retention_days ?? '');
+      setSizeLimitMb(data.size_limit_bytes ? Math.round(data.size_limit_bytes / (1024 * 1024)) : '');
+      setRetentionNever(data.retention_never ?? false);
+    }
+  }, [data]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.patch(`/api/channels/${channelId}/retention`, {
+        retention_days: retentionDays || null,
+        size_limit_bytes: sizeLimitMb ? Number(sizeLimitMb) * 1024 * 1024 : null,
+        retention_never: retentionNever,
+      });
+      queryClient.invalidateQueries({ queryKey: ['channel-retention', channelId] });
+      toastStore.addToast({ type: 'system', title: 'Saved', message: 'Retention settings updated.' });
+    } catch (err) {
+      toastStore.addToast({ type: 'warning', title: 'Save Failed', message: (err as any)?.message || 'Unknown error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isLoading) return <Loader size="sm" />;
+
+  return (
+    <Stack gap={16}>
+      <Switch
+        label="Exempt from retention"
+        description="Messages in this channel are never auto-deleted"
+        checked={retentionNever}
+        onChange={(e) => setRetentionNever(e.currentTarget.checked)}
+      />
+
+      {!retentionNever && (
+        <>
+          <NumberInput
+            label="Retention Days"
+            description="Messages older than this are auto-deleted (leave empty for server default)"
+            value={retentionDays}
+            onChange={setRetentionDays}
+            min={1}
+            max={3650}
+          />
+          <NumberInput
+            label="Size Limit (MB)"
+            description="Max storage for this channel (leave empty for no limit)"
+            value={sizeLimitMb}
+            onChange={setSizeLimitMb}
+            min={1}
+          />
+        </>
+      )}
+
+      <Button onClick={handleSave} loading={saving}>
+        Save Retention Settings
+      </Button>
+    </Stack>
   );
 }

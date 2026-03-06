@@ -12,6 +12,7 @@ import {
   type VoiceParticipant,
   type ScreenShareQuality,
 } from '../lib/voiceService';
+import { emitRaiseHand, emitLowerHand } from '../api/socket';
 import { streamViewerStore } from './streamViewer';
 
 export type { ScreenShareQuality };
@@ -42,6 +43,7 @@ export interface ConnectionQualityState {
 interface VoiceState {
   channelId: string | null;
   channelName: string | null;
+  channelType: string | null;
   connectionState: VoiceConnectionState;
   connected: boolean;
   qualityStabilized: boolean;
@@ -52,8 +54,10 @@ interface VoiceState {
   screenShare: ScreenShareState;
   connectionQuality: ConnectionQualityState;
   error: string | null;
+  isSpeaker: boolean;
+  isHandRaised: boolean;
 
-  join: (channelId: string, channelName?: string) => Promise<{ success: boolean; error?: string }>;
+  join: (channelId: string, channelName?: string, channelType?: string) => Promise<{ success: boolean; error?: string }>;
   leave: () => Promise<void>;
   toggleMute: () => Promise<void>;
   toggleDeafen: () => Promise<void>;
@@ -61,12 +65,15 @@ interface VoiceState {
   stopScreenShare: () => Promise<void>;
   toggleScreenShare: (quality?: ScreenShareQuality) => Promise<void>;
   setConnectionQuality: (quality: ConnectionQualityState) => void;
+  raiseHand: () => void;
+  lowerHand: () => void;
   initListeners: () => () => void;
 }
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   channelId: null,
   channelName: null,
+  channelType: null,
   connectionState: 'idle',
   connected: false,
   qualityStabilized: false,
@@ -77,19 +84,24 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   screenShare: { isSharing: false, streamerId: null, streamerName: null, quality: 'standard' as ScreenShareQuality },
   connectionQuality: { ping: 0, quality: 'excellent' },
   error: null,
+  isSpeaker: false,
+  isHandRaised: false,
 
-  join: async (channelId, channelName) => {
+  join: async (channelId, channelName, channelType) => {
     set({ connectionState: 'connecting', error: null });
     const result = await joinVoiceChannel(channelId);
     if (result.success) {
       set({
         channelId,
         channelName: channelName || null,
+        channelType: channelType || null,
         connectionState: 'connected',
         connected: true,
         qualityStabilized: false,
         muted: false,
         deafened: false,
+        isSpeaker: false,
+        isHandRaised: false,
         permissions: result.permissions || null,
       });
       setTimeout(() => {
@@ -109,6 +121,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     set({
       channelId: null,
       channelName: null,
+      channelType: null,
       connectionState: 'idle',
       connected: false,
       qualityStabilized: false,
@@ -118,6 +131,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       permissions: null,
       screenShare: { isSharing: false, streamerId: null, streamerName: null, quality: 'standard' },
       error: null,
+      isSpeaker: false,
+      isHandRaised: false,
     });
   },
 
@@ -194,6 +209,22 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     set({ connectionQuality: quality });
   },
 
+  raiseHand: () => {
+    const channelId = get().channelId;
+    if (channelId) {
+      emitRaiseHand(channelId);
+      set({ isHandRaised: true });
+    }
+  },
+
+  lowerHand: () => {
+    const channelId = get().channelId;
+    if (channelId) {
+      emitLowerHand(channelId);
+      set({ isHandRaised: false });
+    }
+  },
+
   initListeners: () => {
     const qualityInterval = setInterval(() => {
       const quality = getConnectionQuality();
@@ -251,6 +282,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           break;
         case 'screen-share-audio-available':
           streamViewerStore.notifyAudioAvailable();
+          break;
+        case 'stage:speaker-added':
+          set({ isSpeaker: true, isHandRaised: false });
+          break;
+        case 'stage:speaker-removed':
+          set({ isSpeaker: false });
           break;
       }
     });

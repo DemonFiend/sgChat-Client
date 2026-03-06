@@ -708,3 +708,23 @@ export async function emitActivityClear(): Promise<void> {
     socket.emit('activity:clear', {});
   }
 }
+
+export async function emitRaiseHand(channelId: string): Promise<void> {
+  if (!socket) return;
+  const payload = { channel_id: channelId };
+  if (hasCryptoSession()) {
+    socket.emit('voice:raiseHand', await cryptoEncrypt(payload));
+  } else {
+    socket.emit('voice:raiseHand', payload);
+  }
+}
+
+export async function emitLowerHand(channelId: string): Promise<void> {
+  if (!socket) return;
+  const payload = { channel_id: channelId };
+  if (hasCryptoSession()) {
+    socket.emit('voice:lowerHand', await cryptoEncrypt(payload));
+  } else {
+    socket.emit('voice:lowerHand', payload);
+  }
+}

@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Avatar, Group, Indicator, ScrollArea, Skeleton, Stack, Text, Tooltip } from '@mantine/core';
-import { IconPhone, IconPhoneOff } from '@tabler/icons-react';
+import { IconPhone, IconPhoneOff, IconSettings } from '@tabler/icons-react';
 import { useDMConversations, useDMMessages, useSendDM } from '../../hooks/useDMConversations';
 import { useAuthStore } from '../../stores/authStore';
 import { emitJoinDM, emitLeaveDM, emitDMAck } from '../../api/socket';
 import { usePresenceStore } from '../../stores/presenceStore';
+import { joinDMVoice, leaveDMVoice, toggleDMMute, onDMVoiceEvent } from '../../lib/dmVoiceService';
+import { DMVoiceControls } from '../ui/DMVoiceControls';
+import { DMSettingsModal } from '../ui/DMSettingsModal';
+import { toastStore } from '../../stores/toastNotifications';
 import { MessageGroup } from '../messages/MessageGroup';
 import { MessageInput } from '../messages/MessageInput';
 import type { Message } from '../../hooks/useMessages';
@@ -74,7 +78,7 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
   if (isLoading) {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
-        <DMHeader username={otherUser?.username} status={status} statusColor={statusColor} avatarUrl={otherUser?.avatar_url} />
+        <DMHeader username={otherUser?.username} status={status} statusColor={statusColor} avatarUrl={otherUser?.avatar_url} conversationId={conversationId} />
         <MessageSkeleton />
       </div>
     );
@@ -102,6 +106,7 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
         status={status}
         statusColor={statusColor}
         avatarUrl={otherUser?.avatar_url}
+        conversationId={conversationId}
       />
 
       {/* Messages */}
@@ -151,12 +156,44 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
   );
 }
 
-function DMHeader({ username, status, statusColor, avatarUrl }: {
+function DMHeader({ username, status, statusColor, avatarUrl, conversationId }: {
   username?: string;
   status: string;
   statusColor: string;
   avatarUrl?: string;
+  conversationId: string;
 }) {
+  const [isInCall, setIsInCall] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    const cleanup = onDMVoiceEvent((event) => {
+      switch (event) {
+        case 'connected':
+          setIsInCall(true);
+          break;
+        case 'disconnected':
+          setIsInCall(false);
+          setIsMuted(false);
+          break;
+      }
+    });
+    return cleanup;
+  }, []);
+
+  const handleCall = async () => {
+    const result = await joinDMVoice(conversationId);
+    if (!result.success) {
+      toastStore.addToast({ type: 'warning', title: 'Call Failed', message: result.error || 'Could not start call' });
+    }
+  };
+
+  const handleToggleMute = async () => {
+    const nowEnabled = await toggleDMMute();
+    setIsMuted(!nowEnabled);
+  };
+
   return (
     <div style={{
       height: 48,
@@ -176,11 +213,19 @@ function DMHeader({ username, status, statusColor, avatarUrl }: {
         <Text fw={600} size="sm" truncate>{username || 'Unknown'}</Text>
       </div>
       <Text size="xs" c="dimmed">{STATUS_LABELS[status] || 'Offline'}</Text>
-      <Tooltip label="Start Voice Call" position="bottom" withArrow>
-        <ActionIcon variant="subtle" color="gray" size={28}>
-          <IconPhone size={16} />
+      <DMVoiceControls
+        isInCall={isInCall}
+        isMuted={isMuted}
+        onCall={handleCall}
+        onHangup={leaveDMVoice}
+        onToggleMute={handleToggleMute}
+      />
+      <Tooltip label="DM Settings" position="bottom" withArrow>
+        <ActionIcon variant="subtle" color="gray" size={28} onClick={() => setSettingsOpen(true)}>
+          <IconSettings size={16} />
         </ActionIcon>
       </Tooltip>
+      <DMSettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} dmId={conversationId} />
     </div>
   );
 }

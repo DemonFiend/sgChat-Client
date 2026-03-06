@@ -1,5 +1,5 @@
 import { Menu } from '@mantine/core';
-import { IconUser, IconMessage, IconUserPlus, IconUserMinus, IconVolume, IconVolumeOff, IconBan, IconLock, IconLockOpen } from '@tabler/icons-react';
+import { IconUser, IconMessage, IconUserPlus, IconUserMinus, IconVolume, IconVolumeOff, IconBan, IconLock, IconLockOpen, IconAlertTriangle, IconClock } from '@tabler/icons-react';
 import { hasPermission } from '../../stores/permissions';
 
 interface UserContextMenuProps {
@@ -20,6 +20,8 @@ interface UserContextMenuProps {
   onMute?: () => void;
   onKick?: () => void;
   onBan?: () => void;
+  onWarn?: () => void;
+  onTimeout?: () => void;
 }
 
 export function UserContextMenu({
@@ -40,11 +42,15 @@ export function UserContextMenu({
   onMute,
   onKick,
   onBan,
+  onWarn,
+  onTimeout,
 }: UserContextMenuProps) {
   if (!opened) return null;
 
   const canKick = hasPermission('kick_members');
   const canBan = hasPermission('ban_members');
+  const canModerate = hasPermission('moderate_members');
+  const canTimeout = hasPermission('timeout_members');
 
   return (
     <div
@@ -104,9 +110,19 @@ export function UserContextMenu({
             </>
           )}
 
-          {!isCurrentUser && (canKick || canBan) && (
+          {!isCurrentUser && (canModerate || canTimeout || canKick || canBan) && (
             <>
               <Menu.Divider />
+              {canModerate && onWarn && (
+                <Menu.Item leftSection={<IconAlertTriangle size={14} />} onClick={onWarn} color="yellow">
+                  Warn {username}
+                </Menu.Item>
+              )}
+              {canTimeout && onTimeout && (
+                <Menu.Item leftSection={<IconClock size={14} />} onClick={onTimeout} color="orange">
+                  Timeout {username}
+                </Menu.Item>
+              )}
               {canKick && onKick && (
                 <Menu.Item leftSection={<IconUserMinus size={14} />} onClick={onKick} color="red">
                   Kick {username}

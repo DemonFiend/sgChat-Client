@@ -5,6 +5,7 @@ import { useSendMessage } from '../../hooks/useMessages';
 import { emitTypingStart, emitTypingStop } from '../../api/socket';
 import { useUIStore } from '../../stores/uiStore';
 import { api } from '../../lib/api';
+import { toastStore } from '../../stores/toastNotifications';
 import { GifPicker } from '../ui/GifPicker';
 
 interface MessageInputProps {
@@ -30,14 +31,25 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
 
     // Upload files first if any
     if (files.length > 0) {
-      for (const file of files) {
+      const failedIndexes = new Set<number>();
+      for (let i = 0; i < files.length; i++) {
         try {
-          await api.upload(`/api/channels/${channelId}/messages/upload`, file);
-        } catch {
-          // Continue on upload errors
+          await api.upload(`/api/channels/${channelId}/messages/upload`, files[i]);
+        } catch (err) {
+          failedIndexes.add(i);
+          toastStore.addToast({
+            type: 'warning',
+            title: 'Upload Failed',
+            message: `${files[i].name}: ${(err as any)?.message || 'Unknown error'}`,
+          });
         }
       }
-      setFiles([]);
+      if (failedIndexes.size > 0) {
+        setFiles(prev => prev.filter((_, i) => failedIndexes.has(i)));
+      } else {
+        setFiles([]);
+      }
+      if (failedIndexes.size === files.length && !trimmed) return;
     }
 
     if (trimmed) {

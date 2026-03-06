@@ -9,12 +9,13 @@ import {
   IconSettings, IconUsers, IconShield, IconHash, IconLink, IconPlus,
   IconTrash, IconCopy, IconCheck, IconBan, IconUserMinus, IconClock,
   IconHistory, IconMessageCircle, IconPencil, IconX,
-  IconArrowUp, IconArrowDown, IconDatabase, IconCalendarTime,
+  IconArrowUp, IconArrowDown, IconDatabase, IconCalendarTime, IconVolume,
 } from '@tabler/icons-react';
 import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { ServerPopupConfigForm } from './ServerPopupConfigForm';
 import { TransferOwnershipModal } from './TransferOwnershipModal';
+import { VoiceSoundsPanel } from './VoiceSoundsPanel';
 import { useAuthStore } from '../../stores/authStore';
 
 interface ServerSettingsModalProps {
@@ -91,6 +92,7 @@ export function ServerSettingsModal({ opened, onClose, serverId }: ServerSetting
           <NavLink label="Welcome Popup" leftSection={<IconMessageCircle size={16} />} active={tab === 'popup'} onClick={() => setTab('popup')} variant="subtle" />
           <NavLink label="Storage" leftSection={<IconDatabase size={16} />} active={tab === 'storage'} onClick={() => setTab('storage')} variant="subtle" />
           <NavLink label="Retention" leftSection={<IconCalendarTime size={16} />} active={tab === 'retention'} onClick={() => setTab('retention')} variant="subtle" />
+          <NavLink label="Voice Sounds" leftSection={<IconVolume size={16} />} active={tab === 'sounds'} onClick={() => setTab('sounds')} variant="subtle" />
         </Stack>
 
         <ScrollArea style={{ flex: 1, padding: 16 }}>
@@ -104,6 +106,7 @@ export function ServerSettingsModal({ opened, onClose, serverId }: ServerSetting
           {tab === 'popup' && <ServerPopupConfigForm serverId={serverId} />}
           {tab === 'storage' && <StorageTab serverId={serverId} />}
           {tab === 'retention' && <RetentionTab serverId={serverId} />}
+          {tab === 'sounds' && <VoiceSoundsPanel serverId={serverId} />}
         </ScrollArea>
       </div>
     </Modal>

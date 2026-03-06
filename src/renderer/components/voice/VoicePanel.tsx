@@ -9,6 +9,7 @@ import {
 import { useVoiceStore } from '../../stores/voiceStore';
 import { ScreenShareButton } from '../ui/ScreenShareButton';
 import { SoundboardPanel } from '../ui/SoundboardPanel';
+import { StageControls } from './StageControls';
 
 const QUALITY_COLORS: Record<string, { rgb: string; hex: string }> = {
   excellent: { rgb: '74,222,128', hex: '#4ade80' },
@@ -38,6 +39,11 @@ export function VoicePanel() {
   const error = useVoiceStore((s) => s.error);
   const initListeners = useVoiceStore((s) => s.initListeners);
   const qualityStabilized = useVoiceStore((s) => s.qualityStabilized);
+  const channelType = useVoiceStore((s) => s.channelType);
+  const isSpeaker = useVoiceStore((s) => s.isSpeaker);
+  const isHandRaised = useVoiceStore((s) => s.isHandRaised);
+  const raiseHand = useVoiceStore((s) => s.raiseHand);
+  const lowerHand = useVoiceStore((s) => s.lowerHand);
   const [soundboardOpen, setSoundboardOpen] = useState(false);
 
   // Initialize voice event listeners (quality polling, participant updates, reconnection)
@@ -130,6 +136,18 @@ export function VoicePanel() {
           </Group>
         )}
       </div>
+
+      {/* Stage controls (for stage channels) */}
+      {channelType === 'stage' && (
+        <StageControls
+          isSpeaker={isSpeaker}
+          isHandRaised={isHandRaised}
+          isMuted={muted}
+          onToggleMute={toggleMute}
+          onRaiseHand={raiseHand}
+          onLowerHand={lowerHand}
+        />
+      )}
 
       {/* Glass pill controls */}
       <div style={{
