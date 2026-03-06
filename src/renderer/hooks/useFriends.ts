@@ -61,3 +61,39 @@ export function useRemoveFriend() {
     },
   });
 }
+
+export interface BlockedUser {
+  id: string;
+  username: string;
+  avatar_url?: string;
+  blocked_at?: string;
+}
+
+export function useBlockedUsers() {
+  return useQuery({
+    queryKey: ['blocked-users'],
+    queryFn: () => api.get<BlockedUser[]>('/api/users/blocked'),
+  });
+}
+
+export function useBlockUser() {
+  return useMutation({
+    mutationFn: (userId: string) =>
+      api.post(`/api/users/${userId}/block`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['blocked-users'] });
+      queryClient.invalidateQueries({ queryKey: ['friends'] });
+      queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
+    },
+  });
+}
+
+export function useUnblockUser() {
+  return useMutation({
+    mutationFn: (userId: string) =>
+      api.delete(`/api/users/${userId}/block`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['blocked-users'] });
+    },
+  });
+}

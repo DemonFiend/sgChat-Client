@@ -6,6 +6,9 @@ import { useTypingStore } from '../stores/typingStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useUnreadStore } from '../stores/unreadStore';
 import { useUIStore } from '../stores/uiStore';
+import { useAuthStore } from '../stores/authStore';
+import { soundService } from '../lib/soundService';
+import { cacheParticipantInfo, updateServerVoiceState } from '../lib/voiceService';
 import {
   setKeyMaterial, encrypt as cryptoEncrypt, decrypt as cryptoDecrypt,
   isEncryptedEnvelope, hasActiveSession as hasCryptoSession,
@@ -75,6 +78,39 @@ export async function connectSocket(): Promise<void> {
     queryClient.invalidateQueries();
   });
 
+  socket.on('gateway.resumed', async (rawData: any) => {
+    const data = isEncryptedEnvelope(rawData) && hasCryptoSession()
+      ? await cryptoDecrypt(rawData) : rawData;
+
+    gatewaySessionId = data.session_id || gatewaySessionId;
+    lastSequences = data.sequences || lastSequences;
+
+    // Replay missed events
+    if (Array.isArray(data.missed_events)) {
+      for (const envelope of data.missed_events) {
+        let eventData = envelope.payload;
+        if (hasCryptoSession() && isEncryptedEnvelope(eventData)) {
+          try { eventData = await cryptoDecrypt(eventData); } catch { continue; }
+        }
+        if (envelope.resource_id) {
+          lastSequences[envelope.resource_id] = envelope.sequence;
+        }
+        handleEvent(envelope.type, eventData);
+      }
+    }
+  });
+
+  socket.on('gateway.resume_failed', async (rawData: any) => {
+    const data = isEncryptedEnvelope(rawData) && hasCryptoSession()
+      ? await cryptoDecrypt(rawData) : rawData;
+
+    console.warn('[socket] Gateway resume failed:', data.reason, data.message);
+    // Clear stale session and do a full reconnect
+    gatewaySessionId = null;
+    lastSequences = {};
+    queryClient.invalidateQueries();
+  });
+
   socket.on('event', async (envelope: {
     type: string;
     payload: any;
@@ -98,6 +134,13 @@ export async function connectSocket(): Promise<void> {
     }
 
     handleEvent(envelope.type, eventData);
+  });
+
+  // Named event listeners for events emitted via emitEncrypted (not the envelope bus)
+  socket.on('server.update', async (rawData: any) => {
+    const data = isEncryptedEnvelope(rawData) && hasCryptoSession()
+      ? await cryptoDecrypt(rawData) : rawData;
+    handleEvent('server.update', data);
   });
 
   socket.on('connect_error', async (err: Error) => {
@@ -160,6 +203,15 @@ export function disconnectSocket(): void {
   clearCryptoSession();
 }
 
+function isAfkChannel(channelId: string): boolean {
+  const queries = queryClient.getQueriesData<any[]>({ queryKey: ['channels'] });
+  for (const [, channels] of queries) {
+    const ch = channels?.find((c: any) => c.id === channelId);
+    if (ch) return !!ch.is_afk_channel;
+  }
+  return false;
+}
+
 function handleEvent(type: string, data: any): void {
   switch (type) {
     // Messages — invalidate query cache + track unreads
@@ -216,22 +268,166 @@ function handleEvent(type: string, data: any): void {
     case 'channel.create':
     case 'channel.update':
     case 'channel.delete':
+    case 'channels.reorder':
+    case 'channel.permissions.update':
+    case 'channel.permissions.delete':
       queryClient.invalidateQueries({ queryKey: ['channels'] });
+      break;
+
+    // Categories
+    case 'category.create':
+    case 'category.update':
+    case 'category.delete':
+    case 'category.permissions.update':
+    case 'category.permissions.delete':
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      queryClient.invalidateQueries({ queryKey: ['channels'] });
+      break;
+
+    // Roles
+    case 'role.create':
+    case 'role.update':
+    case 'role.delete':
+    case 'roles.reorder':
+      queryClient.invalidateQueries({ queryKey: ['roles'] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
       break;
 
     // Members
     case 'member.join':
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      // Seed presence for newly joined member
+      if (data.member?.status || data.status) {
+        usePresenceStore.getState().updatePresence(
+          data.member?.id || data.user_id,
+          data.member?.status || data.status,
+        );
+      }
+      break;
     case 'member.leave':
     case 'member.update':
+    case 'member.role.add':
+    case 'member.role.remove':
+    case 'member.roles.update':
       queryClient.invalidateQueries({ queryKey: ['members'] });
+      break;
+
+    case 'member.timeout': {
+      const myUserId = useAuthStore.getState().user?.id;
+      if (data.user_id === myUserId || !data.user_id) {
+        toastStore.addToast({
+          type: 'warning',
+          title: 'Timed Out',
+          message: data.reason
+            ? `You were timed out in ${data.server_name}: ${data.reason}`
+            : `You were timed out in ${data.server_name}`,
+        });
+      }
+      break;
+    }
+    case 'member.timeout.remove':
+      break;
+    case 'member.warn': {
+      toastStore.addToast({
+        type: 'warning',
+        title: 'Warning',
+        message: data.reason
+          ? `${data.moderator_username} warned you in ${data.server_name}: ${data.reason}`
+          : `You received a warning in ${data.server_name}`,
+      });
+      break;
+    }
+
+    // Server
+    case 'server.update':
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+      if (data.id) {
+        queryClient.invalidateQueries({ queryKey: ['server', data.id] });
+      }
+      break;
+    case 'server.delete':
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+      // If we're viewing the deleted server, redirect
+      if (data.id === useUIStore.getState().activeServerId) {
+        useVoiceStore.getState().leave().catch(() => {});
+        toastStore.addToast({ type: 'system', title: 'Server Deleted', message: 'The server has been deleted.' });
+      }
+      break;
+    case 'server.kicked':
+      useVoiceStore.getState().leave().catch(() => {});
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+      toastStore.addToast({
+        type: 'warning',
+        title: 'Kicked',
+        message: data.reason
+          ? `You were kicked from ${data.server_name}: ${data.reason}`
+          : `You were kicked from ${data.server_name}`,
+      });
+      break;
+    case 'server.banned':
+      useVoiceStore.getState().leave().catch(() => {});
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+      toastStore.addToast({
+        type: 'warning',
+        title: 'Banned',
+        message: data.reason
+          ? `You were banned from ${data.server_name}: ${data.reason}`
+          : `You were banned from ${data.server_name}`,
+      });
       break;
 
     // Friends
     case 'friend.request.new':
     case 'friend.request.accepted':
     case 'friend.removed':
+    case 'friend.request.declined':
       queryClient.invalidateQueries({ queryKey: ['friends'] });
       queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
+      break;
+
+    // Message pinning
+    case 'message.pin':
+      queryClient.invalidateQueries({ queryKey: ['messages', data.channel_id] });
+      queryClient.invalidateQueries({ queryKey: ['pinned-messages', data.channel_id] });
+      break;
+    case 'message.unpin':
+      queryClient.invalidateQueries({ queryKey: ['pinned-messages', data.channel_id] });
+      break;
+
+    // Notifications
+    case 'notification.new':
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      if (data.data?.title || data.type) {
+        toastStore.addToast({
+          type: 'system',
+          title: data.data?.title || 'Notification',
+          message: data.data?.message || data.data?.body || '',
+        });
+      }
+      break;
+    case 'notification.read':
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      break;
+
+    // Soundboard
+    case 'soundboard.play': {
+      // Play the sound
+      if (data.sound_url) {
+        const audio = new Audio(data.sound_url);
+        audio.volume = 0.5;
+        audio.play().catch(() => {});
+      }
+      break;
+    }
+    case 'soundboard.added':
+    case 'soundboard.removed':
+      queryClient.invalidateQueries({ queryKey: ['soundboard'] });
+      break;
+
+    // User blocking
+    case 'user.block':
+      queryClient.invalidateQueries({ queryKey: ['blocked-users'] });
+      queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
       break;
 
     // Presence — update Zustand directly (ephemeral)
@@ -243,28 +439,91 @@ function handleEvent(type: string, data: any): void {
       break;
 
     // Typing — update Zustand directly (ephemeral)
+    // Server sends channel typing as { channel_id, user: { id, username, display_name } }
     case 'typing.start':
-      useTypingStore.getState().addTyping(data.channel_id, data.user_id, data.username);
+      useTypingStore.getState().addTyping(
+        data.channel_id,
+        data.user?.id || data.user_id,
+        data.user?.username || data.username || 'Someone',
+      );
       break;
     case 'typing.stop':
-      useTypingStore.getState().removeTyping(data.channel_id, data.user_id);
+      useTypingStore.getState().removeTyping(data.channel_id, data.user?.id || data.user_id);
       break;
-    case 'dm.typing.start':
-      useTypingStore.getState().addTyping(`dm:${data.conversation_id}`, data.user_id, data.username);
+    // Server sends DM typing as { user_id } — resolve conversation from cache
+    case 'dm.typing.start': {
+      const dmConversations = queryClient.getQueryData<any[]>(['dm-conversations']);
+      const dmConv = dmConversations?.find((c) =>
+        c.participants.some((p: any) => p.id === data.user_id),
+      );
+      if (dmConv) {
+        const participant = dmConv.participants.find((p: any) => p.id === data.user_id);
+        useTypingStore.getState().addTyping(
+          `dm:${dmConv.id}`,
+          data.user_id,
+          participant?.username || 'Someone',
+        );
+      }
       break;
-    case 'dm.typing.stop':
-      useTypingStore.getState().removeTyping(`dm:${data.conversation_id}`, data.user_id);
+    }
+    case 'dm.typing.stop': {
+      const dmConvs = queryClient.getQueryData<any[]>(['dm-conversations']);
+      const conv = dmConvs?.find((c) =>
+        c.participants.some((p: any) => p.id === data.user_id),
+      );
+      if (conv) {
+        useTypingStore.getState().removeTyping(`dm:${conv.id}`, data.user_id);
+      }
       break;
+    }
 
-    // Voice — update voice store + query cache
-    case 'voice.join':
+    // Voice — update voice store + query cache + play sounds
+    case 'voice.join': {
       queryClient.invalidateQueries({ queryKey: ['channels'] });
+      // Cache participant display info for voice username resolution
+      if (data.user) {
+        cacheParticipantInfo(data.user.id, {
+          username: data.user.username,
+          displayName: data.user.display_name,
+          avatarUrl: data.user.avatar_url,
+        });
+      }
+      const currentUserId = useAuthStore.getState().user?.id;
+      const voiceState = useVoiceStore.getState();
+      if (
+        voiceState.connected &&
+        data.user?.id !== currentUserId &&
+        !isAfkChannel(data.channel_id) &&
+        (!voiceState.channelId || !isAfkChannel(voiceState.channelId))
+      ) {
+        soundService.playVoiceJoin();
+      }
       break;
-    case 'voice.leave':
+    }
+    case 'voice.leave': {
       queryClient.invalidateQueries({ queryKey: ['channels'] });
+      const currentUserId2 = useAuthStore.getState().user?.id;
+      const voiceState2 = useVoiceStore.getState();
+      if (
+        voiceState2.connected &&
+        data.user?.id !== currentUserId2 &&
+        !isAfkChannel(data.channel_id) &&
+        (!voiceState2.channelId || !isAfkChannel(voiceState2.channelId))
+      ) {
+        soundService.playVoiceLeave();
+      }
       break;
-    case 'voice.state_update':
+    }
+    case 'voice.state_update': {
+      // Server sends mute/deafen/stream state for a participant — update local cache
+      if (data.user_id) {
+        updateServerVoiceState(data.user_id, {
+          isServerMuted: data.is_server_muted,
+          isServerDeafened: data.is_server_deafened,
+        });
+      }
       break;
+    }
     case 'voice.force_move': {
       const voiceStore = useVoiceStore.getState();
       if (voiceStore.connected) {
@@ -273,6 +532,31 @@ function handleEvent(type: string, data: any): void {
             voiceStore.join(data.to_channel_id, data.to_channel_name);
           }
         });
+      }
+      break;
+    }
+    case 'voice.force_disconnect': {
+      // Server already cleaned up Redis state and published voice.leave —
+      // client only needs to tear down local voice (LiveKit, UI state).
+      const vs = useVoiceStore.getState();
+      if (vs.connected) {
+        vs.leave();
+      }
+      break;
+    }
+    case 'voice.server_mute': {
+      // A moderator muted/unmuted the current user
+      const myId = useAuthStore.getState().user?.id;
+      if (myId) {
+        updateServerVoiceState(myId, { isServerMuted: data.muted });
+      }
+      break;
+    }
+    case 'voice.server_deafen': {
+      // A moderator deafened/undeafened the current user
+      const myId2 = useAuthStore.getState().user?.id;
+      if (myId2) {
+        updateServerVoiceState(myId2, { isServerDeafened: data.deafened });
       }
       break;
     }
@@ -308,5 +592,49 @@ export async function emitPresenceUpdate(status: string): Promise<void> {
     socket.emit('presence:update', await cryptoEncrypt(payload));
   } else {
     socket.emit('presence:update', payload);
+  }
+}
+
+export async function emitStatusCommentUpdate(
+  text: string | null,
+  emoji?: string | null,
+  expiresAt?: string | null,
+): Promise<void> {
+  if (!socket) return;
+  const payload = { text, emoji: emoji ?? null, expires_at: expiresAt ?? null };
+  if (hasCryptoSession()) {
+    socket.emit('status_comment:update', await cryptoEncrypt(payload));
+  } else {
+    socket.emit('status_comment:update', payload);
+  }
+}
+
+export async function emitJoinDM(userId: string): Promise<void> {
+  if (!socket) return;
+  const payload = { user_id: userId };
+  if (hasCryptoSession()) {
+    socket.emit('join:dm', await cryptoEncrypt(payload));
+  } else {
+    socket.emit('join:dm', payload);
+  }
+}
+
+export async function emitLeaveDM(userId: string): Promise<void> {
+  if (!socket) return;
+  const payload = { user_id: userId };
+  if (hasCryptoSession()) {
+    socket.emit('leave:dm', await cryptoEncrypt(payload));
+  } else {
+    socket.emit('leave:dm', payload);
+  }
+}
+
+export async function emitDMAck(messageIds: string[]): Promise<void> {
+  if (!socket) return;
+  const payload = { message_ids: messageIds };
+  if (hasCryptoSession()) {
+    socket.emit('dm:ack', await cryptoEncrypt(payload));
+  } else {
+    socket.emit('dm:ack', payload);
   }
 }

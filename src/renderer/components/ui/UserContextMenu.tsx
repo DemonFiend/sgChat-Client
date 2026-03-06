@@ -1,11 +1,12 @@
 import { Menu } from '@mantine/core';
-import { IconUser, IconMessage, IconUserPlus, IconUserMinus, IconVolume, IconVolumeOff, IconBan } from '@tabler/icons-react';
+import { IconUser, IconMessage, IconUserPlus, IconUserMinus, IconVolume, IconVolumeOff, IconBan, IconLock, IconLockOpen } from '@tabler/icons-react';
 import { hasPermission } from '../../stores/permissions';
 
 interface UserContextMenuProps {
   userId: string;
   username: string;
   isFriend?: boolean;
+  isBlocked?: boolean;
   isCurrentUser?: boolean;
   opened: boolean;
   position: { x: number; y: number };
@@ -14,6 +15,8 @@ interface UserContextMenuProps {
   onSendMessage?: () => void;
   onAddFriend?: () => void;
   onRemoveFriend?: () => void;
+  onBlockUser?: () => void;
+  onUnblockUser?: () => void;
   onMute?: () => void;
   onKick?: () => void;
   onBan?: () => void;
@@ -23,6 +26,7 @@ export function UserContextMenu({
   userId,
   username,
   isFriend,
+  isBlocked,
   isCurrentUser,
   opened,
   position,
@@ -31,6 +35,8 @@ export function UserContextMenu({
   onSendMessage,
   onAddFriend,
   onRemoveFriend,
+  onBlockUser,
+  onUnblockUser,
   onMute,
   onKick,
   onBan,
@@ -77,12 +83,24 @@ export function UserContextMenu({
             </Menu.Item>
           )}
 
-          {!isCurrentUser && onMute && (
+          {!isCurrentUser && (onMute || onBlockUser || onUnblockUser) && (
             <>
               <Menu.Divider />
-              <Menu.Item leftSection={<IconVolumeOff size={14} />} onClick={onMute}>
-                Mute
-              </Menu.Item>
+              {onMute && (
+                <Menu.Item leftSection={<IconVolumeOff size={14} />} onClick={onMute}>
+                  Mute
+                </Menu.Item>
+              )}
+              {!isBlocked && onBlockUser && (
+                <Menu.Item leftSection={<IconLock size={14} />} onClick={onBlockUser} color="red">
+                  Block
+                </Menu.Item>
+              )}
+              {isBlocked && onUnblockUser && (
+                <Menu.Item leftSection={<IconLockOpen size={14} />} onClick={onUnblockUser}>
+                  Unblock
+                </Menu.Item>
+              )}
             </>
           )}
 

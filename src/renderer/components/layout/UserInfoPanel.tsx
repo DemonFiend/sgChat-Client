@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../stores/authStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useUIStore } from '../../stores/uiStore';
-import { emitPresenceUpdate } from '../../api/socket';
+import { emitPresenceUpdate, emitStatusCommentUpdate } from '../../api/socket';
 import { api } from '../../lib/api';
 
 const STATUS_OPTIONS = [
@@ -29,8 +29,8 @@ export function UserInfoPanel() {
   const [customStatus, setCustomStatus] = useState('');
   const updateStatus = useAuthStore((s) => s.updateStatus);
   const updateCustomStatus = useAuthStore((s) => s.updateCustomStatus);
-  const currentStatus = usePresenceStore((s) => (user ? s.statuses[user.id] : undefined) || 'offline');
-  const statusComment = usePresenceStore((s) => (user ? s.statusComments[user.id] : undefined) || '');
+  const currentStatus = usePresenceStore((s) => (user ? s.statuses[user.id] : undefined)) || user?.status || 'online';
+  const statusComment = usePresenceStore((s) => (user ? s.statusComments[user.id] : undefined)) || user?.custom_status || '';
 
   // Live clock — updates every minute
   const [now, setNow] = useState(new Date());
@@ -66,7 +66,7 @@ export function UserInfoPanel() {
 
   const handleCustomStatusSubmit = () => {
     if (customStatus.trim()) {
-      api.patch('/api/users/@me/status-comment', { status_comment: customStatus.trim() }).catch(() => {});
+      emitStatusCommentUpdate(customStatus.trim());
       updateCustomStatus(customStatus.trim());
     }
     setStatusMenuOpen(false);
@@ -129,7 +129,7 @@ export function UserInfoPanel() {
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <Text size="xs" fw={600} truncate>{user.username}</Text>
-          <Text size="xs" c="dimmed" truncate>{statusComment || 'Online'}</Text>
+          <Text size="xs" c="dimmed" truncate>{statusComment || user?.custom_status || 'Online'}</Text>
         </div>
       </Group>
 
@@ -141,12 +141,14 @@ export function UserInfoPanel() {
             {localTime}
           </Text>
         </Group>
-        <Group gap={4} wrap="nowrap">
-          <IconWorld size={11} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-          <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace', fontSize: '0.65rem' }}>
-            {serverTime}
-          </Text>
-        </Group>
+        {serverData && (
+          <Group gap={4} wrap="nowrap">
+            <IconWorld size={11} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+            <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace', fontSize: '0.65rem' }}>
+              {serverTime}
+            </Text>
+          </Group>
+        )}
       </Group>
     </div>
   );

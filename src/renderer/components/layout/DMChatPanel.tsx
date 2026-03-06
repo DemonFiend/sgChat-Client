@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Avatar, Group, Indicator, ScrollArea, Skeleton, Stack, Text, Tooltip } from '@mantine/core';
 import { IconPhone, IconPhoneOff } from '@tabler/icons-react';
 import { useDMConversations, useDMMessages, useSendDM } from '../../hooks/useDMConversations';
 import { useAuthStore } from '../../stores/authStore';
+import { emitJoinDM, emitLeaveDM, emitDMAck } from '../../api/socket';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { MessageGroup } from '../messages/MessageGroup';
 import { MessageInput } from '../messages/MessageInput';
@@ -37,9 +38,38 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
   const status = usePresenceStore((s) => (otherUser ? s.statuses[otherUser.id] : undefined) || 'offline');
   const statusColor = STATUS_COLORS[status] || 'gray';
 
+  // Pages are fetched newest-first; reverse page order so oldest page comes first, then flatten
+  const messages = data?.pages ? [...data.pages].reverse().flatMap((page) => page) : [];
+
+  // Subscribe to DM room on mount, unsubscribe on unmount or conversation change
+  useEffect(() => {
+    if (!otherUser?.id) return;
+    emitJoinDM(otherUser.id);
+    return () => { emitLeaveDM(otherUser.id); };
+  }, [otherUser?.id]);
+
+  // Acknowledge messages when they're loaded/viewed
+  useEffect(() => {
+    if (!messages.length) return;
+    const unackedIds = messages.slice(-10).map((m) => m.id);
+    if (unackedIds.length > 0) {
+      emitDMAck(unackedIds);
+    }
+  }, [messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSendMessage = (content: string) => {
     sendDM.mutate(content);
   };
+  const endRef = useRef<HTMLDivElement>(null);
+  const prevLengthRef = useRef(0);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (messages.length > prevLengthRef.current) {
+      endRef.current?.scrollIntoView({ behavior: prevLengthRef.current === 0 ? 'instant' : 'smooth' });
+    }
+    prevLengthRef.current = messages.length;
+  }, [messages.length]);
 
   if (isLoading) {
     return (
@@ -49,8 +79,6 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
       </div>
     );
   }
-
-  const messages = data?.pages.flatMap((page) => page).reverse() || [];
 
   // Group consecutive messages from same author
   const groups: Message[][] = [];
@@ -109,6 +137,7 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
           {groups.map((group) => (
             <MessageGroup key={group[0].id} messages={group} />
           ))}
+          <div ref={endRef} />
         </Stack>
       </ScrollArea>
 

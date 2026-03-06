@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { ActionIcon, Button, Group, Modal, Text, Textarea, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconArrowBackUp, IconEdit, IconMoodSmile, IconTrash } from '@tabler/icons-react';
-import { useEditMessage, useDeleteMessage, useAddReaction, useRemoveReaction, type Message } from '../../hooks/useMessages';
+import { IconArrowBackUp, IconEdit, IconMoodSmile, IconPin, IconPinnedOff, IconTrash } from '@tabler/icons-react';
+import { useEditMessage, useDeleteMessage, useAddReaction, useRemoveReaction, usePinMessage, useUnpinMessage, type Message } from '../../hooks/useMessages';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { MessageContent } from '../ui/MessageContent';
@@ -27,6 +27,8 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
   const deleteMessage = useDeleteMessage(channelId);
   const addReaction = useAddReaction(channelId);
   const removeReaction = useRemoveReaction(channelId);
+  const pinMessage = usePinMessage(channelId);
+  const unpinMessage = useUnpinMessage(channelId);
 
   const isOwn = currentUser?.id === message.author?.id;
   const isSystemMessage = !!message.system_event || !message.author;
@@ -118,6 +120,19 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
               <IconMoodSmile size={14} />
             </ActionIcon>
           </Tooltip>
+          {message.pinned ? (
+            <Tooltip label="Unpin" position="top" withArrow>
+              <ActionIcon variant="subtle" color="yellow" size={24} onClick={() => unpinMessage.mutate(message.id)}>
+                <IconPinnedOff size={14} />
+              </ActionIcon>
+            </Tooltip>
+          ) : (
+            <Tooltip label="Pin" position="top" withArrow>
+              <ActionIcon variant="subtle" color="gray" size={24} onClick={() => pinMessage.mutate(message.id)}>
+                <IconPin size={14} />
+              </ActionIcon>
+            </Tooltip>
+          )}
           {isOwn && (
             <>
               <Tooltip label="Edit" position="top" withArrow>

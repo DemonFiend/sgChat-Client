@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { queryClient } from '../lib/queryClient';
 
@@ -33,6 +33,7 @@ export interface Message {
   reactions: MessageReaction[];
   attachments: Array<{ id: string; url: string; filename: string; size: number; mime_type: string }>;
   system_event: string | null;
+  pinned?: boolean;
 }
 
 export function useMessages(channelId: string | null) {
@@ -58,7 +59,7 @@ export function useMessages(channelId: string | null) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => {
       if (!lastPage || lastPage.length < 50) return undefined;
-      return lastPage[lastPage.length - 1]?.id;
+      return lastPage[0]?.id; // oldest message in the ASC page — fetch messages before it
     },
     enabled: !!channelId,
   });
@@ -110,6 +111,36 @@ export function useRemoveReaction(channelId: string) {
       api.delete(`/api/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['messages', channelId] });
+    },
+  });
+}
+
+export function usePinnedMessages(channelId: string | null) {
+  return useQuery({
+    queryKey: ['pinned-messages', channelId],
+    queryFn: () => api.get<Message[]>(`/api/channels/${channelId}/pinned`),
+    enabled: !!channelId,
+  });
+}
+
+export function usePinMessage(channelId: string) {
+  return useMutation({
+    mutationFn: (messageId: string) =>
+      api.post(`/api/channels/${channelId}/messages/${messageId}/pin`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', channelId] });
+      queryClient.invalidateQueries({ queryKey: ['pinned-messages', channelId] });
+    },
+  });
+}
+
+export function useUnpinMessage(channelId: string) {
+  return useMutation({
+    mutationFn: (messageId: string) =>
+      api.delete(`/api/channels/${channelId}/messages/${messageId}/pin`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', channelId] });
+      queryClient.invalidateQueries({ queryKey: ['pinned-messages', channelId] });
     },
   });
 }

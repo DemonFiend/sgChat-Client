@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ActionIcon, Avatar, Badge, Button, Group, Indicator, ScrollArea, Stack, Tabs, Text, TextInput, Tooltip, UnstyledButton } from '@mantine/core';
 import { IconCheck, IconMessage, IconUserPlus, IconX } from '@tabler/icons-react';
-import { useFriends, useFriendRequests, useSendFriendRequest, useAcceptFriendRequest, useRemoveFriend, type Friend } from '../hooks/useFriends';
+import { useFriends, useFriendRequests, useSendFriendRequest, useAcceptFriendRequest, useRemoveFriend, useBlockedUsers, useUnblockUser, type Friend } from '../hooks/useFriends';
 import { usePresenceStore } from '../stores/presenceStore';
 import { useUIStore } from '../stores/uiStore';
 import { api } from '../lib/api';
@@ -16,6 +16,8 @@ export function FriendsView() {
   const sendRequest = useSendFriendRequest();
   const acceptRequest = useAcceptFriendRequest();
   const removeFriend = useRemoveFriend();
+  const { data: blockedUsers } = useBlockedUsers();
+  const unblockUser = useUnblockUser();
 
   const statuses = usePresenceStore((s) => s.statuses);
   const onlineFriends = friends?.filter((f) => statuses[f.id] && statuses[f.id] !== 'offline') || [];
@@ -59,6 +61,7 @@ export function FriendsView() {
                   </Badge>
                 )}
               </Tabs.Tab>
+              <Tabs.Tab value="blocked" size="xs">Blocked</Tabs.Tab>
               <Tabs.Tab value="add" size="xs" color="green">Add Friend</Tabs.Tab>
             </Tabs.List>
           </Tabs>
@@ -104,6 +107,27 @@ export function FriendsView() {
               <Text c="dimmed" ta="center" py={32}>No pending requests</Text>
             )}
 
+            {tab === 'blocked' && blockedUsers?.map((user) => (
+              <Group key={user.id} px={8} py={8} style={{ borderRadius: 4 }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <Avatar src={user.avatar_url} size={32} radius="xl" color="brand">
+                  {user.username.charAt(0).toUpperCase()}
+                </Avatar>
+                <div style={{ flex: 1 }}>
+                  <Text size="sm" fw={500}>{user.username}</Text>
+                  <Text size="xs" c="dimmed">Blocked</Text>
+                </div>
+                <Button size="xs" variant="light" onClick={() => unblockUser.mutate(user.id)}>
+                  Unblock
+                </Button>
+              </Group>
+            ))}
+            {tab === 'blocked' && (!blockedUsers || blockedUsers.length === 0) && (
+              <Text c="dimmed" ta="center" py={32}>No blocked users</Text>
+            )}
+
             {tab === 'add' && (
               <div style={{ maxWidth: 500 }}>
                 <Text size="sm" fw={600} mb={4}>Add Friend</Text>
@@ -135,11 +159,19 @@ export function FriendsView() {
   );
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  online: 'Online',
+  idle: 'Idle',
+  dnd: 'Do Not Disturb',
+  offline: 'Offline',
+};
+
 function FriendItem({ friend, onRemove }: { friend: Friend; onRemove: () => void }) {
   const setView = useUIStore((s) => s.setView);
   const setActiveDM = useUIStore((s) => s.setActiveDM);
   const [hovered, setHovered] = useState(false);
   const status = usePresenceStore((s) => s.statuses[friend.id] || 'offline');
+  const customStatus = usePresenceStore((s) => s.statusComments[friend.id]);
   const statusColor = { online: 'green', idle: 'yellow', dnd: 'red', offline: 'gray' }[status] || 'gray';
 
   const openDM = async () => {
@@ -154,36 +186,47 @@ function FriendItem({ friend, onRemove }: { friend: Friend; onRemove: () => void
   };
 
   return (
-    <Group
-      px={8}
-      py={8}
-      style={{ borderRadius: 4, cursor: 'pointer', transition: 'background 0.1s', background: hovered ? 'var(--bg-hover)' : 'transparent' }}
+    <UnstyledButton
+      onClick={openDM}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '6px 8px',
+        borderRadius: 4,
+        cursor: 'pointer',
+        transition: 'background 0.1s',
+        background: hovered ? 'var(--bg-hover)' : 'transparent',
+        width: '100%',
+      }}
     >
       <Indicator color={statusColor as any} size={8} offset={3} position="bottom-end" withBorder>
         <Avatar src={friend.avatar_url} size={32} radius="xl" color="brand">
           {friend.username.charAt(0).toUpperCase()}
         </Avatar>
       </Indicator>
-      <div style={{ flex: 1 }}>
-        <Text size="sm" fw={500}>{friend.username}</Text>
-        <Text size="xs" c="dimmed">{friend.status || 'Offline'}</Text>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Text size="sm" fw={500} truncate>{friend.display_name || friend.username}</Text>
+        <Text size="xs" c="dimmed" truncate>
+          {customStatus || STATUS_LABELS[status] || 'Offline'}
+        </Text>
       </div>
       {hovered && (
         <Group gap={4}>
           <Tooltip label="Message" position="top" withArrow>
-            <ActionIcon variant="subtle" color="gray" size={28} onClick={openDM}>
+            <ActionIcon variant="subtle" color="gray" size={28} onClick={(e) => { e.stopPropagation(); openDM(); }}>
               <IconMessage size={16} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label="Remove Friend" position="top" withArrow>
-            <ActionIcon variant="subtle" color="red" size={28} onClick={onRemove}>
+            <ActionIcon variant="subtle" color="red" size={28} onClick={(e) => { e.stopPropagation(); onRemove(); }}>
               <IconX size={16} />
             </ActionIcon>
           </Tooltip>
         </Group>
       )}
-    </Group>
+    </UnstyledButton>
   );
 }

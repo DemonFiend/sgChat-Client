@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Group, Skeleton, ScrollArea, Stack, Text, Tooltip } from '@mantine/core';
-import { IconHash, IconUsers, IconSearch } from '@tabler/icons-react';
-import { useMessages, type Message } from '../../hooks/useMessages';
+import { IconHash, IconPin, IconUsers, IconSearch } from '@tabler/icons-react';
+import { useMessages, usePinnedMessages, type Message } from '../../hooks/useMessages';
 import { useUIStore } from '../../stores/uiStore';
 import { useChannels } from '../../hooks/useChannels';
 import { MessageGroup } from '../messages/MessageGroup';
@@ -16,6 +16,8 @@ export function ChatPanel() {
   const memberListVisible = useUIStore((s) => s.memberListVisible);
   const { data: channels } = useChannels(activeServerId);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [pinnedOpen, setPinnedOpen] = useState(false);
+  const { data: pinnedMessages } = usePinnedMessages(activeChannelId);
 
   const activeChannel = channels?.find((c) => c.id === activeChannelId);
 
@@ -63,6 +65,16 @@ export function ChatPanel() {
             </Text>
           </>
         )}
+        <Tooltip label={pinnedOpen ? 'Hide Pinned' : 'Pinned Messages'} position="bottom" withArrow>
+          <ActionIcon
+            variant={pinnedOpen ? 'light' : 'subtle'}
+            color={pinnedOpen ? 'yellow' : 'gray'}
+            size={28}
+            onClick={() => setPinnedOpen((v) => !v)}
+          >
+            <IconPin size={18} />
+          </ActionIcon>
+        </Tooltip>
         <Tooltip label="Search" position="bottom" withArrow>
           <ActionIcon
             variant="subtle"
@@ -92,6 +104,41 @@ export function ChatPanel() {
           onClose={() => setSearchOpen(false)}
           channelId={activeChannelId}
         />
+      )}
+
+      {/* Pinned messages panel */}
+      {pinnedOpen && (
+        <div style={{
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--bg-secondary)',
+          maxHeight: 300,
+          overflow: 'auto',
+          padding: '8px 16px',
+        }}>
+          <Group justify="space-between" mb={8}>
+            <Text size="sm" fw={600}>Pinned Messages</Text>
+            <ActionIcon variant="subtle" color="gray" size={20} onClick={() => setPinnedOpen(false)}>
+              <Text size="xs">×</Text>
+            </ActionIcon>
+          </Group>
+          {(!pinnedMessages || pinnedMessages.length === 0) ? (
+            <Text size="xs" c="dimmed" py={8}>No pinned messages</Text>
+          ) : (
+            <Stack gap={4}>
+              {pinnedMessages.map((msg) => (
+                <div key={msg.id} style={{
+                  padding: '6px 8px',
+                  background: 'var(--bg-primary)',
+                  borderRadius: 4,
+                  borderLeft: '3px solid var(--accent)',
+                }}>
+                  <Text size="xs" fw={600} c="dimmed">{msg.author?.username || 'Unknown'}</Text>
+                  <Text size="sm" lineClamp={2}>{msg.content}</Text>
+                </div>
+              ))}
+            </Stack>
+          )}
+        </div>
       )}
 
       {/* Messages */}
@@ -129,10 +176,21 @@ function MessageSkeleton() {
 function MessageList({ channelId }: { channelId: string }) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useMessages(channelId);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+  const prevLengthRef = useRef(0);
+
+  // Pages are fetched newest-first; reverse page order so oldest page comes first, then flatten
+  const messages = data?.pages ? [...data.pages].reverse().flatMap((page) => page) : [];
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (messages.length > prevLengthRef.current) {
+      endRef.current?.scrollIntoView({ behavior: prevLengthRef.current === 0 ? 'instant' : 'smooth' });
+    }
+    prevLengthRef.current = messages.length;
+  }, [messages.length]);
 
   if (isLoading) return <MessageSkeleton />;
-
-  const messages = data?.pages.flatMap((page) => page).reverse() || [];
 
   // Group consecutive messages from same author
   const groups: Message[][] = [];
@@ -172,6 +230,7 @@ function MessageList({ channelId }: { channelId: string }) {
         {groups.map((group, i) => (
           <MessageGroup key={group[0].id} messages={group} channelId={channelId} />
         ))}
+        <div ref={endRef} />
       </Stack>
     </ScrollArea>
   );
