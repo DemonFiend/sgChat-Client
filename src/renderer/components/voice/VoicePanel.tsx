@@ -3,11 +3,11 @@ import { ActionIcon, Group, Text, Tooltip } from '@mantine/core';
 import {
   IconMicrophone, IconMicrophoneOff,
   IconHeadphones, IconHeadphonesOff,
-  IconScreenShare, IconScreenShareOff,
   IconPhoneOff, IconWifi, IconWifiOff,
   IconMusic, IconAlertTriangle,
 } from '@tabler/icons-react';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { ScreenShareButton } from '../ui/ScreenShareButton';
 import { SoundboardPanel } from '../ui/SoundboardPanel';
 
 const QUALITY_COLORS: Record<string, { rgb: string; hex: string }> = {
@@ -33,9 +33,6 @@ export function VoicePanel() {
   const toggleMute = useVoiceStore((s) => s.toggleMute);
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const leave = useVoiceStore((s) => s.leave);
-  const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
-  const isSharing = useVoiceStore((s) => s.screenShare.isSharing);
-  const canStream = useVoiceStore((s) => s.permissions?.canStream ?? false);
   const qualityLevel = useVoiceStore((s) => s.connectionQuality.quality);
   const ping = useVoiceStore((s) => s.connectionQuality.ping);
   const error = useVoiceStore((s) => s.error);
@@ -77,9 +74,11 @@ export function VoicePanel() {
     );
   }
 
+  const qualityStabilized = useVoiceStore((s) => s.qualityStabilized);
   const statusLabel =
     connectionState === 'connecting' ? 'Connecting...' :
     connectionState === 'reconnecting' ? 'Reconnecting...' :
+    !qualityStabilized ? 'Connecting...' :
     'Voice Connected';
 
   const q = QUALITY_COLORS[qualityLevel] || QUALITY_COLORS.excellent;
@@ -167,19 +166,7 @@ export function VoicePanel() {
             </ActionIcon>
           </Tooltip>
 
-          {canStream && (
-            <Tooltip label={isSharing ? 'Stop Sharing' : 'Share Screen'} position="top" withArrow>
-              <ActionIcon
-                variant={isSharing ? 'filled' : 'subtle'}
-                color={isSharing ? 'green' : 'gray'}
-                size={28}
-                radius="xl"
-                onClick={toggleScreenShare}
-              >
-                {isSharing ? <IconScreenShareOff size={16} /> : <IconScreenShare size={16} />}
-              </ActionIcon>
-            </Tooltip>
-          )}
+          <ScreenShareButton size={28} />
 
           <Tooltip label="Soundboard" position="top" withArrow>
             <ActionIcon

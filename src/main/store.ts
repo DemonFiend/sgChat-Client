@@ -4,6 +4,16 @@ import path from 'path';
 
 // ── Settings Store (unencrypted) ──────────────────────────────────────────────
 
+export interface SavedServer {
+  url: string;
+  name: string;
+  email: string;
+  accessToken: string;
+  refreshToken: string;
+  userId: string;
+  lastUsed: number;
+}
+
 interface SettingsSchema {
   autoStart: boolean;
   windowState: {
@@ -13,6 +23,7 @@ interface SettingsSchema {
     height: number;
     isMaximized: boolean;
   };
+  savedServers: SavedServer[];
 }
 
 const settingsStore = new Store<SettingsSchema>({
@@ -24,6 +35,7 @@ const settingsStore = new Store<SettingsSchema>({
       height: 800,
       isMaximized: false,
     },
+    savedServers: [],
   },
 });
 
@@ -126,6 +138,71 @@ export function getRememberedEmail(): string {
 
 export function setRememberedEmail(email: string): void {
   authStore.set('rememberedEmail', email);
+}
+
+// ── Saved Servers (quick switcher) ────────────────────────────────────────────
+
+export function getSavedServers(): SavedServer[] {
+  return settingsStore.get('savedServers') || [];
+}
+
+export function saveServer(server: Omit<SavedServer, 'lastUsed'>): void {
+  const servers = getSavedServers();
+  const idx = servers.findIndex((s) => s.url === server.url);
+  const entry: SavedServer = { ...server, lastUsed: Date.now() };
+  if (idx >= 0) {
+    servers[idx] = entry;
+  } else {
+    servers.push(entry);
+  }
+  settingsStore.set('savedServers', servers);
+}
+
+export function removeSavedServer(url: string): void {
+  const servers = getSavedServers().filter((s) => s.url !== url);
+  settingsStore.set('savedServers', servers);
+}
+
+/**
+ * Save current session to saved servers, then load a different server's credentials.
+ * Returns the loaded server's tokens for the renderer to use.
+ */
+export function switchToServer(targetUrl: string): SavedServer | null {
+  const servers = getSavedServers();
+  const target = servers.find((s) => s.url === targetUrl);
+  if (!target) return null;
+
+  // Save current session before switching
+  const currentUrl = getServerUrl();
+  const currentAccessToken = getAccessToken();
+  const currentRefreshToken = getRefreshToken();
+  const currentUserId = getUserId();
+  const currentEmail = getRememberedEmail();
+  if (currentUrl && currentAccessToken) {
+    const currentName = servers.find((s) => s.url === currentUrl)?.name || currentUrl;
+    saveServer({
+      url: currentUrl,
+      name: currentName,
+      email: currentEmail,
+      accessToken: currentAccessToken,
+      refreshToken: currentRefreshToken,
+      userId: currentUserId,
+    });
+  }
+
+  // Load target server credentials
+  setServerUrl(target.url);
+  setTokens(target.accessToken, target.refreshToken, target.userId);
+  setRememberedEmail(target.email);
+
+  // Update lastUsed
+  target.lastUsed = Date.now();
+  const updatedServers = getSavedServers();
+  const idx = updatedServers.findIndex((s) => s.url === target.url);
+  if (idx >= 0) updatedServers[idx] = target;
+  settingsStore.set('savedServers', updatedServers);
+
+  return target;
 }
 
 export { settingsStore, authStore };

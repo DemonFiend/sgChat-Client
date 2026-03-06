@@ -1,9 +1,12 @@
-import { ipcMain, BrowserWindow, Notification, app, net } from 'electron';
+import { ipcMain, BrowserWindow, Notification, app, desktopCapturer, net } from 'electron';
 import {
   getAutoStart, setAutoStart,
   getServerUrl, setServerUrl, hasServerUrl,
   getRememberedEmail, setRememberedEmail,
   isAuthenticated,
+  getSavedServers, saveServer, removeSavedServer, switchToServer,
+  getAccessToken, getRefreshToken, getUserId,
+  type SavedServer,
 } from './store';
 import { login, register, logout, getToken, refreshAccessToken } from './auth';
 import { apiRequest, apiUpload } from './api-proxy';
@@ -12,6 +15,7 @@ import {
   getKeyMaterial, getSessionInfo, getSessionId,
   hasActiveSession,
 } from './crypto';
+import { stopAppAudioCapture, isAppAudioSupported } from './app-audio-capture';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // ── Window controls ────────────────────────────────────────────────────
@@ -85,6 +89,44 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       return { ok: true, data };
     } catch (err: any) {
       return { ok: false, error: err.message || 'Could not reach server' };
+    }
+  });
+
+  // ── Saved Servers (quick switcher) ────────────────────────────────────
+  ipcMain.handle('servers:getSaved', () => {
+    return getSavedServers();
+  });
+
+  ipcMain.handle('servers:save', (_event, server: Omit<SavedServer, 'lastUsed'>) => {
+    saveServer(server);
+  });
+
+  ipcMain.handle('servers:remove', (_event, url: string) => {
+    removeSavedServer(url);
+  });
+
+  ipcMain.handle('servers:switch', (_event, targetUrl: string) => {
+    clearCryptoSession();
+    const result = switchToServer(targetUrl);
+    return result;
+  });
+
+  ipcMain.handle('servers:saveCurrentSession', () => {
+    const url = getServerUrl();
+    const accessToken = getAccessToken();
+    const refreshToken = getRefreshToken();
+    const userId = getUserId();
+    const email = getRememberedEmail();
+    if (url && accessToken) {
+      const existing = getSavedServers().find((s) => s.url === url);
+      saveServer({
+        url,
+        name: existing?.name || url,
+        email,
+        accessToken,
+        refreshToken,
+        userId,
+      });
     }
   });
 
@@ -165,6 +207,36 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle('api:upload', async (_event, path: string, fileBuffer: ArrayBuffer, fileName: string, mimeType: string) => {
     return apiUpload(path, Buffer.from(fileBuffer), fileName, mimeType);
+  });
+
+  // ── Screen share ──────────────────────────────────────────────────────
+  ipcMain.handle('screen-share:getSources', async () => {
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ['screen', 'window'],
+        thumbnailSize: { width: 320, height: 180 },
+        fetchWindowIcons: true,
+      });
+      return sources.map((s) => ({
+        id: s.id,
+        name: s.name,
+        thumbnail: s.thumbnail.toDataURL(),
+        appIcon: s.appIcon?.toDataURL() || null,
+        display_id: s.display_id,
+      }));
+    } catch (err) {
+      console.error('[ipc] Failed to get screen sources:', err);
+      return [];
+    }
+  });
+
+  // ── Per-app audio capture ─────────────────────────────────────────────
+  ipcMain.handle('app-audio:stop', async () => {
+    await stopAppAudioCapture();
+  });
+
+  ipcMain.handle('app-audio:isSupported', () => {
+    return isAppAudioSupported();
   });
 
   // ── Window events ──────────────────────────────────────────────────────

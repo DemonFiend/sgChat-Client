@@ -15,13 +15,16 @@ export function VoiceConnectedBar({ compact }: VoiceConnectedBarProps) {
     return null;
   }
 
+  const qualityStabilized = useVoiceStore((s) => s.qualityStabilized);
+
   const statusLabel =
     connectionState === 'connecting' ? 'Connecting...' :
     connectionState === 'reconnecting' ? 'Reconnecting...' :
+    !qualityStabilized ? 'Connecting...' :
     'Voice Connected';
 
   const statusColor =
-    connectionState === 'connected' ? 'var(--accent)' :
+    connectionState === 'connected' && qualityStabilized ? 'var(--accent)' :
     connectionState === 'reconnecting' ? 'var(--warning)' :
     'var(--text-muted)';
 

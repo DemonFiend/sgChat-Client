@@ -45,6 +45,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setRememberedEmail: (email: string) => ipcRenderer.invoke('config:setRememberedEmail', email),
   },
 
+  // Saved servers (quick switcher)
+  servers: {
+    getSaved: () => ipcRenderer.invoke('servers:getSaved'),
+    save: (server: any) => ipcRenderer.invoke('servers:save', server),
+    remove: (url: string) => ipcRenderer.invoke('servers:remove', url),
+    switch: (targetUrl: string) => ipcRenderer.invoke('servers:switch', targetUrl),
+    saveCurrentSession: () => ipcRenderer.invoke('servers:saveCurrentSession'),
+  },
+
   // Auth
   auth: {
     login: (serverUrl: string, email: string, password: string) =>
@@ -63,6 +72,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('api:request', method, path, body),
     upload: (path: string, fileBuffer: ArrayBuffer, fileName: string, mimeType: string) =>
       ipcRenderer.invoke('api:upload', path, fileBuffer, fileName, mimeType),
+  },
+
+  // Screen share
+  screenShare: {
+    getSources: () => ipcRenderer.invoke('screen-share:getSources'),
+    onPickRequest: (callback: (sources: any[]) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sources: any[]) => callback(sources);
+      ipcRenderer.on('screen-share:show-picker', handler);
+      return () => ipcRenderer.removeListener('screen-share:show-picker', handler);
+    },
+    selectSource: (id: string | null, audioMode: 'none' | 'app' | 'system' = 'none') =>
+      ipcRenderer.send('screen-share:source-selected', { id, audioMode }),
+    onAudioModeSelected: (callback: (mode: 'none' | 'app' | 'system') => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, mode: 'none' | 'app' | 'system') => callback(mode);
+      ipcRenderer.on('screen-share:audio-mode-selected', handler);
+      return () => ipcRenderer.removeListener('screen-share:audio-mode-selected', handler);
+    },
+  },
+
+  // Per-app audio capture
+  appAudio: {
+    onPcmData: (callback: (data: Buffer) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: Buffer) => callback(data);
+      ipcRenderer.on('app-audio:pcm-data', handler);
+      return () => ipcRenderer.removeListener('app-audio:pcm-data', handler);
+    },
+    onSourceLost: (callback: () => void) => {
+      const handler = () => callback();
+      ipcRenderer.on('app-audio:source-lost', handler);
+      return () => ipcRenderer.removeListener('app-audio:source-lost', handler);
+    },
+    stop: () => ipcRenderer.invoke('app-audio:stop'),
+    isSupported: () => ipcRenderer.invoke('app-audio:isSupported'),
   },
 
   // Crypto (payload encryption)

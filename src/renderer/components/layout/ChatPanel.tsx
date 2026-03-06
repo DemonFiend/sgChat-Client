@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Group, Skeleton, ScrollArea, Stack, Text, Tooltip } from '@mantine/core';
-import { IconHash, IconPin, IconUsers, IconSearch } from '@tabler/icons-react';
-import { useMessages, usePinnedMessages, type Message } from '../../hooks/useMessages';
+import { IconHash, IconPin, IconPinnedOff, IconUsers, IconSearch } from '@tabler/icons-react';
+import { useMessages, usePinnedMessages, useUnpinMessage, type Message } from '../../hooks/useMessages';
 import { useUIStore } from '../../stores/uiStore';
 import { useChannels } from '../../hooks/useChannels';
 import { MessageGroup } from '../messages/MessageGroup';
@@ -18,6 +18,7 @@ export function ChatPanel() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinnedOpen, setPinnedOpen] = useState(false);
   const { data: pinnedMessages } = usePinnedMessages(activeChannelId);
+  const unpinMessage = useUnpinMessage(activeChannelId || '');
 
   const activeChannel = channels?.find((c) => c.id === activeChannelId);
 
@@ -132,7 +133,19 @@ export function ChatPanel() {
                   borderRadius: 4,
                   borderLeft: '3px solid var(--accent)',
                 }}>
-                  <Text size="xs" fw={600} c="dimmed">{msg.author?.username || 'Unknown'}</Text>
+                  <Group justify="space-between" wrap="nowrap">
+                    <Text size="xs" fw={600} c="dimmed" truncate>{msg.author?.username || 'Unknown'}</Text>
+                    <Tooltip label="Unpin" position="left" withArrow>
+                      <ActionIcon
+                        variant="subtle"
+                        color="yellow"
+                        size={20}
+                        onClick={() => unpinMessage.mutate(msg.id)}
+                      >
+                        <IconPinnedOff size={12} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Group>
                   <Text size="sm" lineClamp={2}>{msg.content}</Text>
                 </div>
               ))}

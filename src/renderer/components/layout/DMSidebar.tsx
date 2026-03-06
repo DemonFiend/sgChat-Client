@@ -6,6 +6,7 @@ import { useDMVoiceStatus } from '../../hooks/useServerInfo';
 import { useAuthStore } from '../../stores/authStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useUnreadStore } from '../../stores/unreadStore';
 import { UserInfoPanel } from './UserInfoPanel';
 import { VoiceBar } from '../voice/VoiceBar';
 
@@ -111,7 +112,10 @@ export function DMSidebar({ onCreateDM }: DMSidebarProps) {
                 conversation={conv}
                 otherUser={otherUser}
                 active={activeDMId === conv.id}
-                onClick={() => setActiveDM(conv.id)}
+                onClick={() => {
+                  setActiveDM(conv.id);
+                  useUnreadStore.getState().markDMRead(conv.id);
+                }}
               />
             );
           })}

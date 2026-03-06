@@ -244,9 +244,11 @@ function handleEvent(type: string, data: any): void {
     case 'dm.message.new': {
       queryClient.invalidateQueries({ queryKey: ['dm-messages'] });
       queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
-      // Toast for new DMs from non-active conversation
+      // Track DM unread + toast for non-active conversation
       const currentView = useUIStore.getState().view;
-      if (currentView !== 'dms' || useUIStore.getState().activeDMId !== data.conversation_id) {
+      const isActiveDM = currentView === 'dms' && useUIStore.getState().activeDMId === data.conversation_id;
+      if (!isActiveDM) {
+        useUnreadStore.getState().incrementDM(data.conversation_id);
         const dmAuthor = data.author?.username || 'Someone';
         const dmContent = data.content?.slice(0, 80) || '';
         toastStore.addToast({
@@ -636,5 +638,14 @@ export async function emitDMAck(messageIds: string[]): Promise<void> {
     socket.emit('dm:ack', await cryptoEncrypt(payload));
   } else {
     socket.emit('dm:ack', payload);
+  }
+}
+
+export async function emitVoiceActivity(): Promise<void> {
+  if (!socket) return;
+  if (hasCryptoSession()) {
+    socket.emit('voice:activity', await cryptoEncrypt({}));
+  } else {
+    socket.emit('voice:activity', {});
   }
 }

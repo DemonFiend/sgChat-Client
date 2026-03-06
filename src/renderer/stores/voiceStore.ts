@@ -4,11 +4,17 @@ import {
   leaveVoiceChannel,
   toggleMute as toggleMuteService,
   toggleDeafen as toggleDeafenService,
-  toggleScreenShare as toggleScreenShareService,
+  startScreenShare as startScreenShareService,
+  stopScreenShare as stopScreenShareService,
   getConnectionQuality,
+  getLocalScreenShareVideo,
   onVoiceEvent,
   type VoiceParticipant,
+  type ScreenShareQuality,
 } from '../lib/voiceService';
+import { streamViewerStore } from './streamViewer';
+
+export type { ScreenShareQuality };
 
 export type VoiceConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 
@@ -25,6 +31,7 @@ export interface ScreenShareState {
   isSharing: boolean;
   streamerId: string | null;
   streamerName: string | null;
+  quality: ScreenShareQuality;
 }
 
 export interface ConnectionQualityState {
@@ -37,6 +44,7 @@ interface VoiceState {
   channelName: string | null;
   connectionState: VoiceConnectionState;
   connected: boolean;
+  qualityStabilized: boolean;
   muted: boolean;
   deafened: boolean;
   participants: VoiceParticipant[];
@@ -49,7 +57,9 @@ interface VoiceState {
   leave: () => Promise<void>;
   toggleMute: () => Promise<void>;
   toggleDeafen: () => Promise<void>;
-  toggleScreenShare: () => Promise<void>;
+  startScreenShare: (quality?: ScreenShareQuality) => Promise<void>;
+  stopScreenShare: () => Promise<void>;
+  toggleScreenShare: (quality?: ScreenShareQuality) => Promise<void>;
   setConnectionQuality: (quality: ConnectionQualityState) => void;
   initListeners: () => () => void;
 }
@@ -59,11 +69,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   channelName: null,
   connectionState: 'idle',
   connected: false,
+  qualityStabilized: false,
   muted: false,
   deafened: false,
   participants: [],
   permissions: null,
-  screenShare: { isSharing: false, streamerId: null, streamerName: null },
+  screenShare: { isSharing: false, streamerId: null, streamerName: null, quality: 'standard' as ScreenShareQuality },
   connectionQuality: { ping: 0, quality: 'excellent' },
   error: null,
 
@@ -76,10 +87,16 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         channelName: channelName || null,
         connectionState: 'connected',
         connected: true,
+        qualityStabilized: false,
         muted: false,
         deafened: false,
         permissions: result.permissions || null,
       });
+      setTimeout(() => {
+        if (get().connected && get().channelId === channelId) {
+          set({ qualityStabilized: true });
+        }
+      }, 3000);
     } else {
       set({ connectionState: 'error', error: result.error || 'Failed to connect' });
     }
@@ -88,16 +105,18 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
   leave: async () => {
     await leaveVoiceChannel();
+    streamViewerStore.leaveStream();
     set({
       channelId: null,
       channelName: null,
       connectionState: 'idle',
       connected: false,
+      qualityStabilized: false,
       muted: false,
       deafened: false,
       participants: [],
       permissions: null,
-      screenShare: { isSharing: false, streamerId: null, streamerName: null },
+      screenShare: { isSharing: false, streamerId: null, streamerName: null, quality: 'standard' },
       error: null,
     });
   },
@@ -116,18 +135,58 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     });
   },
 
-  toggleScreenShare: async () => {
+  startScreenShare: async (quality: ScreenShareQuality = 'standard') => {
     try {
-      const isSharing = await toggleScreenShareService();
+      const started = await startScreenShareService(quality);
+      if (started) {
+        set({
+          screenShare: {
+            isSharing: true,
+            streamerId: 'local',
+            streamerName: 'You',
+            quality,
+          },
+        });
+        // Auto-open host preview
+        const channelId = get().channelId;
+        if (channelId) {
+          streamViewerStore.watchStream({
+            streamerId: 'local',
+            streamerName: 'You',
+            streamerAvatar: null,
+            channelId,
+            isLocalPreview: true,
+          });
+          // Attach local preview video element
+          const video = getLocalScreenShareVideo();
+          if (video) {
+            streamViewerStore.setVideoElement(video);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[voiceStore] Screen share failed:', err);
+    }
+  },
+
+  stopScreenShare: async () => {
+    try {
+      await stopScreenShareService();
       set({
-        screenShare: {
-          isSharing,
-          streamerId: isSharing ? 'local' : null,
-          streamerName: isSharing ? 'You' : null,
-        },
+        screenShare: { isSharing: false, streamerId: null, streamerName: null, quality: 'standard' },
       });
-    } catch {
-      // User cancelled screen share or error
+      streamViewerStore.leaveStream();
+    } catch (err) {
+      console.error('[voiceStore] Stop screen share failed:', err);
+    }
+  },
+
+  toggleScreenShare: async (quality?: ScreenShareQuality) => {
+    const { screenShare } = get();
+    if (screenShare.isSharing) {
+      await get().stopScreenShare();
+    } else {
+      await get().startScreenShare(quality);
     }
   },
 
@@ -149,32 +208,49 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           set({ connectionState: 'connected', connected: true, channelId: data.channelId });
           break;
         case 'disconnected':
+          // During reconnection, suppress disconnect events — they're temporary
+          if (get().connectionState === 'reconnecting') break;
           set({
             connectionState: 'idle',
             connected: false,
             channelId: null,
             channelName: null,
             participants: [],
-            screenShare: { isSharing: false, streamerId: null, streamerName: null },
+            screenShare: { isSharing: false, streamerId: null, streamerName: null, quality: 'standard' },
           });
           break;
         case 'reconnecting':
           set({ connectionState: 'reconnecting' });
           break;
         case 'participant-update':
+          // During reconnection, keep existing participants if the update is empty
+          // (prevents flicker from momentary disconnect/reconnect cycle)
+          if (get().connectionState === 'reconnecting' && data.length <= 1) break;
           set({ participants: data });
           break;
-        case 'screen-share-started':
-          set({
-            screenShare: {
-              isSharing: true,
-              streamerId: data.participantId,
-              streamerName: data.participantName,
-            },
-          });
+        case 'screen-share-started': {
+          // Remote user started sharing
+          const currentScreenShare = get().screenShare;
+          if (!currentScreenShare.isSharing) {
+            set({
+              screenShare: {
+                ...currentScreenShare,
+                isSharing: true,
+                streamerId: data.participantId,
+                streamerName: data.participantName,
+              },
+            });
+          }
           break;
+        }
         case 'screen-share-stopped':
-          set({ screenShare: { isSharing: false, streamerId: null, streamerName: null } });
+          set({ screenShare: { isSharing: false, streamerId: null, streamerName: null, quality: 'standard' } });
+          if (streamViewerStore.isWatchingStreamer(data.participantId)) {
+            streamViewerStore.leaveStream();
+          }
+          break;
+        case 'screen-share-audio-available':
+          streamViewerStore.notifyAudioAvailable();
           break;
       }
     });

@@ -40,6 +40,9 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: Logi
       const result = await login(serverUrl, email, password);
       if (result.success) {
         electronAPI.config.setRememberedEmail(rememberMe ? email : '');
+        if (rememberMe) {
+          electronAPI.servers.saveCurrentSession();
+        }
       } else {
         setError(result.error || 'Login failed');
       }

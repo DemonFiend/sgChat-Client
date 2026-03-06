@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ActionIcon, Badge, Group, Indicator, Text, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconBell, IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog } from '@tabler/icons-react';
+import { ActionIcon, Badge, Group, Text, Tooltip, UnstyledButton } from '@mantine/core';
+import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog } from '@tabler/icons-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
-import { useNotificationStore } from '../../stores/notificationStore';
-import { useUnreadNotificationCount } from '../../hooks/useNotifications';
 import { useServers } from '../../hooks/useServers';
 import { canManageServer } from '../../stores/permissions';
 import { ServerSettingsModal } from '../ui/ServerSettingsModal';
-import { NotificationPanel } from '../ui/NotificationPanel';
+import { ServerSwitcher } from '../ui/ServerSwitcher';
 
 const electronAPI = (window as any).electronAPI;
 
@@ -22,21 +20,20 @@ export function TitleBar() {
   const view = useUIStore((s) => s.view);
   const setView = useUIStore((s) => s.setView);
   const activeServerId = useUIStore((s) => s.activeServerId);
+  const dmUnreads = useUnreadStore((s) => s.dmUnreads);
+  const totalDMUnread = Object.values(dmUnreads).reduce((sum, c) => sum + c, 0);
   const unreads = useUnreadStore((s) => s.unreads);
-  const totalUnread = Object.values(unreads).reduce((sum, e) => sum + e.count, 0);
+  const totalMentions = Object.values(unreads).reduce((sum, e) => sum + e.mentions, 0);
   const { data: servers } = useServers();
   const activeServer = servers?.find((s) => s.id === activeServerId);
   const showServerSettings = view === 'servers' && !!activeServerId && canManageServer(activeServer?.owner_id);
   const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
-  const notifPanelOpen = useNotificationStore((s) => s.panelOpen);
-  const toggleNotifPanel = useNotificationStore((s) => s.togglePanel);
-  const { data: unreadNotifCount } = useUnreadNotificationCount();
-  const notifBadge = unreadNotifCount?.count || 0;
 
-  // Update window title with unread count
+  // Update window title with total unread count (DMs + mentions)
+  const totalBadge = totalDMUnread + totalMentions;
   useEffect(() => {
-    document.title = totalUnread > 0 ? `sgChat (${totalUnread})` : 'sgChat';
-  }, [totalUnread]);
+    document.title = totalBadge > 0 ? `sgChat (${totalBadge})` : 'sgChat';
+  }, [totalBadge]);
 
   return (
     <div
@@ -64,6 +61,7 @@ export function TitleBar() {
       {/* Center: Navigation tabs */}
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }} className="drag-region">
         <Group gap={2} className="no-drag">
+          <ServerSwitcher />
           {NAV_TABS.map((tab) => {
             const active = view === tab.id;
             return (
@@ -86,7 +84,7 @@ export function TitleBar() {
               >
                 <tab.icon size={14} />
                 {tab.label}
-                {tab.id === 'dms' && totalUnread > 0 && !active && (
+                {tab.id === 'dms' && totalDMUnread > 0 && !active && (
                   <Badge
                     size="xs"
                     variant="filled"
@@ -94,7 +92,18 @@ export function TitleBar() {
                     circle
                     style={{ position: 'absolute', top: -4, right: -4, fontSize: '0.6rem', minWidth: 16, height: 16 }}
                   >
-                    {totalUnread > 99 ? '99+' : totalUnread}
+                    {totalDMUnread > 99 ? '99+' : totalDMUnread}
+                  </Badge>
+                )}
+                {tab.id === 'servers' && totalMentions > 0 && !active && (
+                  <Badge
+                    size="xs"
+                    variant="filled"
+                    color="red"
+                    circle
+                    style={{ position: 'absolute', top: -4, right: -4, fontSize: '0.6rem', minWidth: 16, height: 16 }}
+                  >
+                    {totalMentions > 99 ? '99+' : totalMentions}
                   </Badge>
                 )}
               </UnstyledButton>
@@ -143,37 +152,6 @@ export function TitleBar() {
             Settings
           </UnstyledButton>
 
-          {/* Notification bell */}
-          <Tooltip label="Notifications" position="bottom" withArrow>
-            <UnstyledButton
-              onClick={toggleNotifPanel}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                padding: '4px 8px',
-                borderRadius: 16,
-                background: notifPanelOpen ? 'var(--accent)' : 'transparent',
-                color: notifPanelOpen ? 'var(--accent-text)' : 'var(--text-muted)',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                transition: 'background 0.15s, color 0.15s',
-                position: 'relative',
-              }}
-            >
-              <IconBell size={14} />
-              {notifBadge > 0 && (
-                <Badge
-                  size="xs"
-                  variant="filled"
-                  color="red"
-                  circle
-                  style={{ position: 'absolute', top: -4, right: -4, fontSize: '0.6rem', minWidth: 16, height: 16 }}
-                >
-                  {notifBadge > 99 ? '99+' : notifBadge}
-                </Badge>
-              )}
-            </UnstyledButton>
-          </Tooltip>
         </Group>
       </div>
 
@@ -224,8 +202,6 @@ export function TitleBar() {
           serverId={activeServerId}
         />
       )}
-
-      <NotificationPanel />
     </div>
   );
 }
