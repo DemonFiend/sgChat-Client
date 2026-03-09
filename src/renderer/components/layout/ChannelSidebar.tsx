@@ -5,7 +5,7 @@ import {
   IconHash, IconVolume, IconChevronDown, IconChevronRight,
   IconSpeakerphone, IconMusic, IconPlus, IconMoon, IconSettings,
   IconLink, IconBell, IconBellOff, IconBellRinging, IconCrown, IconInfoCircle,
-  IconCheck,
+  IconCheck, IconCalendar,
 } from '@tabler/icons-react';
 import { useChannelNotificationStore, type NotificationLevel } from '../../stores/channelNotificationStore';
 import { useChannels, type Channel, type ChannelType } from '../../hooks/useChannels';

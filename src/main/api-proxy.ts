@@ -117,7 +117,8 @@ export async function apiUpload(
   path: string,
   fileBuffer: Buffer,
   fileName: string,
-  mimeType: string
+  mimeType: string,
+  extraFields?: Record<string, string>
 ): Promise<ApiResponse> {
   const serverUrl = getServerUrl();
   if (!serverUrl) {
@@ -135,7 +136,7 @@ export async function apiUpload(
         filename: fileName,
         mimetype: mimeType,
         data: fileBuffer.toString('base64'),
-        fields: {},
+        fields: extraFields || {},
       };
 
       const encryptedBody = JSON.stringify(encrypt(filePayload));
@@ -164,15 +165,29 @@ export async function apiUpload(
       }
       return { ok: true, status: res.status, data };
     } else {
-      // Existing multipart upload path (unchanged)
+      // Multipart upload path with optional extra fields
       const boundary = `----FormBoundary${Date.now()}`;
-      const preamble = Buffer.from(
+      const parts: Buffer[] = [];
+
+      // Add extra fields before the file
+      if (extraFields) {
+        for (const [key, val] of Object.entries(extraFields)) {
+          parts.push(Buffer.from(
+            `--${boundary}\r\n` +
+            `Content-Disposition: form-data; name="${key}"\r\n\r\n` +
+            `${val}\r\n`
+          ));
+        }
+      }
+
+      parts.push(Buffer.from(
         `--${boundary}\r\n` +
         `Content-Disposition: form-data; name="file"; filename="${fileName}"\r\n` +
         `Content-Type: ${mimeType}\r\n\r\n`
-      );
-      const epilogue = Buffer.from(`\r\n--${boundary}--\r\n`);
-      const bodyBuffer = Buffer.concat([preamble, fileBuffer, epilogue]);
+      ));
+      parts.push(fileBuffer);
+      parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+      const bodyBuffer = Buffer.concat(parts);
 
       const headers: Record<string, string> = {
         'Content-Type': `multipart/form-data; boundary=${boundary}`,

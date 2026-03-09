@@ -37,9 +37,9 @@ export const api = {
   patch: <T = any>(path: string, body?: any) => request<T>('PATCH', path, body),
   delete: <T = any>(path: string, body?: any) => request<T>('DELETE', path, body),
 
-  upload: async <T = any>(path: string, file: File): Promise<T> => {
+  upload: async <T = any>(path: string, file: File, extraFields?: Record<string, string>): Promise<T> => {
     const buffer = await file.arrayBuffer();
-    const res: ApiResponse<T> = await electronAPI.api.upload(path, buffer, file.name, file.type);
+    const res: ApiResponse<T> = await electronAPI.api.upload(path, buffer, file.name, file.type, extraFields);
     if (!res.ok) {
       throw new ApiError(res.error || 'Upload failed', res.status, res.data);
     }

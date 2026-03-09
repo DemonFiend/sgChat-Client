@@ -12,6 +12,7 @@ import { useUIStore } from '../stores/uiStore';
 import { useServers } from '../hooks/useServers';
 import { useAuthStore } from '../stores/authStore';
 import { useServerPopupStore } from '../stores/serverPopup';
+import { useEmojiManifest } from '../hooks/useEmojis';
 import { api } from '../lib/api';
 import { queryClient } from '../lib/queryClient';
 
@@ -22,6 +23,9 @@ export function ServerView() {
   const user = useAuthStore((s) => s.user);
   const [claimModalOpen, setClaimModalOpen] = useState(false);
   const showPopup = useServerPopupStore((s) => s.show);
+
+  // Fetch emoji manifest for the active server
+  useEmojiManifest(activeServerId);
 
   // Fetch active server details
   const { data: serverData } = useQuery({

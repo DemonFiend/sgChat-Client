@@ -7,6 +7,14 @@ export interface MessageReaction {
   count: number;
   users: string[];
   me: boolean;
+  /** 'unicode' or 'custom' — defaults to 'unicode' for backwards compat */
+  type?: 'unicode' | 'custom';
+  /** For custom reactions: emoji ID */
+  emoji_id?: string;
+  /** For custom reactions: image URL */
+  image_url?: string;
+  /** For custom reactions: shortcode */
+  shortcode?: string;
 }
 
 export interface MessageReply {

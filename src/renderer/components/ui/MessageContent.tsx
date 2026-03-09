@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
-import { Image, Text } from '@mantine/core';
+import { Image, Text, Tooltip } from '@mantine/core';
 import { isImageUrl, getImageType, extractImageUrls } from '../../lib/imageUtils';
 import { parseMentions, type ParsedMention } from '../../lib/mentionUtils';
+import { renderMarkdown } from '../../lib/markdownParser';
+import { useEmojiStore } from '../../stores/emojiStore';
 import { UserMentionBadge, ChannelMentionBadge, RoleMentionBadge, BroadcastMentionBadge } from './MentionBadges';
 
 export interface MessageContentProps {
@@ -111,6 +113,55 @@ function ImageRenderer({ src, compact }: { src: string; compact?: boolean }) {
   );
 }
 
+/** Render text with :shortcode: replaced by inline emoji images */
+function TextWithEmojis({ text }: { text: string }) {
+  const findByShortcode = useEmojiStore((s) => s.findByShortcode);
+
+  const parts = useMemo(() => {
+    const result: Array<{ type: 'text' | 'emoji'; value: string; url?: string; shortcode?: string }> = [];
+    const regex = /:([a-zA-Z0-9_]+):/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      const emoji = findByShortcode(match[1]);
+      if (emoji) {
+        if (match.index > lastIndex) {
+          result.push({ type: 'text', value: text.slice(lastIndex, match.index) });
+        }
+        result.push({ type: 'emoji', value: match[0], url: emoji.image_url, shortcode: emoji.shortcode });
+        lastIndex = match.index + match[0].length;
+      }
+    }
+
+    if (lastIndex < text.length) {
+      result.push({ type: 'text', value: text.slice(lastIndex) });
+    }
+    return result;
+  }, [text, findByShortcode]);
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.type === 'emoji') {
+          return (
+            <Tooltip key={i} label={`:${part.shortcode}:`} position="top" withArrow openDelay={300}>
+              <img
+                src={part.url}
+                alt={`:${part.shortcode}:`}
+                width={20}
+                height={20}
+                style={{ objectFit: 'contain', verticalAlign: 'text-bottom', display: 'inline', margin: '0 1px' }}
+              />
+            </Tooltip>
+          );
+        }
+        return <span key={i}>{renderMarkdown(part.value)}</span>;
+      })}
+    </>
+  );
+}
+
 export function MessageContent({ content, isOwnMessage, compact }: MessageContentProps) {
   const segments = useMemo(() => parseContentSegments(content), [content]);
 
@@ -124,7 +175,7 @@ export function MessageContent({ content, isOwnMessage, compact }: MessageConten
             return <MentionRenderer key={i} mention={segment.mention!} />;
           case 'text':
           default:
-            return <span key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{segment.value}</span>;
+            return <span key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}><TextWithEmojis text={segment.value} /></span>;
         }
       })}
     </span>

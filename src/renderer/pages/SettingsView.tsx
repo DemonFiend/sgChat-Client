@@ -1,5 +1,5 @@
-import { ActionIcon, Button, Divider, Group, Kbd, NavLink, Progress, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton } from '@mantine/core';
-import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay, IconRefresh } from '@tabler/icons-react';
+import { ActionIcon, Button, Divider, Group, Kbd, Modal, NavLink, PasswordInput, Progress, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton } from '@mantine/core';
+import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay, IconRefresh, IconLock, IconMail } from '@tabler/icons-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
@@ -136,6 +136,21 @@ function ProfileSettings({ user }: { user: any }) {
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Email change
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailPassword, setEmailPassword] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [emailSaving, setEmailSaving] = useState(false);
+
+  // Password change
+  const [pwModalOpen, setPwModalOpen] = useState(false);
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+
   const handleSaveProfile = async () => {
     setIsSaving(true);
     setSaved(false);
@@ -153,6 +168,55 @@ function ProfileSettings({ user }: { user: any }) {
     setIsSaving(false);
   };
 
+  const handleChangeEmail = async () => {
+    setEmailError('');
+    if (!newEmail.includes('@')) { setEmailError('Enter a valid email'); return; }
+    if (!emailPassword) { setEmailError('Current password is required'); return; }
+    setEmailSaving(true);
+    try {
+      const res = await electronAPI.api.request('PATCH', '/api/users/me/email', {
+        new_email: newEmail,
+        current_password: emailPassword,
+      });
+      if (res.ok) {
+        updateUser({ email: newEmail });
+        setEmailModalOpen(false);
+        setNewEmail('');
+        setEmailPassword('');
+      } else {
+        setEmailError(res.body?.message || 'Failed to change email');
+      }
+    } catch (err: unknown) {
+      setEmailError(err instanceof Error ? err.message : 'Failed to change email');
+    }
+    setEmailSaving(false);
+  };
+
+  const handleChangePassword = async () => {
+    setPwError('');
+    if (!currentPw) { setPwError('Current password is required'); return; }
+    if (newPw.length < 8) { setPwError('New password must be at least 8 characters'); return; }
+    if (newPw !== confirmPw) { setPwError('New passwords do not match'); return; }
+    setPwSaving(true);
+    try {
+      const res = await electronAPI.api.request('PATCH', '/api/users/me/password', {
+        current_password: currentPw,
+        new_password: newPw,
+      });
+      if (res.ok) {
+        setPwModalOpen(false);
+        setCurrentPw('');
+        setNewPw('');
+        setConfirmPw('');
+      } else {
+        setPwError(res.body?.message || 'Failed to change password');
+      }
+    } catch (err: unknown) {
+      setPwError(err instanceof Error ? err.message : 'Failed to change password');
+    }
+    setPwSaving(false);
+  };
+
   return (
     <Stack gap={24}>
       <Text size="xl" fw={700}>My Account</Text>
@@ -168,7 +232,27 @@ function ProfileSettings({ user }: { user: any }) {
 
       <Stack gap={12}>
         <TextInput label="Username" value={user?.username || ''} readOnly />
-        <TextInput label="Email" value={user?.email || ''} readOnly />
+        <Group align="flex-end" gap={8}>
+          <TextInput label="Email" value={user?.email || ''} readOnly style={{ flex: 1 }} />
+          <Button
+            variant="light"
+            size="sm"
+            leftSection={<IconMail size={14} />}
+            onClick={() => { setNewEmail(''); setEmailPassword(''); setEmailError(''); setEmailModalOpen(true); }}
+          >
+            Change
+          </Button>
+        </Group>
+        <Group>
+          <Button
+            variant="light"
+            size="sm"
+            leftSection={<IconLock size={14} />}
+            onClick={() => { setCurrentPw(''); setNewPw(''); setConfirmPw(''); setPwError(''); setPwModalOpen(true); }}
+          >
+            Change Password
+          </Button>
+        </Group>
         <TextInput
           label="Display Name"
           placeholder="How others see you"
@@ -197,6 +281,71 @@ function ProfileSettings({ user }: { user: any }) {
           </Button>
         </Group>
       </Stack>
+
+      {/* Change Email Modal */}
+      <Modal opened={emailModalOpen} onClose={() => setEmailModalOpen(false)} title="Change Email" centered>
+        <Stack gap={12}>
+          {emailError && (
+            <Text size="sm" c="red">{emailError}</Text>
+          )}
+          <TextInput
+            label="New Email"
+            type="email"
+            name="email"
+            autoComplete="email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.currentTarget.value)}
+            placeholder="new@example.com"
+          />
+          <PasswordInput
+            label="Current Password"
+            name="current-password"
+            autoComplete="current-password"
+            value={emailPassword}
+            onChange={(e) => setEmailPassword(e.currentTarget.value)}
+            placeholder="Confirm your password"
+          />
+          <Group justify="flex-end" mt={8}>
+            <Button variant="subtle" onClick={() => setEmailModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleChangeEmail} loading={emailSaving}>Change Email</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Change Password Modal */}
+      <Modal opened={pwModalOpen} onClose={() => setPwModalOpen(false)} title="Change Password" centered>
+        <Stack gap={12}>
+          {pwError && (
+            <Text size="sm" c="red">{pwError}</Text>
+          )}
+          <PasswordInput
+            label="Current Password"
+            name="current-password"
+            autoComplete="current-password"
+            value={currentPw}
+            onChange={(e) => setCurrentPw(e.currentTarget.value)}
+          />
+          <PasswordInput
+            label="New Password"
+            name="new-password"
+            autoComplete="new-password"
+            value={newPw}
+            onChange={(e) => setNewPw(e.currentTarget.value)}
+            description="Must be at least 8 characters"
+          />
+          <PasswordInput
+            label="Confirm New Password"
+            name="confirm-password"
+            autoComplete="new-password"
+            value={confirmPw}
+            onChange={(e) => setConfirmPw(e.currentTarget.value)}
+          />
+          <Group justify="flex-end" mt={8}>
+            <Button variant="subtle" onClick={() => setPwModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleChangePassword} loading={pwSaving}>Change Password</Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

@@ -1,12 +1,15 @@
-import { useRef, useState } from 'react';
-import { ActionIcon, Group, Text, Textarea, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconGif, IconPaperclip, IconMoodSmile, IconSend, IconX } from '@tabler/icons-react';
+import { useRef, useState, useCallback } from 'react';
+import { ActionIcon, Group, Text, Textarea, Tooltip } from '@mantine/core';
+import { IconGif, IconPaperclip, IconMoodSmile, IconSend, IconX, IconEyeOff, IconEye } from '@tabler/icons-react';
 import { useSendMessage } from '../../hooks/useMessages';
 import { emitTypingStart, emitTypingStop } from '../../api/socket';
 import { useUIStore } from '../../stores/uiStore';
 import { api } from '../../lib/api';
 import { toastStore } from '../../stores/toastNotifications';
 import { GifPicker } from '../ui/GifPicker';
+import { EmojiPicker } from '../ui/EmojiPicker';
+import { EmojiAutocomplete } from '../ui/EmojiAutocomplete';
+import type { CustomEmoji } from '../../stores/emojiStore';
 
 interface MessageInputProps {
   channelId: string;
@@ -17,13 +20,32 @@ interface MessageInputProps {
 export function MessageInput({ channelId, channelName, onSendOverride }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [spoilerFiles, setSpoilerFiles] = useState<Set<number>>(new Set());
   const [gifPickerOpen, setGifPickerOpen] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [cursorPos, setCursorPos] = useState(0);
   const sendMessage = useSendMessage(channelId);
   const lastTypingEmit = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const gifBtnRef = useRef<HTMLButtonElement>(null);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const replyTo = useUIStore((s) => s.replyTo);
   const setReplyTo = useUIStore((s) => s.setReplyTo);
+
+  const handleEmojiSelect = useCallback((emoji: CustomEmoji) => {
+    const shortcode = `:${emoji.shortcode}: `;
+    setContent((prev) => prev + shortcode);
+    setEmojiPickerOpen(false);
+  }, []);
+
+  const handleEmojiAutocomplete = useCallback((emoji: CustomEmoji, colonStart: number, colonEnd: number) => {
+    setContent((prev) => {
+      const before = prev.slice(0, colonStart);
+      const after = prev.slice(colonEnd);
+      return `${before}:${emoji.shortcode}: ${after}`;
+    });
+  }, []);
 
   const handleSend = async () => {
     const trimmed = content.trim();
@@ -34,7 +56,8 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
       const failedIndexes = new Set<number>();
       for (let i = 0; i < files.length; i++) {
         try {
-          await api.upload(`/api/channels/${channelId}/messages/upload`, files[i]);
+          const isSpoiler = spoilerFiles.has(i);
+          await api.upload(`/api/channels/${channelId}/messages/upload`, files[i], isSpoiler ? { spoiler: 'true' } : undefined);
         } catch (err) {
           failedIndexes.add(i);
           toastStore.addToast({
@@ -48,6 +71,7 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
         setFiles(prev => prev.filter((_, i) => failedIndexes.has(i)));
       } else {
         setFiles([]);
+        setSpoilerFiles(new Set());
       }
       if (failedIndexes.size === files.length && !trimmed) return;
     }
@@ -101,6 +125,23 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
 
   const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
+    setSpoilerFiles((prev) => {
+      const next = new Set<number>();
+      prev.forEach((idx) => {
+        if (idx < index) next.add(idx);
+        else if (idx > index) next.add(idx - 1);
+      });
+      return next;
+    });
+  };
+
+  const toggleSpoiler = (index: number) => {
+    setSpoilerFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
   };
 
   return (
@@ -141,11 +182,17 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
               alignItems: 'center',
               gap: 6,
               padding: '4px 8px',
-              background: 'var(--bg-input)',
+              background: spoilerFiles.has(i) ? 'var(--danger-bg)' : 'var(--bg-input)',
               borderRadius: 4,
-              maxWidth: 200,
+              maxWidth: 240,
+              border: spoilerFiles.has(i) ? '1px solid var(--danger)' : '1px solid transparent',
             }}>
-              <Text size="xs" truncate style={{ flex: 1 }}>{file.name}</Text>
+              <Tooltip label={spoilerFiles.has(i) ? 'Remove spoiler' : 'Mark as spoiler'} position="top" withArrow>
+                <ActionIcon variant="subtle" color={spoilerFiles.has(i) ? 'red' : 'gray'} size={16} onClick={() => toggleSpoiler(i)}>
+                  {spoilerFiles.has(i) ? <IconEyeOff size={10} /> : <IconEye size={10} />}
+                </ActionIcon>
+              </Tooltip>
+              <Text size="xs" truncate style={{ flex: 1 }}>{spoilerFiles.has(i) ? 'SPOILER ' : ''}{file.name}</Text>
               <Text size="xs" c="dimmed">{(file.size / 1024).toFixed(0)}KB</Text>
               <ActionIcon variant="subtle" color="gray" size={16} onClick={() => removeFile(i)}>
                 <IconX size={10} />
@@ -175,26 +222,37 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
           onChange={handleFileSelect}
         />
 
-        <Textarea
-          value={content}
-          onChange={(e) => handleChange(e.currentTarget.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={() => { if (lastTypingEmit.current > 0) { emitTypingStop(channelId); lastTypingEmit.current = 0; } }}
-          placeholder={replyTo ? `Reply to @${replyTo.author.username}` : `Message #${channelName}`}
-          autosize
-          minRows={1}
-          maxRows={8}
-          variant="unstyled"
-          style={{ flex: 1 }}
-          styles={{
-            input: {
-              color: 'var(--text-primary)',
-              fontSize: '0.9rem',
-              padding: '6px 0',
-              minHeight: 'unset',
-            },
-          }}
-        />
+        <div style={{ flex: 1, position: 'relative' }}>
+          <EmojiAutocomplete
+            text={content}
+            cursorPosition={cursorPos}
+            onSelect={handleEmojiAutocomplete}
+            inputRef={textareaRef}
+          />
+          <Textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(e) => { handleChange(e.currentTarget.value); setCursorPos(e.currentTarget.selectionStart || 0); }}
+            onKeyDown={handleKeyDown}
+            onKeyUp={(e) => setCursorPos(e.currentTarget.selectionStart || 0)}
+            onClick={(e) => setCursorPos(e.currentTarget.selectionStart || 0)}
+            onBlur={() => { if (lastTypingEmit.current > 0) { emitTypingStop(channelId); lastTypingEmit.current = 0; } }}
+            placeholder={replyTo ? `Reply to @${replyTo.author.username}` : `Message #${channelName}`}
+            autosize
+            minRows={1}
+            maxRows={8}
+            variant="unstyled"
+            style={{ width: '100%' }}
+            styles={{
+              input: {
+                color: 'var(--text-primary)',
+                fontSize: '0.9rem',
+                padding: '6px 0',
+                minHeight: 'unset',
+              },
+            }}
+          />
+        </div>
 
         <Group gap={2}>
           <Tooltip label="GIF" position="top" withArrow>
@@ -202,9 +260,11 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
               <IconGif size={20} />
             </ActionIcon>
           </Tooltip>
-          <ActionIcon variant="subtle" color="gray" size={32}>
-            <IconMoodSmile size={18} />
-          </ActionIcon>
+          <Tooltip label="Emoji" position="top" withArrow>
+            <ActionIcon ref={emojiBtnRef} variant="subtle" color="gray" size={32} onClick={() => setEmojiPickerOpen((v) => !v)}>
+              <IconMoodSmile size={18} />
+            </ActionIcon>
+          </Tooltip>
           {(content.trim() || files.length > 0) && (
             <ActionIcon
               variant="filled"
@@ -232,6 +292,14 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
           setReplyTo(null);
         }}
         anchorRef={gifBtnRef.current}
+      />
+
+      {/* Emoji Picker */}
+      <EmojiPicker
+        isOpen={emojiPickerOpen}
+        onClose={() => setEmojiPickerOpen(false)}
+        onSelect={handleEmojiSelect}
+        anchorRef={emojiBtnRef.current}
       />
     </div>
   );

@@ -70,8 +70,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   api: {
     request: (method: string, path: string, body?: any) =>
       ipcRenderer.invoke('api:request', method, path, body),
-    upload: (path: string, fileBuffer: ArrayBuffer, fileName: string, mimeType: string) =>
-      ipcRenderer.invoke('api:upload', path, fileBuffer, fileName, mimeType),
+    upload: (path: string, fileBuffer: ArrayBuffer, fileName: string, mimeType: string, extraFields?: Record<string, string>) =>
+      ipcRenderer.invoke('api:upload', path, fileBuffer, fileName, mimeType, extraFields),
   },
 
   // Screen share

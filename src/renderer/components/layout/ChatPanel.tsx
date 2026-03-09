@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Group, Skeleton, ScrollArea, Stack, Text, Tooltip } from '@mantine/core';
-import { IconHash, IconPin, IconPinnedOff, IconUsers, IconSearch } from '@tabler/icons-react';
+import { IconHash, IconPin, IconPinnedOff, IconUsers, IconSearch, IconCalendar } from '@tabler/icons-react';
 import { useMessages, usePinnedMessages, useUnpinMessage, type Message } from '../../hooks/useMessages';
 import { useUIStore } from '../../stores/uiStore';
 import { useChannels } from '../../hooks/useChannels';
@@ -8,6 +8,7 @@ import { MessageGroup } from '../messages/MessageGroup';
 import { MessageInput } from '../messages/MessageInput';
 import { TypingIndicator } from '../messages/TypingIndicator';
 import { SearchPanel } from '../ui/SearchPanel';
+import { ServerEventsPanel } from '../ui/ServerEventsPanel';
 
 export function ChatPanel() {
   const activeChannelId = useUIStore((s) => s.activeChannelId);
@@ -17,6 +18,7 @@ export function ChatPanel() {
   const { data: channels } = useChannels(activeServerId);
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinnedOpen, setPinnedOpen] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
   const { data: pinnedMessages } = usePinnedMessages(activeChannelId);
   const unpinMessage = useUnpinMessage(activeChannelId || '');
 
@@ -66,6 +68,16 @@ export function ChatPanel() {
             </Text>
           </>
         )}
+        <Tooltip label={eventsOpen ? 'Hide Events' : 'Server Events'} position="bottom" withArrow>
+          <ActionIcon
+            variant={eventsOpen ? 'light' : 'subtle'}
+            color={eventsOpen ? 'brand' : 'gray'}
+            size={28}
+            onClick={() => setEventsOpen((v) => !v)}
+          >
+            <IconCalendar size={18} />
+          </ActionIcon>
+        </Tooltip>
         <Tooltip label={pinnedOpen ? 'Hide Pinned' : 'Pinned Messages'} position="bottom" withArrow>
           <ActionIcon
             variant={pinnedOpen ? 'light' : 'subtle'}
@@ -154,14 +166,21 @@ export function ChatPanel() {
         </div>
       )}
 
-      {/* Messages */}
-      <MessageList channelId={activeChannelId} />
+      {/* Events panel (replaces messages when open) */}
+      {eventsOpen && activeServerId ? (
+        <ServerEventsPanel serverId={activeServerId} />
+      ) : (
+        <>
+          {/* Messages */}
+          <MessageList channelId={activeChannelId} />
 
-      {/* Typing indicator */}
-      <TypingIndicator channelId={activeChannelId} />
+          {/* Typing indicator */}
+          <TypingIndicator channelId={activeChannelId} />
 
-      {/* Message input */}
-      <MessageInput channelId={activeChannelId} channelName={activeChannel?.name || 'channel'} />
+          {/* Message input */}
+          <MessageInput channelId={activeChannelId} channelName={activeChannel?.name || 'channel'} />
+        </>
+      )}
     </div>
   );
 }

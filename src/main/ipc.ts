@@ -205,8 +205,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return apiRequest(method, path, body);
   });
 
-  ipcMain.handle('api:upload', async (_event, path: string, fileBuffer: ArrayBuffer, fileName: string, mimeType: string) => {
-    return apiUpload(path, Buffer.from(fileBuffer), fileName, mimeType);
+  ipcMain.handle('api:upload', async (_event, path: string, fileBuffer: ArrayBuffer, fileName: string, mimeType: string, extraFields?: Record<string, string>) => {
+    return apiUpload(path, Buffer.from(fileBuffer), fileName, mimeType, extraFields);
   });
 
   // ── Screen share ──────────────────────────────────────────────────────
