@@ -75,20 +75,6 @@ export function ChannelSidebar() {
     });
   }, []);
 
-  // Auto-select the first text channel when channels load and none is active
-  useEffect(() => {
-    if (!activeChannelId && channels && channels.length > 0) {
-      const firstText = [...channels]
-        .sort((a, b) => a.position - b.position)
-        .find((c) => c.type === 'text' || c.type === 'announcement');
-      if (firstText) {
-        setActiveChannel(firstText.id);
-      }
-    }
-  }, [activeChannelId, channels, setActiveChannel]);
-
-  if (!activeServerId) return null;
-
   // Sort all channels by position
   const sorted = [...(channels || [])].sort((a, b) => a.position - b.position);
 
@@ -123,7 +109,21 @@ export function ChannelSidebar() {
     });
   }, [canReorder, activeServerId, localCategories]);
 
+  // Auto-select the first text channel when channels load and none is active
+  useEffect(() => {
+    if (!activeChannelId && channels && channels.length > 0) {
+      const firstText = [...channels]
+        .sort((a, b) => a.position - b.position)
+        .find((c) => c.type === 'text' || c.type === 'announcement');
+      if (firstText) {
+        setActiveChannel(firstText.id);
+      }
+    }
+  }, [activeChannelId, channels, setActiveChannel]);
+
   const serverMotd = activeServer?.motd;
+
+  if (!activeServerId) return null;
 
   return (
     <div style={{
