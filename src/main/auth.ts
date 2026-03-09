@@ -33,9 +33,12 @@ interface AuthError {
 
 let refreshPromise: Promise<string> | null = null;
 
-function hashPasswordForTransit(password: string): string {
+export function hashPasswordForTransit(password: string): string {
   return `sha256:${createHash('sha256').update(password).digest('hex')}`;
 }
+
+/** Alias exposed to renderer via IPC */
+export const hashPassword = hashPasswordForTransit;
 
 /** Build headers for an auth request, adding crypto session if active. */
 function authHeaders(): Record<string, string> {

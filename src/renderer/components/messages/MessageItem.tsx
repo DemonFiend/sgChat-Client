@@ -78,11 +78,11 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
     return matches.some((url) => !isImageUrl(url));
   }, [message.content]);
 
-  const handleReactionToggle = (emoji: string, hasReacted: boolean) => {
+  const handleReactionToggle = (emoji: string, hasReacted: boolean, type?: 'unicode' | 'custom', emojiId?: string) => {
     if (hasReacted) {
-      removeReaction.mutate({ messageId: message.id, emoji });
+      removeReaction.mutate({ messageId: message.id, emoji, type, emojiId });
     } else {
-      addReaction.mutate({ messageId: message.id, emoji });
+      addReaction.mutate({ messageId: message.id, emoji, type, emojiId });
     }
   };
 

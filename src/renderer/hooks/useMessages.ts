@@ -105,8 +105,14 @@ export function useDeleteMessage(channelId: string) {
 
 export function useAddReaction(channelId: string) {
   return useMutation({
-    mutationFn: ({ messageId, emoji }: { messageId: string; emoji: string }) =>
-      api.post(`/api/channels/${channelId}/messages/${messageId}/reactions`, { emoji }),
+    mutationFn: ({ messageId, emoji, type, emojiId }: { messageId: string; emoji: string; type?: 'unicode' | 'custom'; emojiId?: string }) => {
+      if (type === 'custom' && emojiId) {
+        return api.post(`/api/channels/${channelId}/messages/${messageId}/reactions`, {
+          reaction: { type: 'custom', emojiId },
+        });
+      }
+      return api.post(`/api/channels/${channelId}/messages/${messageId}/reactions`, { emoji });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['messages', channelId] });
     },
@@ -115,8 +121,14 @@ export function useAddReaction(channelId: string) {
 
 export function useRemoveReaction(channelId: string) {
   return useMutation({
-    mutationFn: ({ messageId, emoji }: { messageId: string; emoji: string }) =>
-      api.delete(`/api/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`),
+    mutationFn: ({ messageId, emoji, type, emojiId }: { messageId: string; emoji: string; type?: 'unicode' | 'custom'; emojiId?: string }) => {
+      if (type === 'custom' && emojiId) {
+        return api.delete(`/api/channels/${channelId}/messages/${messageId}/reactions`, {
+          reaction: { type: 'custom', emojiId },
+        });
+      }
+      return api.delete(`/api/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['messages', channelId] });
     },

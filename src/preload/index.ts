@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     register: (serverUrl: string, username: string, email: string, password: string) =>
       ipcRenderer.invoke('auth:register', serverUrl, username, email, password),
     logout: () => ipcRenderer.invoke('auth:logout'),
+    hashPassword: (password: string) => ipcRenderer.invoke('auth:hashPassword', password) as Promise<string>,
     check: () => ipcRenderer.invoke('auth:check'),
     getSocketToken: () => ipcRenderer.invoke('auth:getSocketToken'),
     refreshToken: () => ipcRenderer.invoke('auth:refreshToken'),

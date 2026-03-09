@@ -8,7 +8,7 @@ import {
   getAccessToken, getRefreshToken, getUserId,
   type SavedServer,
 } from './store';
-import { login, register, logout, getToken, refreshAccessToken } from './auth';
+import { login, register, logout, getToken, refreshAccessToken, hashPassword } from './auth';
 import { apiRequest, apiUpload } from './api-proxy';
 import {
   negotiateCryptoSession, clearCryptoSession,
@@ -162,6 +162,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     } catch {
       return { token: null };
     }
+  });
+
+  ipcMain.handle('auth:hashPassword', (_event, password: string) => {
+    return hashPassword(password);
   });
 
   ipcMain.handle('auth:refreshToken', async () => {

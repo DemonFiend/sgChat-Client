@@ -174,9 +174,10 @@ function ProfileSettings({ user }: { user: any }) {
     if (!emailPassword) { setEmailError('Current password is required'); return; }
     setEmailSaving(true);
     try {
+      const hashedPw = await electronAPI.auth.hashPassword(emailPassword);
       const res = await electronAPI.api.request('PATCH', '/api/users/me/email', {
         new_email: newEmail,
-        current_password: emailPassword,
+        current_password: hashedPw,
       });
       if (res.ok) {
         updateUser({ email: newEmail });
@@ -199,9 +200,13 @@ function ProfileSettings({ user }: { user: any }) {
     if (newPw !== confirmPw) { setPwError('New passwords do not match'); return; }
     setPwSaving(true);
     try {
+      const [hashedCurrent, hashedNew] = await Promise.all([
+        electronAPI.auth.hashPassword(currentPw),
+        electronAPI.auth.hashPassword(newPw),
+      ]);
       const res = await electronAPI.api.request('PATCH', '/api/users/me/password', {
-        current_password: currentPw,
-        new_password: newPw,
+        current_password: hashedCurrent,
+        new_password: hashedNew,
       });
       if (res.ok) {
         setPwModalOpen(false);
