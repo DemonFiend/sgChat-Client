@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { ScrollArea, SimpleGrid, Text, Tooltip } from '@mantine/core';
-import { useStickers, type Sticker } from '../../hooks/useStickers';
+import { useStickers } from '../../hooks/useStickers';
 import { useUIStore } from '../../stores/uiStore';
 
 interface StickerPickerProps {

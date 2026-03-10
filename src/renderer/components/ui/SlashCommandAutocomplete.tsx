@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Stack, Text, Group } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
@@ -29,9 +29,12 @@ export function SlashCommandAutocomplete({ text, cursorPosition, onSelect, input
   const isSlashTrigger = text.startsWith('/') && cursorPosition > 0 && !text.includes(' ');
   const searchTerm = isSlashTrigger ? text.slice(1).toLowerCase() : '';
 
-  const filtered = isSlashTrigger && commands
-    ? commands.filter((c) => c.name.toLowerCase().startsWith(searchTerm)).slice(0, 8)
-    : [];
+  const filtered = useMemo(
+    () => isSlashTrigger && commands
+      ? commands.filter((c) => c.name.toLowerCase().startsWith(searchTerm)).slice(0, 8)
+      : [],
+    [isSlashTrigger, commands, searchTerm],
+  );
 
   useEffect(() => {
     setSelectedIndex(0);

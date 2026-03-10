@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActionIcon, Group, Text, Textarea, Tooltip } from '@mantine/core';
 import { IconGif, IconPaperclip, IconMoodSmile, IconSend, IconSticker, IconX, IconEyeOff, IconEye } from '@tabler/icons-react';
 import { useSendMessage } from '../../hooks/useMessages';
