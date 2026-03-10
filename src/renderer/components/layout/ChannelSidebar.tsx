@@ -4,8 +4,8 @@ import { Reorder } from 'framer-motion';
 import {
   IconHash, IconVolume, IconChevronDown, IconChevronRight,
   IconSpeakerphone, IconMusic, IconPlus, IconMoon, IconSettings,
-  IconLink, IconBell, IconBellOff, IconBellRinging, IconCrown, IconInfoCircle,
-  IconCheck, IconCalendar,
+  IconBell, IconBellOff, IconBellRinging, IconCrown, IconInfoCircle,
+  IconCheck,
 } from '@tabler/icons-react';
 import { useChannelNotificationStore, type NotificationLevel } from '../../stores/channelNotificationStore';
 import { useChannels, type Channel, type ChannelType } from '../../hooks/useChannels';
@@ -22,7 +22,6 @@ import { toastStore } from '../../stores/toastNotifications';
 import { UserInfoPanel } from './UserInfoPanel';
 import { VoicePanel } from '../voice/VoicePanel';
 import { VoiceParticipantsList } from '../ui/VoiceParticipantsList';
-import { ServerSettingsModal } from '../ui/ServerSettingsModal';
 import { ChannelSettingsModal } from '../ui/ChannelSettingsModal';
 import { CategorySettingsModal } from '../ui/CategorySettingsModal';
 
@@ -50,7 +49,6 @@ export function ChannelSidebar() {
   const { data: fetchedCategories } = useCategories(activeServerId);
   const unreads = useUnreadStore((s) => s.unreads);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [motdVisible, setMotdVisible] = useState(true);
   const [categorySettingsId, setCategorySettingsId] = useState<string | null>(null);
 
@@ -133,50 +131,41 @@ export function ChannelSidebar() {
       flexDirection: 'column',
       flexShrink: 0,
     }}>
-      {/* Server header with dropdown menu */}
-      <Menu shadow="md" width={200} position="bottom-start">
-        <Menu.Target>
-          <UnstyledButton
-            style={{
-              height: 48,
-              padding: '0 16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              borderBottom: '1px solid var(--border)',
-              flexShrink: 0,
-            }}
-          >
-            <Text fw={600} size="sm" truncate>
-              {activeServer?.name || 'Server'}
-            </Text>
-            <IconChevronDown size={16} style={{ color: 'var(--text-muted)' }} />
-          </UnstyledButton>
-        </Menu.Target>
-        <Menu.Dropdown style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
-          <Menu.Item leftSection={<IconSettings size={14} />} onClick={() => setSettingsOpen(true)}>
-            Server Settings
-          </Menu.Item>
-          <Menu.Item leftSection={<IconHash size={14} />} onClick={() => setSettingsOpen(true)}>
-            Create Channel
-          </Menu.Item>
-          <Menu.Item leftSection={<IconLink size={14} />} onClick={() => setSettingsOpen(true)}>
-            Invite People
-          </Menu.Item>
-          <Menu.Divider />
-          <Menu.Item leftSection={<IconBell size={14} />}>
-            Notification Settings
-          </Menu.Item>
-        </Menu.Dropdown>
-      </Menu>
-
-      {activeServerId && (
-        <ServerSettingsModal
-          opened={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
-          serverId={activeServerId}
-        />
-      )}
+      {/* Server banner header */}
+      <div style={{
+        height: 120,
+        background: activeServer?.banner_url
+          ? `url(${activeServer.banner_url}) center/cover no-repeat`
+          : 'linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%)',
+        display: 'flex',
+        alignItems: 'flex-end',
+        padding: 12,
+        borderBottom: '1px solid var(--border)',
+        flexShrink: 0,
+        position: 'relative',
+      }}>
+        {/* Gradient overlay for text readability when banner image exists */}
+        {activeServer?.banner_url && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(transparent 40%, rgba(0,0,0,0.6))',
+            borderRadius: 'inherit',
+          }} />
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', zIndex: 1 }}>
+          {activeServer?.icon_url && (
+            <Avatar src={activeServer.icon_url} size={32} radius="md" />
+          )}
+          <Text fw={700} size="sm" truncate style={{
+            color: activeServer?.banner_url ? '#fff' : 'var(--text-primary)',
+            textShadow: activeServer?.banner_url ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
+            maxWidth: 160,
+          }}>
+            {activeServer?.name || 'Server'}
+          </Text>
+        </div>
+      </div>
 
       {/* MOTD banner */}
       {serverMotd && (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActionIcon, Badge, Group, Menu, Text, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog, IconBell, IconCalendarEvent, IconHash } from '@tabler/icons-react';
+import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog, IconBell, IconCalendarEvent, IconHash, IconLink, IconPlus } from '@tabler/icons-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useNotificationStore } from '../../stores/notificationStore';
@@ -112,12 +112,38 @@ export function TitleBar() {
                 leftSection={<IconCalendarEvent size={14} />}
                 onClick={() => {
                   setView('servers');
-                  // Small delay to ensure server view is mounted before dispatching
                   setTimeout(() => window.dispatchEvent(new Event('toggleServerEvents')), 50);
                 }}
               >
                 Events
               </Menu.Item>
+              {activeServerId && (
+                <>
+                  <Menu.Divider />
+                  <Menu.Item
+                    leftSection={<IconSettings size={14} />}
+                    onClick={() => setServerSettingsOpen(true)}
+                  >
+                    Server Settings
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<IconPlus size={14} />}
+                    onClick={() => setServerSettingsOpen(true)}
+                  >
+                    Create Channel
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<IconLink size={14} />}
+                    onClick={() => setServerSettingsOpen(true)}
+                  >
+                    Invite People
+                  </Menu.Item>
+                  <Menu.Divider />
+                  <Menu.Item leftSection={<IconBell size={14} />}>
+                    Notification Settings
+                  </Menu.Item>
+                </>
+              )}
             </Menu.Dropdown>
           </Menu>
 
