@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 import { ActionIcon, Group, Text, Textarea, Tooltip } from '@mantine/core';
-import { IconGif, IconPaperclip, IconMoodSmile, IconSend, IconX, IconEyeOff, IconEye } from '@tabler/icons-react';
+import { IconGif, IconPaperclip, IconMoodSmile, IconSend, IconSticker, IconX, IconEyeOff, IconEye } from '@tabler/icons-react';
 import { useSendMessage } from '../../hooks/useMessages';
 import { emitTypingStart, emitTypingStop } from '../../api/socket';
 import { useUIStore } from '../../stores/uiStore';
@@ -9,6 +9,8 @@ import { toastStore } from '../../stores/toastNotifications';
 import { GifPicker } from '../ui/GifPicker';
 import { EmojiPicker } from '../ui/EmojiPicker';
 import { EmojiAutocomplete } from '../ui/EmojiAutocomplete';
+import { StickerPicker } from '../ui/StickerPicker';
+import { SlashCommandAutocomplete } from '../ui/SlashCommandAutocomplete';
 import type { CustomEmoji } from '../../stores/emojiStore';
 
 interface MessageInputProps {
@@ -23,15 +25,24 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
   const [spoilerFiles, setSpoilerFiles] = useState<Set<number>>(new Set());
   const [gifPickerOpen, setGifPickerOpen] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [stickerPickerOpen, setStickerPickerOpen] = useState(false);
   const [cursorPos, setCursorPos] = useState(0);
   const sendMessage = useSendMessage(channelId);
   const lastTypingEmit = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const gifBtnRef = useRef<HTMLButtonElement>(null);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  const stickerBtnRef = useRef<HTMLButtonElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const replyTo = useUIStore((s) => s.replyTo);
   const setReplyTo = useUIStore((s) => s.setReplyTo);
+
+  // Focus textarea on custom event (fired by double-click on channel)
+  useEffect(() => {
+    const handler = () => textareaRef.current?.focus();
+    window.addEventListener('focusChatInput', handler);
+    return () => window.removeEventListener('focusChatInput', handler);
+  }, []);
 
   const handleEmojiSelect = useCallback((emoji: CustomEmoji) => {
     const shortcode = `:${emoji.shortcode}: `;
@@ -47,9 +58,12 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
     });
   }, []);
 
+  const MAX_MESSAGE_LENGTH = 2000;
+  const isOverLimit = content.length > MAX_MESSAGE_LENGTH;
+
   const handleSend = async () => {
     const trimmed = content.trim();
-    if ((!trimmed && files.length === 0) || sendMessage.isPending) return;
+    if ((!trimmed && files.length === 0) || sendMessage.isPending || isOverLimit) return;
 
     // Upload files first if any
     if (files.length > 0) {
@@ -96,7 +110,7 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      if (!isOverLimit) handleSend();
     }
     if (e.key === 'Escape' && replyTo) {
       setReplyTo(null);
@@ -223,6 +237,12 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
         />
 
         <div style={{ flex: 1, position: 'relative' }}>
+          <SlashCommandAutocomplete
+            text={content}
+            cursorPosition={cursorPos}
+            onSelect={(cmd) => setContent(cmd)}
+            inputRef={textareaRef}
+          />
           <EmojiAutocomplete
             text={content}
             cursorPosition={cursorPos}
@@ -252,9 +272,29 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
               },
             }}
           />
+          {/* Character limit counter */}
+          {content.length > 1500 && (
+            <Text
+              size="xs"
+              style={{
+                position: 'absolute',
+                bottom: 2,
+                right: 4,
+                color: content.length > 2000 ? 'var(--danger, #ff4444)' : content.length > 1800 ? '#f0ad4e' : 'var(--text-muted)',
+                fontWeight: content.length > 2000 ? 700 : 400,
+              }}
+            >
+              {content.length}/2000
+            </Text>
+          )}
         </div>
 
         <Group gap={2}>
+          <Tooltip label="Stickers" position="top" withArrow>
+            <ActionIcon ref={stickerBtnRef} variant="subtle" color="gray" size={32} onClick={() => setStickerPickerOpen((v) => !v)}>
+              <IconSticker size={18} />
+            </ActionIcon>
+          </Tooltip>
           <Tooltip label="GIF" position="top" withArrow>
             <ActionIcon ref={gifBtnRef} variant="subtle" color="gray" size={32} onClick={() => setGifPickerOpen(true)}>
               <IconGif size={20} />
@@ -268,10 +308,11 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
           {(content.trim() || files.length > 0) && (
             <ActionIcon
               variant="filled"
-              color="brand"
+              color={isOverLimit ? 'red' : 'brand'}
               size={32}
               onClick={handleSend}
               loading={sendMessage.isPending}
+              disabled={isOverLimit}
             >
               <IconSend size={16} />
             </ActionIcon>
@@ -300,6 +341,21 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
         onClose={() => setEmojiPickerOpen(false)}
         onSelect={handleEmojiSelect}
         anchorRef={emojiBtnRef.current}
+      />
+
+      {/* Sticker Picker */}
+      <StickerPicker
+        isOpen={stickerPickerOpen}
+        onClose={() => setStickerPickerOpen(false)}
+        onSelect={(stickerUrl) => {
+          if (onSendOverride) {
+            onSendOverride(stickerUrl);
+          } else {
+            sendMessage.mutate({ content: stickerUrl, reply_to_id: replyTo?.id });
+          }
+          setReplyTo(null);
+        }}
+        anchorRef={stickerBtnRef.current}
       />
     </div>
   );

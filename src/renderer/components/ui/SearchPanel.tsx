@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { ActionIcon, Group, Modal, ScrollArea, Stack, Text, TextInput } from '@mantine/core';
+import { useState } from 'react';
+import { ActionIcon, Group, Modal, ScrollArea, SegmentedControl, Stack, Text, TextInput } from '@mantine/core';
 import { IconSearch, IconX } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
@@ -10,6 +10,7 @@ interface SearchResult {
   content: string;
   author: { id: string; username: string };
   channel_id: string;
+  channel_name?: string;
   created_at: string;
 }
 
@@ -21,18 +22,29 @@ interface SearchPanelProps {
 
 export function SearchPanel({ opened, onClose, channelId }: SearchPanelProps) {
   const [query, setQuery] = useState('');
+  const [scope, setScope] = useState<'channel' | 'server' | 'dms'>('channel');
   const setActiveChannel = useUIStore((s) => s.setActiveChannel);
+  const activeDMId = useUIStore((s) => s.activeDMId);
 
   const { data: results, isFetching } = useQuery({
-    queryKey: ['search', channelId, query],
-    queryFn: () => api.get<SearchResult[]>(
-      `/api/channels/${channelId}/messages?search=${encodeURIComponent(query)}&limit=25`
-    ),
+    queryKey: ['search', scope, scope === 'channel' ? channelId : scope === 'dms' ? activeDMId : 'global', query],
+    queryFn: () => {
+      const q = encodeURIComponent(query);
+      if (scope === 'server') {
+        return api.get<SearchResult[]>(`/api/search/messages?q=${q}&limit=25`);
+      }
+      if (scope === 'dms' && activeDMId) {
+        return api.get<SearchResult[]>(`/api/dms/${activeDMId}/messages/search?q=${q}&limit=25`);
+      }
+      return api.get<SearchResult[]>(
+        `/api/channels/${channelId}/messages?search=${q}&limit=25`
+      );
+    },
     enabled: opened && query.length >= 2,
   });
 
   const handleResultClick = (result: SearchResult) => {
-    setActiveChannel(result.channel_id);
+    if (result.channel_id) setActiveChannel(result.channel_id);
     onClose();
   };
 
@@ -45,6 +57,16 @@ export function SearchPanel({ opened, onClose, channelId }: SearchPanelProps) {
       size="lg"
     >
       <Stack gap={12}>
+        <SegmentedControl
+          value={scope}
+          onChange={(v) => setScope(v as 'channel' | 'server' | 'dms')}
+          data={[
+            { label: 'This Channel', value: 'channel' },
+            { label: 'All Channels', value: 'server' },
+            { label: 'DMs', value: 'dms' },
+          ]}
+          size="xs"
+        />
         <TextInput
           placeholder="Search messages..."
           leftSection={<IconSearch size={16} />}
@@ -90,6 +112,9 @@ export function SearchPanel({ opened, onClose, channelId }: SearchPanelProps) {
               >
                 <Group gap={8} mb={2}>
                   <Text size="xs" fw={600}>{result.author.username}</Text>
+                  {result.channel_name && scope === 'server' && (
+                    <Text size="xs" c="dimmed">#{result.channel_name}</Text>
+                  )}
                   <Text size="xs" c="dimmed">
                     {new Date(result.created_at).toLocaleString()}
                   </Text>

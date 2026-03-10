@@ -21,6 +21,7 @@ interface UserContextMenuProps {
   onKick?: () => void;
   onBan?: () => void;
   onWarn?: () => void;
+  onViewWarnings?: () => void;
   onTimeout?: () => void;
 }
 
@@ -43,6 +44,7 @@ export function UserContextMenu({
   onKick,
   onBan,
   onWarn,
+  onViewWarnings,
   onTimeout,
 }: UserContextMenuProps) {
   if (!opened) return null;
@@ -116,6 +118,11 @@ export function UserContextMenu({
               {canModerate && onWarn && (
                 <Menu.Item leftSection={<IconAlertTriangle size={14} />} onClick={onWarn} color="yellow">
                   Warn {username}
+                </Menu.Item>
+              )}
+              {canModerate && onViewWarnings && (
+                <Menu.Item leftSection={<IconAlertTriangle size={14} />} onClick={onViewWarnings}>
+                  View Warnings
                 </Menu.Item>
               )}
               {canTimeout && onTimeout && (

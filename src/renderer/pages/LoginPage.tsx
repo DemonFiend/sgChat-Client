@@ -64,6 +64,8 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: Logi
         <label style={styles.label}>Email</label>
         <input
           type="email"
+          name="email"
+          autoComplete="email"
           style={styles.input}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -74,6 +76,8 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: Logi
         <label style={{ ...styles.label, marginTop: '1rem' }}>Password</label>
         <input
           type="password"
+          name="password"
+          autoComplete="current-password"
           style={styles.input}
           value={password}
           onChange={(e) => setPassword(e.target.value)}

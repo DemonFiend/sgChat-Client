@@ -1,5 +1,5 @@
 import { ActionIcon, Button, Divider, Group, Kbd, Modal, NavLink, PasswordInput, Progress, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton } from '@mantine/core';
-import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay, IconRefresh, IconLock, IconMail } from '@tabler/icons-react';
+import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay, IconRefresh, IconLock, IconMail, IconHistory } from '@tabler/icons-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
@@ -10,6 +10,8 @@ import { useServerVersion } from '../hooks/useServerInfo';
 import { switchInputDevice, switchOutputDevice, setGlobalOutputVolume, applyAudioProcessingSettings } from '../lib/voiceService';
 import { VoiceBar } from '../components/voice/VoiceBar';
 import { AvatarPicker } from '../components/ui/AvatarPicker';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../lib/api';
 
 type SettingsTab = 'profile' | 'appearance' | 'notifications' | 'keybinds' | 'voice';
 
@@ -233,6 +235,11 @@ function ProfileSettings({ user }: { user: any }) {
         onAvatarChange={(url) => updateAvatarUrl(url)}
       />
 
+      <AvatarHistory onRevert={(url) => updateAvatarUrl(url)} />
+
+      {/* Banner upload */}
+      <BannerUpload currentBannerUrl={user?.banner_url} onBannerChange={(url) => updateUser({ banner_url: url })} />
+
       <Divider style={{ borderColor: 'var(--border)' }} />
 
       <Stack gap={12}>
@@ -351,6 +358,59 @@ function ProfileSettings({ user }: { user: any }) {
           </Group>
         </Stack>
       </Modal>
+    </Stack>
+  );
+}
+
+function BannerUpload({ currentBannerUrl, onBannerChange }: { currentBannerUrl?: string | null; onBannerChange: (url: string | null) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const res = await electronAPI.api.upload('/api/users/me/banner', buffer, file.name, file.type);
+      if (res.ok && res.data?.banner_url) {
+        onBannerChange(res.data.banner_url);
+      }
+    } catch { /* ignore */ }
+    setUploading(false);
+  };
+
+  const handleRemove = async () => {
+    try {
+      const res = await electronAPI.api.request('DELETE', '/api/users/me/banner');
+      if (res.ok) onBannerChange(null);
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <Stack gap={8}>
+      <Text size="sm" fw={500}>Profile Banner</Text>
+      <div style={{
+        width: '100%',
+        height: 120,
+        borderRadius: 8,
+        background: currentBannerUrl ? `url(${currentBannerUrl}) center/cover` : 'var(--bg-secondary)',
+        border: '1px solid var(--border)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+      }}>
+        <Button variant="light" size="xs" loading={uploading} onClick={() => fileRef.current?.click()}>
+          {currentBannerUrl ? 'Change' : 'Upload Banner'}
+        </Button>
+        {currentBannerUrl && (
+          <Button variant="light" size="xs" color="red" onClick={handleRemove}>Remove</Button>
+        )}
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
+        const f = e.target.files?.[0];
+        if (f) handleUpload(f);
+        e.target.value = '';
+      }} />
     </Stack>
   );
 }
@@ -855,5 +915,56 @@ function VoiceSettings() {
         }}
       />
     </Stack>
+  );
+}
+
+/* ─── Avatar History ─── */
+
+function AvatarHistory({ onRevert }: { onRevert: (url: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const { data: history } = useQuery({
+    queryKey: ['avatar-history'],
+    queryFn: () => api.get<Array<{ url: string; uploaded_at: string }>>('/api/users/me/avatar/history'),
+    enabled: expanded,
+  });
+
+  return (
+    <div>
+      <Button
+        variant="subtle"
+        size="xs"
+        leftSection={<IconHistory size={14} />}
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? 'Hide Avatar History' : 'Avatar History'}
+      </Button>
+      {expanded && (
+        <Group gap={8} mt={8}>
+          {!history || history.length === 0 ? (
+            <Text size="xs" c="dimmed">No previous avatars</Text>
+          ) : (
+            history.map((entry, i) => (
+              <UnstyledButton
+                key={i}
+                onClick={() => onRevert(entry.url)}
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  border: '2px solid var(--border)',
+                  cursor: 'pointer',
+                  transition: 'border-color 0.15s',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+              >
+                <img src={entry.url} alt="Previous avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </UnstyledButton>
+            ))
+          )}
+        </Group>
+      )}
+    </div>
   );
 }

@@ -399,6 +399,7 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
         <Menu.Target>
           <UnstyledButton
             onClick={handleClick}
+            onDoubleClick={() => { if (!isVoiceType) window.dispatchEvent(new Event('focusChatInput')); }}
             onContextMenu={handleContextMenu}
             style={{
               display: 'flex',

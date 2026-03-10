@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Group, Skeleton, ScrollArea, Stack, Text, Tooltip } from '@mantine/core';
-import { IconHash, IconPin, IconPinnedOff, IconUsers, IconSearch, IconCalendar } from '@tabler/icons-react';
+import { IconHash, IconPin, IconPinnedOff, IconUsers, IconSearch, IconCalendar, IconMessage2 } from '@tabler/icons-react';
 import { useMessages, usePinnedMessages, useUnpinMessage, type Message } from '../../hooks/useMessages';
 import { useUIStore } from '../../stores/uiStore';
 import { useChannels } from '../../hooks/useChannels';
@@ -9,6 +9,7 @@ import { MessageInput } from '../messages/MessageInput';
 import { TypingIndicator } from '../messages/TypingIndicator';
 import { SearchPanel } from '../ui/SearchPanel';
 import { ServerEventsPanel } from '../ui/ServerEventsPanel';
+import { ThreadPanel, ThreadList } from '../ui/ThreadPanel';
 
 export function ChatPanel() {
   const activeChannelId = useUIStore((s) => s.activeChannelId);
@@ -16,9 +17,13 @@ export function ChatPanel() {
   const toggleMemberList = useUIStore((s) => s.toggleMemberList);
   const memberListVisible = useUIStore((s) => s.memberListVisible);
   const { data: channels } = useChannels(activeServerId);
+  const activeThreadId = useUIStore((s) => s.activeThreadId);
+  const openThread = useUIStore((s) => s.openThread);
+  const closeThread = useUIStore((s) => s.closeThread);
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinnedOpen, setPinnedOpen] = useState(false);
   const [eventsOpen, setEventsOpen] = useState(false);
+  const [threadsOpen, setThreadsOpen] = useState(false);
   const { data: pinnedMessages } = usePinnedMessages(activeChannelId);
   const unpinMessage = useUnpinMessage(activeChannelId || '');
 
@@ -86,6 +91,16 @@ export function ChatPanel() {
             onClick={() => setPinnedOpen((v) => !v)}
           >
             <IconPin size={18} />
+          </ActionIcon>
+        </Tooltip>
+        <Tooltip label={threadsOpen ? 'Hide Threads' : 'Threads'} position="bottom" withArrow>
+          <ActionIcon
+            variant={threadsOpen ? 'light' : 'subtle'}
+            color={threadsOpen ? 'brand' : 'gray'}
+            size={28}
+            onClick={() => setThreadsOpen((v) => !v)}
+          >
+            <IconMessage2 size={18} />
           </ActionIcon>
         </Tooltip>
         <Tooltip label="Search" position="bottom" withArrow>
@@ -166,21 +181,45 @@ export function ChatPanel() {
         </div>
       )}
 
-      {/* Events panel (replaces messages when open) */}
-      {eventsOpen && activeServerId ? (
-        <ServerEventsPanel serverId={activeServerId} />
-      ) : (
-        <>
-          {/* Messages */}
-          <MessageList channelId={activeChannelId} />
-
-          {/* Typing indicator */}
-          <TypingIndicator channelId={activeChannelId} />
-
-          {/* Message input */}
-          <MessageInput channelId={activeChannelId} channelName={activeChannel?.name || 'channel'} />
-        </>
+      {/* Thread list dropdown */}
+      {threadsOpen && activeChannelId && !activeThreadId && (
+        <div style={{
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--bg-secondary)',
+          maxHeight: 260,
+          overflow: 'auto',
+        }}>
+          <ThreadList
+            channelId={activeChannelId}
+            onSelectThread={(id) => { openThread(id); setThreadsOpen(false); }}
+          />
+        </div>
       )}
+
+      {/* Main content area — chat + optional thread panel side by side */}
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        {/* Chat / Events column */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          {eventsOpen && activeServerId ? (
+            <ServerEventsPanel serverId={activeServerId} />
+          ) : (
+            <>
+              <MessageList channelId={activeChannelId} />
+              <TypingIndicator channelId={activeChannelId} />
+              <MessageInput channelId={activeChannelId} channelName={activeChannel?.name || 'channel'} />
+            </>
+          )}
+        </div>
+
+        {/* Thread panel (side panel) */}
+        {activeThreadId && activeChannelId && (
+          <ThreadPanel
+            threadId={activeThreadId}
+            channelId={activeChannelId}
+            onClose={closeThread}
+          />
+        )}
+      </div>
     </div>
   );
 }

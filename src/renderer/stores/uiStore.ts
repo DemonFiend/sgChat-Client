@@ -10,6 +10,7 @@ interface UIState {
   activeServerId: string | null;
   activeChannelId: string | null;
   activeDMId: string | null;
+  activeThreadId: string | null;
   view: 'servers' | 'dms' | 'friends' | 'settings';
   memberListVisible: boolean;
   replyTo: ReplyTarget | null;
@@ -20,21 +21,24 @@ interface UIState {
   setView: (view: UIState['view']) => void;
   toggleMemberList: () => void;
   setReplyTo: (target: ReplyTarget | null) => void;
+  openThread: (threadId: string) => void;
+  closeThread: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
   activeServerId: null,
   activeChannelId: null,
   activeDMId: null,
+  activeThreadId: null,
   view: 'servers',
   memberListVisible: true,
   replyTo: null,
 
   setActiveServer: (serverId) =>
-    set({ activeServerId: serverId, activeChannelId: null, view: 'servers' }),
+    set({ activeServerId: serverId, activeChannelId: null, activeThreadId: null, view: 'servers' }),
 
   setActiveChannel: (channelId) =>
-    set({ activeChannelId: channelId, replyTo: null }),
+    set({ activeChannelId: channelId, activeThreadId: null, replyTo: null }),
 
   setActiveDM: (dmId) =>
     set({ activeDMId: dmId, view: 'dms' }),
@@ -47,4 +51,10 @@ export const useUIStore = create<UIState>((set) => ({
 
   setReplyTo: (target) =>
     set({ replyTo: target }),
+
+  openThread: (threadId) =>
+    set({ activeThreadId: threadId }),
+
+  closeThread: () =>
+    set({ activeThreadId: null }),
 }));

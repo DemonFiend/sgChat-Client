@@ -45,6 +45,8 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
         <label style={styles.label}>Username</label>
         <input
           type="text"
+          name="username"
+          autoComplete="username"
           style={styles.input}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
@@ -54,6 +56,8 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
         <label style={{ ...styles.label, marginTop: '1rem' }}>Email</label>
         <input
           type="email"
+          name="email"
+          autoComplete="email"
           style={styles.input}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -62,6 +66,8 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
         <label style={{ ...styles.label, marginTop: '1rem' }}>Password</label>
         <input
           type="password"
+          name="password"
+          autoComplete="new-password"
           style={styles.input}
           value={password}
           onChange={(e) => setPassword(e.target.value)}

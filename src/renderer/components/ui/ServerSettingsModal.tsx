@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ActionIcon, Avatar, Badge, Button, Checkbox, ColorInput, CopyButton, Divider,
@@ -10,7 +10,7 @@ import {
   IconTrash, IconCopy, IconCheck, IconBan, IconUserMinus, IconClock,
   IconHistory, IconMessageCircle, IconPencil, IconX,
   IconArrowUp, IconArrowDown, IconDatabase, IconCalendarTime, IconVolume,
-  IconMoodSmile, IconUpload,
+  IconMoodSmile, IconUpload, IconWebhook, IconHeartHandshake, IconSticker, IconChartBar,
 } from '@tabler/icons-react';
 import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
@@ -24,6 +24,14 @@ import {
   useDeleteEmoji, useInstallDefaultPack, useToggleMasterEmoji,
 } from '../../hooks/useEmojis';
 import { useEmojiStore, type EmojiPack } from '../../stores/emojiStore';
+import { useWebhooks, useCreateWebhook, useUpdateWebhook, useDeleteWebhook } from '../../hooks/useWebhooks';
+import { useStickers, useUploadSticker, useDeleteSticker } from '../../hooks/useStickers';
+import {
+  useRoleReactions, useCreateRoleReactionGroup, useDeleteRoleReactionGroup,
+  useToggleRoleReactionGroup, useAddRoleReactionMapping, useDeleteRoleReactionMapping,
+  useFormatRoleReactionChannel,
+} from '../../hooks/useRoleReactions';
+import { useChannels } from '../../hooks/useChannels';
 
 interface ServerSettingsModalProps {
   opened: boolean;
@@ -95,11 +103,16 @@ export function ServerSettingsModal({ opened, onClose, serverId }: ServerSetting
           <NavLink label="Channels" leftSection={<IconHash size={16} />} active={tab === 'channels'} onClick={() => setTab('channels')} variant="subtle" />
           <NavLink label="Invites" leftSection={<IconLink size={16} />} active={tab === 'invites'} onClick={() => setTab('invites')} variant="subtle" />
           <NavLink label="Bans" leftSection={<IconBan size={16} />} active={tab === 'bans'} onClick={() => setTab('bans')} variant="subtle" />
+          <NavLink label="Statistics" leftSection={<IconChartBar size={16} />} active={tab === 'stats'} onClick={() => setTab('stats')} variant="subtle" />
           <NavLink label="Audit Log" leftSection={<IconHistory size={16} />} active={tab === 'audit'} onClick={() => setTab('audit')} variant="subtle" />
           <NavLink label="Welcome Popup" leftSection={<IconMessageCircle size={16} />} active={tab === 'popup'} onClick={() => setTab('popup')} variant="subtle" />
           <NavLink label="Storage" leftSection={<IconDatabase size={16} />} active={tab === 'storage'} onClick={() => setTab('storage')} variant="subtle" />
           <NavLink label="Retention" leftSection={<IconCalendarTime size={16} />} active={tab === 'retention'} onClick={() => setTab('retention')} variant="subtle" />
           <NavLink label="Emoji Packs" leftSection={<IconMoodSmile size={16} />} active={tab === 'emojis'} onClick={() => setTab('emojis')} variant="subtle" />
+          <NavLink label="Stickers" leftSection={<IconSticker size={16} />} active={tab === 'stickers'} onClick={() => setTab('stickers')} variant="subtle" />
+          <NavLink label="Webhooks" leftSection={<IconWebhook size={16} />} active={tab === 'webhooks'} onClick={() => setTab('webhooks')} variant="subtle" />
+          <NavLink label="Role Reactions" leftSection={<IconHeartHandshake size={16} />} active={tab === 'role-reactions'} onClick={() => setTab('role-reactions')} variant="subtle" />
+          <NavLink label="Soundboard" leftSection={<IconVolume size={16} />} active={tab === 'soundboard'} onClick={() => setTab('soundboard')} variant="subtle" />
           <NavLink label="Voice Sounds" leftSection={<IconVolume size={16} />} active={tab === 'sounds'} onClick={() => setTab('sounds')} variant="subtle" />
         </Stack>
 
@@ -110,11 +123,16 @@ export function ServerSettingsModal({ opened, onClose, serverId }: ServerSetting
           {tab === 'channels' && <ChannelsTab serverId={serverId} />}
           {tab === 'invites' && <InvitesTab serverId={serverId} />}
           {tab === 'bans' && <BansTab serverId={serverId} />}
+          {tab === 'stats' && <StatsTab serverId={serverId} />}
           {tab === 'audit' && <AuditLogTab serverId={serverId} />}
           {tab === 'popup' && <ServerPopupConfigForm serverId={serverId} />}
           {tab === 'emojis' && <EmojiPacksTab serverId={serverId} />}
           {tab === 'storage' && <StorageTab serverId={serverId} />}
           {tab === 'retention' && <RetentionTab serverId={serverId} />}
+          {tab === 'stickers' && <StickersTab serverId={serverId} />}
+          {tab === 'webhooks' && <WebhooksTab serverId={serverId} />}
+          {tab === 'role-reactions' && <RoleReactionsTab serverId={serverId} />}
+          {tab === 'soundboard' && <SoundboardTab serverId={serverId} />}
           {tab === 'sounds' && <VoiceSoundsPanel serverId={serverId} />}
         </ScrollArea>
       </div>
@@ -1571,6 +1589,450 @@ function EmojiPacksTab({ serverId }: { serverId: string }) {
             ))}
           </Stack>
         </>
+      )}
+    </Stack>
+  );
+}
+
+/* ─── Stats Tab ─── */
+
+function StatsTab({ serverId }: { serverId: string }) {
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ['server-stats', serverId],
+    queryFn: () => api.get<{ users: number; channels: number; messages: number }>('/api/server/stats'),
+  });
+
+  if (isLoading) return <Text size="sm" c="dimmed">Loading statistics...</Text>;
+  if (!stats) return <Text size="sm" c="dimmed">Unable to load statistics</Text>;
+
+  const items = [
+    { label: 'Total Users', value: stats.users },
+    { label: 'Total Channels', value: stats.channels },
+    { label: 'Total Messages', value: stats.messages },
+  ];
+
+  return (
+    <Stack gap={16} p={8}>
+      <Text size="lg" fw={600}>Server Statistics</Text>
+      <Group gap={16}>
+        {items.map((item) => (
+          <div
+            key={item.label}
+            style={{
+              flex: 1,
+              padding: '20px 16px',
+              background: 'var(--bg-secondary)',
+              borderRadius: 8,
+              textAlign: 'center',
+            }}
+          >
+            <Text size="xl" fw={700}>{item.value.toLocaleString()}</Text>
+            <Text size="xs" c="dimmed" mt={4}>{item.label}</Text>
+          </div>
+        ))}
+      </Group>
+    </Stack>
+  );
+}
+
+/* ─── Stickers Tab ─── */
+
+function StickersTab({ serverId }: { serverId: string }) {
+  const { data: stickers, isLoading } = useStickers(serverId);
+  const uploadSticker = useUploadSticker(serverId);
+  const deleteSticker = useDeleteSticker(serverId);
+  const [newName, setNewName] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const handleUpload = () => {
+    if (!selectedFile || !newName.trim()) return;
+    uploadSticker.mutate(
+      { file: selectedFile, name: newName.trim(), description: newDesc.trim() || undefined },
+      {
+        onSuccess: () => {
+          setNewName('');
+          setNewDesc('');
+          setSelectedFile(null);
+        },
+      },
+    );
+  };
+
+  return (
+    <Stack gap="md">
+      <Text size="lg" fw={600}>Stickers</Text>
+
+      {/* Upload */}
+      <div style={{ padding: 12, background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+        <Text size="sm" fw={500} mb={8}>Upload Sticker</Text>
+        <Group gap={8} align="flex-end">
+          <TextInput label="Name" placeholder="Sticker name" value={newName} onChange={(e) => setNewName(e.currentTarget.value)} style={{ flex: 1 }} size="sm" />
+          <TextInput label="Description" placeholder="Optional" value={newDesc} onChange={(e) => setNewDesc(e.currentTarget.value)} style={{ flex: 1 }} size="sm" />
+        </Group>
+        <Group gap={8} mt={8}>
+          <Button variant="light" size="xs" leftSection={<IconUpload size={14} />} onClick={() => fileRef.current?.click()}>
+            {selectedFile ? selectedFile.name : 'Choose file'}
+          </Button>
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
+          <Button size="xs" onClick={handleUpload} loading={uploadSticker.isPending} disabled={!selectedFile || !newName.trim()}>
+            Upload
+          </Button>
+        </Group>
+      </div>
+
+      {/* List */}
+      {isLoading ? (
+        <Text size="sm" c="dimmed">Loading stickers...</Text>
+      ) : !stickers || stickers.length === 0 ? (
+        <Text size="sm" c="dimmed">No stickers yet</Text>
+      ) : (
+        <Stack gap={4}>
+          {stickers.map((s) => (
+            <Group key={s.id} justify="space-between" style={{ padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 6 }}>
+              <Group gap={12}>
+                <img src={s.url} alt={s.name} style={{ width: 48, height: 48, objectFit: 'contain', borderRadius: 4 }} />
+                <div>
+                  <Text size="sm" fw={500}>{s.name}</Text>
+                  {s.description && <Text size="xs" c="dimmed">{s.description}</Text>}
+                </div>
+              </Group>
+              <ActionIcon variant="subtle" color="red" size={24} onClick={() => deleteSticker.mutate(s.id)}>
+                <IconTrash size={14} />
+              </ActionIcon>
+            </Group>
+          ))}
+        </Stack>
+      )}
+    </Stack>
+  );
+}
+
+/* ─── Webhooks Tab ─── */
+
+function WebhooksTab({ serverId }: { serverId: string }) {
+  const { data: webhooks, isLoading } = useWebhooks(serverId);
+  const { data: channels } = useChannels(serverId);
+  const createWebhook = useCreateWebhook();
+  const updateWebhook = useUpdateWebhook();
+  const deleteWebhook = useDeleteWebhook();
+  const [newName, setNewName] = useState('');
+  const [newChannelId, setNewChannelId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editChannelId, setEditChannelId] = useState<string | null>(null);
+
+  const textChannels = (channels || []).filter((c) => c.type === 'text');
+  const channelOptions = textChannels.map((c) => ({ value: c.id, label: `#${c.name}` }));
+
+  const handleCreate = () => {
+    if (!newName.trim() || !newChannelId) return;
+    createWebhook.mutate(
+      { name: newName.trim(), channel_id: newChannelId, server_id: serverId },
+      { onSuccess: () => { setNewName(''); setNewChannelId(null); } },
+    );
+  };
+
+  const handleUpdate = (id: string) => {
+    const updates: any = { id, serverId };
+    if (editName.trim()) updates.name = editName.trim();
+    if (editChannelId) updates.channel_id = editChannelId;
+    updateWebhook.mutate(updates, { onSuccess: () => setEditingId(null) });
+  };
+
+  const getServerUrl = () => {
+    try { return (window as any).electronAPI?.server?.getServerUrl?.() || window.location.origin; } catch { return window.location.origin; }
+  };
+
+  return (
+    <Stack gap="md">
+      <Text size="lg" fw={600}>Webhooks</Text>
+
+      {/* Create */}
+      <div style={{ padding: 12, background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+        <Text size="sm" fw={500} mb={8}>Create Webhook</Text>
+        <Group gap={8} align="flex-end">
+          <TextInput label="Name" placeholder="Webhook name" value={newName} onChange={(e) => setNewName(e.currentTarget.value)} style={{ flex: 1 }} size="sm" />
+          <Select label="Channel" data={channelOptions} value={newChannelId} onChange={setNewChannelId} placeholder="Select channel" style={{ flex: 1 }} size="sm" />
+          <Button size="xs" onClick={handleCreate} loading={createWebhook.isPending} disabled={!newName.trim() || !newChannelId}>
+            Create
+          </Button>
+        </Group>
+      </div>
+
+      {/* List */}
+      {isLoading ? (
+        <Text size="sm" c="dimmed">Loading webhooks...</Text>
+      ) : !webhooks || webhooks.length === 0 ? (
+        <Text size="sm" c="dimmed">No webhooks configured</Text>
+      ) : (
+        <Stack gap={4}>
+          {webhooks.map((wh) => (
+            <div key={wh.id} style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 6, border: '1px solid var(--border)' }}>
+              {editingId === wh.id ? (
+                <Stack gap={8}>
+                  <Group gap={8}>
+                    <TextInput value={editName} onChange={(e) => setEditName(e.currentTarget.value)} placeholder="Name" size="sm" style={{ flex: 1 }} />
+                    <Select data={channelOptions} value={editChannelId} onChange={setEditChannelId} placeholder="Channel" size="sm" style={{ flex: 1 }} />
+                  </Group>
+                  <Group gap={4}>
+                    <Button size="xs" onClick={() => handleUpdate(wh.id)} loading={updateWebhook.isPending}>Save</Button>
+                    <Button size="xs" variant="subtle" color="gray" onClick={() => setEditingId(null)}>Cancel</Button>
+                  </Group>
+                </Stack>
+              ) : (
+                <Group justify="space-between">
+                  <div>
+                    <Text size="sm" fw={500}>{wh.name}</Text>
+                    <Text size="xs" c="dimmed">#{textChannels.find((c) => c.id === wh.channel_id)?.name || 'unknown'}</Text>
+                  </div>
+                  <Group gap={4}>
+                    <CopyButton value={`${getServerUrl()}/api/webhooks/${wh.id}/${wh.token}`}>
+                      {({ copied, copy }) => (
+                        <Tooltip label={copied ? 'Copied!' : 'Copy URL'} position="top" withArrow>
+                          <ActionIcon variant="subtle" color={copied ? 'green' : 'gray'} size={24} onClick={copy}>
+                            {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                          </ActionIcon>
+                        </Tooltip>
+                      )}
+                    </CopyButton>
+                    <ActionIcon variant="subtle" color="gray" size={24} onClick={() => { setEditingId(wh.id); setEditName(wh.name); setEditChannelId(wh.channel_id); }}>
+                      <IconPencil size={14} />
+                    </ActionIcon>
+                    <ActionIcon variant="subtle" color="red" size={24} onClick={() => deleteWebhook.mutate({ id: wh.id, serverId })}>
+                      <IconTrash size={14} />
+                    </ActionIcon>
+                  </Group>
+                </Group>
+              )}
+            </div>
+          ))}
+        </Stack>
+      )}
+    </Stack>
+  );
+}
+
+/* ─── Role Reactions Tab ─── */
+
+function RoleReactionsTab({ serverId }: { serverId: string }) {
+  const { data: groups, isLoading } = useRoleReactions(serverId);
+  const { data: channels } = useChannels(serverId);
+  const { data: roles } = useQuery({
+    queryKey: ['roles', serverId],
+    queryFn: () => api.get<Role[]>(`/api/servers/${serverId}/roles`),
+  });
+  const createGroup = useCreateRoleReactionGroup(serverId);
+  const deleteGroup = useDeleteRoleReactionGroup(serverId);
+  const toggleGroup = useToggleRoleReactionGroup(serverId);
+  const addMapping = useAddRoleReactionMapping(serverId);
+  const deleteMapping = useDeleteRoleReactionMapping(serverId);
+  const formatChannel = useFormatRoleReactionChannel(serverId);
+
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupChannelId, setNewGroupChannelId] = useState<string | null>(null);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+  const [mappingEmoji, setMappingEmoji] = useState('');
+  const [mappingRoleId, setMappingRoleId] = useState<string | null>(null);
+
+  const textChannels = (channels || []).filter((c) => c.type === 'text');
+  const channelOptions = textChannels.map((c) => ({ value: c.id, label: `#${c.name}` }));
+  const roleOptions = (roles || []).map((r) => ({ value: r.id, label: r.name }));
+
+  const handleCreateGroup = () => {
+    if (!newGroupName.trim() || !newGroupChannelId) return;
+    createGroup.mutate(
+      { name: newGroupName.trim(), channel_id: newGroupChannelId },
+      { onSuccess: () => { setNewGroupName(''); setNewGroupChannelId(null); } },
+    );
+  };
+
+  const handleAddMapping = (groupId: string) => {
+    if (!mappingEmoji.trim() || !mappingRoleId) return;
+    addMapping.mutate(
+      { groupId, emoji: mappingEmoji.trim(), emoji_type: 'unicode', role_id: mappingRoleId },
+      { onSuccess: () => { setMappingEmoji(''); setMappingRoleId(null); } },
+    );
+  };
+
+  return (
+    <Stack gap="md">
+      <Text size="lg" fw={600}>Role Reactions</Text>
+      <Text size="xs" c="dimmed">
+        Let members self-assign roles by reacting to messages with specific emojis.
+      </Text>
+
+      {/* Create group */}
+      <div style={{ padding: 12, background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+        <Text size="sm" fw={500} mb={8}>Create Reaction Group</Text>
+        <Group gap={8} align="flex-end">
+          <TextInput label="Name" placeholder="e.g. Color Roles" value={newGroupName} onChange={(e) => setNewGroupName(e.currentTarget.value)} style={{ flex: 1 }} size="sm" />
+          <Select label="Channel" data={channelOptions} value={newGroupChannelId} onChange={setNewGroupChannelId} placeholder="Target channel" style={{ flex: 1 }} size="sm" />
+          <Button size="xs" onClick={handleCreateGroup} loading={createGroup.isPending} disabled={!newGroupName.trim() || !newGroupChannelId}>
+            Create
+          </Button>
+        </Group>
+      </div>
+
+      {/* Groups list */}
+      {isLoading ? (
+        <Text size="sm" c="dimmed">Loading...</Text>
+      ) : !groups || groups.length === 0 ? (
+        <Text size="sm" c="dimmed">No reaction groups configured</Text>
+      ) : (
+        <Stack gap={8}>
+          {groups.map((group) => (
+            <div key={group.id} style={{ background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }}>
+              {/* Group header */}
+              <div
+                style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                onClick={() => setExpandedGroup(expandedGroup === group.id ? null : group.id)}
+              >
+                <Text size="sm" fw={600} style={{ flex: 1 }}>{group.name}</Text>
+                <Badge size="xs" variant="light" color={group.is_active ? 'green' : 'gray'}>
+                  {group.is_active ? 'Active' : 'Inactive'}
+                </Badge>
+                <Text size="xs" c="dimmed">{group.mappings?.length || 0} mappings</Text>
+                <Switch
+                  size="xs"
+                  checked={group.is_active}
+                  onChange={() => toggleGroup.mutate(group.id)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <Tooltip label="Format Channel" position="top" withArrow>
+                  <ActionIcon variant="subtle" color="brand" size={24} onClick={(e) => { e.stopPropagation(); formatChannel.mutate(group.id); }}>
+                    <IconMessageCircle size={14} />
+                  </ActionIcon>
+                </Tooltip>
+                <ActionIcon variant="subtle" color="red" size={24} onClick={(e) => { e.stopPropagation(); deleteGroup.mutate(group.id); }}>
+                  <IconTrash size={14} />
+                </ActionIcon>
+              </div>
+
+              {/* Expanded mappings */}
+              {expandedGroup === group.id && (
+                <div style={{ borderTop: '1px solid var(--border)', padding: 12 }}>
+                  {group.mappings && group.mappings.length > 0 ? (
+                    <Stack gap={4} mb={12}>
+                      {group.mappings.map((m) => (
+                        <Group key={m.id} justify="space-between" style={{ padding: '4px 8px', background: 'var(--bg-primary)', borderRadius: 4 }}>
+                          <Group gap={8}>
+                            <Text size="sm">{m.emoji_type === 'custom' ? `custom emoji` : m.emoji}</Text>
+                            <Text size="xs" c="dimmed">→</Text>
+                            <Badge size="sm" variant="light" color={m.role_color || 'gray'}>{m.role_name || 'Unknown Role'}</Badge>
+                          </Group>
+                          <ActionIcon variant="subtle" color="red" size={20} onClick={() => deleteMapping.mutate({ groupId: group.id, mappingId: m.id })}>
+                            <IconTrash size={12} />
+                          </ActionIcon>
+                        </Group>
+                      ))}
+                    </Stack>
+                  ) : (
+                    <Text size="xs" c="dimmed" mb={12}>No mappings yet</Text>
+                  )}
+
+                  {/* Add mapping */}
+                  <Group gap={8} align="flex-end">
+                    <TextInput label="Emoji" placeholder="e.g. 🔴" value={mappingEmoji} onChange={(e) => setMappingEmoji(e.currentTarget.value)} style={{ width: 80 }} size="sm" />
+                    <Select label="Role" data={roleOptions} value={mappingRoleId} onChange={setMappingRoleId} placeholder="Select role" style={{ flex: 1 }} size="sm" />
+                    <Button size="xs" onClick={() => handleAddMapping(group.id)} disabled={!mappingEmoji.trim() || !mappingRoleId}>
+                      Add
+                    </Button>
+                  </Group>
+                </div>
+              )}
+            </div>
+          ))}
+        </Stack>
+      )}
+    </Stack>
+  );
+}
+
+/* ─── Soundboard Tab (server sounds) ─── */
+
+interface SoundboardSound {
+  id: string;
+  name: string;
+  url: string;
+  server_id: string;
+  created_by: string;
+  created_at: string;
+}
+
+function SoundboardTab({ serverId }: { serverId: string }) {
+  const { data: sounds, isLoading } = useQuery({
+    queryKey: ['soundboard', serverId],
+    queryFn: () => api.get<SoundboardSound[]>(`/api/servers/${serverId}/soundboard`),
+  });
+  const [newName, setNewName] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = async () => {
+    if (!selectedFile || !newName.trim()) return;
+    setUploading(true);
+    try {
+      await api.upload(`/api/servers/${serverId}/soundboard`, selectedFile, { name: newName.trim() });
+      queryClient.invalidateQueries({ queryKey: ['soundboard', serverId] });
+      setNewName('');
+      setSelectedFile(null);
+    } catch { /* ignore */ }
+    setUploading(false);
+  };
+
+  const handleDelete = async (soundId: string) => {
+    try {
+      await api.delete(`/api/servers/${serverId}/soundboard/${soundId}`);
+      queryClient.invalidateQueries({ queryKey: ['soundboard', serverId] });
+    } catch { /* ignore */ }
+  };
+
+  const handlePlay = async (soundId: string) => {
+    try {
+      await api.post(`/api/servers/${serverId}/soundboard/${soundId}/play`);
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <Stack gap="md">
+      <Text size="lg" fw={600}>Soundboard</Text>
+      <Text size="xs" c="dimmed">Upload and manage server audio clips for voice channels.</Text>
+
+      {/* Upload */}
+      <div style={{ padding: 12, background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+        <Text size="sm" fw={500} mb={8}>Upload Sound</Text>
+        <Group gap={8} align="flex-end">
+          <TextInput label="Name" placeholder="Sound name" value={newName} onChange={(e) => setNewName(e.currentTarget.value)} style={{ flex: 1 }} size="sm" />
+          <Button variant="light" size="xs" leftSection={<IconUpload size={14} />} onClick={() => fileRef.current?.click()}>
+            {selectedFile ? selectedFile.name : 'Choose file'}
+          </Button>
+          <input ref={fileRef} type="file" accept="audio/*" style={{ display: 'none' }} onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
+          <Button size="xs" onClick={handleUpload} loading={uploading} disabled={!selectedFile || !newName.trim()}>Upload</Button>
+        </Group>
+      </div>
+
+      {/* List */}
+      {isLoading ? (
+        <Text size="sm" c="dimmed">Loading sounds...</Text>
+      ) : !sounds || sounds.length === 0 ? (
+        <Text size="sm" c="dimmed">No server sounds yet</Text>
+      ) : (
+        <Stack gap={4}>
+          {sounds.map((s) => (
+            <Group key={s.id} justify="space-between" style={{ padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 6 }}>
+              <Text size="sm" fw={500}>{s.name}</Text>
+              <Group gap={4}>
+                <Button variant="subtle" size="xs" onClick={() => handlePlay(s.id)}>Play</Button>
+                <ActionIcon variant="subtle" color="red" size={24} onClick={() => handleDelete(s.id)}>
+                  <IconTrash size={14} />
+                </ActionIcon>
+              </Group>
+            </Group>
+          ))}
+        </Stack>
       )}
     </Stack>
   );

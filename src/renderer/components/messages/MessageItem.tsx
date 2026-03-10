@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActionIcon, Button, Group, Image, Modal, Text, Textarea, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconArrowBackUp, IconEdit, IconExternalLink, IconMoodSmile, IconPin, IconPinnedOff, IconTrash } from '@tabler/icons-react';
+import { IconArrowBackUp, IconEdit, IconExternalLink, IconMessage2, IconMoodSmile, IconPin, IconPinnedOff, IconTrash } from '@tabler/icons-react';
 import { useEditMessage, useDeleteMessage, useAddReaction, useRemoveReaction, usePinMessage, useUnpinMessage, type Message } from '../../hooks/useMessages';
+import { useCreateThread } from '../../hooks/useThreads';
 import { useMessagePreview } from '../../hooks/useServerInfo';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -31,10 +32,23 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
   const removeReaction = useRemoveReaction(channelId);
   const pinMessage = usePinMessage(channelId);
   const unpinMessage = useUnpinMessage(channelId);
+  const createThread = useCreateThread();
+  const openThread = useUIStore((s) => s.openThread);
 
   const isOwn = currentUser?.id === message.author?.id;
   const isSystemMessage = !!message.system_event || !message.author;
   const isEdited = message.edited_at && message.edited_at !== message.created_at;
+
+  // TTS playback for incoming TTS messages
+  const ttsPlayedRef = useRef(false);
+  useEffect(() => {
+    if (message.is_tts && !ttsPlayedRef.current && 'speechSynthesis' in window) {
+      ttsPlayedRef.current = true;
+      const utterance = new SpeechSynthesisUtterance(message.content);
+      utterance.rate = 1;
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [message.is_tts, message.content]);
 
   const handleStartEdit = () => {
     setEditContent(message.content);
@@ -128,6 +142,17 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
           <Tooltip label="React" position="top" withArrow>
             <ActionIcon ref={reactionBtnRef} variant="subtle" color="gray" size={24} onClick={() => setReactionPickerOpen(true)}>
               <IconMoodSmile size={14} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Create Thread" position="top" withArrow>
+            <ActionIcon variant="subtle" color="gray" size={24} onClick={() => {
+              const name = `Thread: ${message.content.slice(0, 40)}${message.content.length > 40 ? '...' : ''}`;
+              createThread.mutate(
+                { parent_message_id: message.id, channel_id: channelId, name },
+                { onSuccess: (thread) => { if (thread?.id) openThread(thread.id); } },
+              );
+            }}>
+              <IconMessage2 size={14} />
             </ActionIcon>
           </Tooltip>
           {message.pinned ? (

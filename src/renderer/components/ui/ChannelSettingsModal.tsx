@@ -4,7 +4,7 @@ import {
   ActionIcon, Badge, Button, Divider, Group, Loader, Modal, NumberInput, ScrollArea, Select, Stack, Switch, Text,
   TextInput, Textarea, Tooltip,
 } from '@mantine/core';
-import { IconPlus, IconTrash, IconChevronDown, IconChevronUp } from '@tabler/icons-react';
+import { IconDownload, IconPlus, IconTrash, IconChevronDown, IconChevronUp } from '@tabler/icons-react';
 import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { useUIStore } from '../../stores/uiStore';
@@ -61,7 +61,7 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
     enabled: opened && !!serverId,
   });
 
-  const [activeTab, setActiveTab] = useState<'general' | 'permissions' | 'segments' | 'retention'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'permissions' | 'segments' | 'retention' | 'export'>('general');
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
   const [saving, setSaving] = useState(false);
@@ -199,6 +199,18 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
           }}
         >
           Retention
+        </Button>
+        <Button
+          variant="subtle"
+          color={activeTab === 'export' ? 'violet' : 'gray'}
+          size="sm"
+          onClick={() => setActiveTab('export')}
+          style={{
+            borderBottom: activeTab === 'export' ? '2px solid var(--mantine-color-violet-5)' : '2px solid transparent',
+            borderRadius: 0,
+          }}
+        >
+          Export
         </Button>
       </Group>
 
@@ -375,6 +387,10 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
       {activeTab === 'retention' && (
         <ChannelRetentionTab channelId={channelId} />
       )}
+
+      {activeTab === 'export' && (
+        <ChannelExportTab channelId={channelId} />
+      )}
     </Modal>
   );
 }
@@ -450,6 +466,100 @@ function ChannelRetentionTab({ channelId }: { channelId: string }) {
       <Button onClick={handleSave} loading={saving}>
         Save Retention Settings
       </Button>
+    </Stack>
+  );
+}
+
+/* ─── Channel Export Tab ─── */
+
+interface ExportEntry {
+  path: string;
+  created_at: string;
+  size: number;
+}
+
+function ChannelExportTab({ channelId }: { channelId: string }) {
+  const [exporting, setExporting] = useState(false);
+  const { data: exports, refetch } = useQuery({
+    queryKey: ['channel-exports', channelId],
+    queryFn: () => api.get<ExportEntry[]>(`/api/channels/${channelId}/exports`),
+  });
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await api.post(`/api/channels/${channelId}/export`);
+      toastStore.addToast({ type: 'success', title: 'Export Started', message: 'Message export is being generated.' });
+      // Poll for completion
+      setTimeout(() => refetch(), 3000);
+    } catch {
+      toastStore.addToast({ type: 'warning', title: 'Export Failed', message: 'Could not start export.' });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDownload = async (exportPath: string) => {
+    try {
+      const data = await api.get<any>(`/api/channels/${channelId}/exports/${encodeURIComponent(exportPath)}/download`);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = exportPath;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toastStore.addToast({ type: 'warning', title: 'Download Failed', message: 'Could not download export.' });
+    }
+  };
+
+  const handleDelete = async (exportPath: string) => {
+    try {
+      await api.delete(`/api/channels/${channelId}/exports/${encodeURIComponent(exportPath)}`);
+      refetch();
+    } catch {
+      toastStore.addToast({ type: 'warning', title: 'Delete Failed', message: 'Could not delete export.' });
+    }
+  };
+
+  return (
+    <Stack gap={16}>
+      <Text size="lg" fw={600}>Message Export</Text>
+      <Text size="xs" c="dimmed">Export all messages in this channel to a downloadable file.</Text>
+
+      <Button
+        leftSection={<IconDownload size={14} />}
+        onClick={handleExport}
+        loading={exporting}
+      >
+        Export Messages
+      </Button>
+
+      {exports && exports.length > 0 && (
+        <>
+          <Divider style={{ borderColor: 'var(--border)' }} />
+          <Text size="sm" fw={600}>Previous Exports</Text>
+          <Stack gap={4}>
+            {exports.map((exp) => (
+              <Group key={exp.path} justify="space-between" style={{ padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 6 }}>
+                <Stack gap={0}>
+                  <Text size="sm" fw={500}>{exp.path}</Text>
+                  <Text size="xs" c="dimmed">
+                    {new Date(exp.created_at).toLocaleString()} — {(exp.size / 1024).toFixed(1)} KB
+                  </Text>
+                </Stack>
+                <Group gap={4}>
+                  <Button variant="subtle" size="xs" onClick={() => handleDownload(exp.path)}>Download</Button>
+                  <ActionIcon variant="subtle" color="red" size={24} onClick={() => handleDelete(exp.path)}>
+                    <IconTrash size={14} />
+                  </ActionIcon>
+                </Group>
+              </Group>
+            ))}
+          </Stack>
+        </>
+      )}
     </Stack>
   );
 }

@@ -45,6 +45,7 @@ export function MemberList() {
   const [ctxMenu, setCtxMenu] = useState<{ userId: string; username: string; x: number; y: number } | null>(null);
   const [timeoutTarget, setTimeoutTarget] = useState<{ userId: string; username: string } | null>(null);
   const [timeoutDuration, setTimeoutDuration] = useState<string | null>('300');
+  const [warningsTarget, setWarningsTarget] = useState<{ userId: string; username: string } | null>(null);
   const friendIds = new Set((friends || []).map((f: any) => f.friend_id || f.id));
 
   const handleContextMenu = useCallback((e: React.MouseEvent, member: Member) => {
@@ -209,6 +210,10 @@ export function MemberList() {
             });
             setCtxMenu(null);
           } : undefined}
+          onViewWarnings={activeServerId ? () => {
+            setWarningsTarget({ userId: ctxMenu.userId, username: ctxMenu.username });
+            setCtxMenu(null);
+          } : undefined}
           onTimeout={activeServerId ? () => {
             setTimeoutTarget({ userId: ctxMenu.userId, username: ctxMenu.username });
             setCtxMenu(null);
@@ -270,7 +275,48 @@ export function MemberList() {
           </Button>
         </Stack>
       </Modal>
+
+      {/* Warnings history modal */}
+      <WarningsModal
+        opened={!!warningsTarget}
+        onClose={() => setWarningsTarget(null)}
+        userId={warningsTarget?.userId || ''}
+        username={warningsTarget?.username || ''}
+        serverId={activeServerId || ''}
+      />
     </div>
+  );
+}
+
+function WarningsModal({ opened, onClose, userId, username, serverId }: {
+  opened: boolean; onClose: () => void; userId: string; username: string; serverId: string;
+}) {
+  const { data: warnings, isLoading } = useQuery({
+    queryKey: ['warnings', serverId, userId],
+    queryFn: () => api.get<any[]>(`/api/servers/${serverId}/members/${userId}/warnings`),
+    enabled: opened && !!serverId && !!userId,
+  });
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={`Warnings — ${username}`} centered size="md"
+      styles={{ content: { background: 'var(--bg-primary)' }, header: { background: 'var(--bg-primary)' } }}>
+      <Stack gap={8}>
+        {isLoading && <Text size="sm" c="dimmed">Loading...</Text>}
+        {!isLoading && (!warnings || warnings.length === 0) && (
+          <Text size="sm" c="dimmed">No warnings on record</Text>
+        )}
+        {(warnings || []).map((w: any, i: number) => (
+          <div key={w.id || i} style={{ padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 6, borderLeft: '3px solid #f0ad4e' }}>
+            <Group justify="space-between" mb={4}>
+              <Text size="xs" fw={600}>Warning #{i + 1}</Text>
+              <Text size="xs" c="dimmed">{new Date(w.created_at).toLocaleString()}</Text>
+            </Group>
+            {w.reason && <Text size="sm">{w.reason}</Text>}
+            {w.warned_by_username && <Text size="xs" c="dimmed">By: {w.warned_by_username}</Text>}
+          </div>
+        ))}
+      </Stack>
+    </Modal>
   );
 }
 

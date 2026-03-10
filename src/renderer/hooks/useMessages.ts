@@ -42,6 +42,7 @@ export interface Message {
   attachments: Array<{ id: string; url: string; filename: string; size: number; mime_type: string }>;
   system_event: string | null;
   pinned?: boolean;
+  is_tts?: boolean;
 }
 
 export function useMessages(channelId: string | null) {
