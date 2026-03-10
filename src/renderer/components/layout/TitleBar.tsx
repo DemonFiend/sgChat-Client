@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ActionIcon, Badge, Group, Text, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog, IconBell } from '@tabler/icons-react';
+import { ActionIcon, Badge, Group, Menu, Text, Tooltip, UnstyledButton } from '@mantine/core';
+import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog, IconBell, IconCalendarEvent, IconHash } from '@tabler/icons-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useNotificationStore } from '../../stores/notificationStore';
@@ -67,7 +67,62 @@ export function TitleBar() {
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }} className="drag-region">
         <Group gap={2} className="no-drag">
           <ServerSwitcher />
-          {NAV_TABS.map((tab) => {
+          {/* Server tab — with dropdown for Events */}
+          <Menu shadow="md" width={180} position="bottom" withArrow>
+            <Menu.Target>
+              <UnstyledButton
+                onClick={() => setView('servers')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 12px',
+                  borderRadius: 16,
+                  background: view === 'servers' ? 'var(--accent)' : 'transparent',
+                  color: view === 'servers' ? 'var(--accent-text)' : 'var(--text-muted)',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  transition: 'background 0.15s, color 0.15s',
+                  position: 'relative',
+                }}
+              >
+                <IconServer2 size={14} />
+                Server
+                {totalMentions > 0 && view !== 'servers' && (
+                  <Badge
+                    size="xs"
+                    variant="filled"
+                    color="red"
+                    circle
+                    style={{ position: 'absolute', top: -4, right: -4, fontSize: '0.6rem', minWidth: 16, height: 16 }}
+                  >
+                    {totalMentions > 99 ? '99+' : totalMentions}
+                  </Badge>
+                )}
+              </UnstyledButton>
+            </Menu.Target>
+            <Menu.Dropdown style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+              <Menu.Item
+                leftSection={<IconHash size={14} />}
+                onClick={() => setView('servers')}
+              >
+                Channels
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<IconCalendarEvent size={14} />}
+                onClick={() => {
+                  setView('servers');
+                  // Small delay to ensure server view is mounted before dispatching
+                  setTimeout(() => window.dispatchEvent(new Event('toggleServerEvents')), 50);
+                }}
+              >
+                Events
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+
+          {/* DMs & Friends tabs */}
+          {NAV_TABS.filter((t) => t.id !== 'servers').map((tab) => {
             const active = view === tab.id;
             return (
               <UnstyledButton
@@ -98,17 +153,6 @@ export function TitleBar() {
                     style={{ position: 'absolute', top: -4, right: -4, fontSize: '0.6rem', minWidth: 16, height: 16 }}
                   >
                     {totalDMUnread > 99 ? '99+' : totalDMUnread}
-                  </Badge>
-                )}
-                {tab.id === 'servers' && totalMentions > 0 && !active && (
-                  <Badge
-                    size="xs"
-                    variant="filled"
-                    color="red"
-                    circle
-                    style={{ position: 'absolute', top: -4, right: -4, fontSize: '0.6rem', minWidth: 16, height: 16 }}
-                  >
-                    {totalMentions > 99 ? '99+' : totalMentions}
                   </Badge>
                 )}
               </UnstyledButton>

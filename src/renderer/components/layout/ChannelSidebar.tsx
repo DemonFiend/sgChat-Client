@@ -163,9 +163,6 @@ export function ChannelSidebar() {
           <Menu.Item leftSection={<IconLink size={14} />} onClick={() => setSettingsOpen(true)}>
             Invite People
           </Menu.Item>
-          <Menu.Item leftSection={<IconCalendar size={14} />} onClick={() => window.dispatchEvent(new Event('toggleServerEvents'))}>
-            Events
-          </Menu.Item>
           <Menu.Divider />
           <Menu.Item leftSection={<IconBell size={14} />}>
             Notification Settings
