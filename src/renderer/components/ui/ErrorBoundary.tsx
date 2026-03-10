@@ -1,6 +1,7 @@
-import { Component, type ReactNode, type ErrorInfo } from 'react';
-import { Center, Stack, Text, Button, ThemeIcon } from '@mantine/core';
-import { IconAlertTriangle } from '@tabler/icons-react';
+import { Component, type ReactNode, type ErrorInfo, useState } from 'react';
+import { Center, Stack, Text, Button, ThemeIcon, Group } from '@mantine/core';
+import { IconAlertTriangle, IconChevronRight, IconCopy, IconCheck } from '@tabler/icons-react';
+import { useDevModeStore } from '../../stores/devModeStore';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -10,6 +11,89 @@ interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
   componentStack: string | null;
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      window.prompt('Copy error details:', text);
+    });
+  };
+
+  return (
+    <Button
+      onClick={handleCopy}
+      variant="light"
+      color={copied ? 'green' : 'gray'}
+      leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+    >
+      {copied ? 'Copied!' : 'Copy Error Details'}
+    </Button>
+  );
+}
+
+function DevModeDetails({ error, componentStack }: { error: Error; componentStack: string | null }) {
+  const devMode = useDevModeStore((s) => s.enabled);
+  const [expanded, setExpanded] = useState(false);
+
+  if (!devMode) return null;
+
+  const details = [
+    `Error: ${error.message || 'Unknown'}`,
+    `\nComponent Stack:${componentStack || ' (unavailable)'}`,
+    `\nStack Trace:\n${error.stack || '(unavailable)'}`,
+  ].join('\n');
+
+  return (
+    <>
+      <Button
+        variant="subtle"
+        color="dimmed"
+        size="xs"
+        onClick={() => setExpanded(!expanded)}
+        leftSection={
+          <IconChevronRight
+            size={14}
+            style={{
+              transform: expanded ? 'rotate(90deg)' : 'none',
+              transition: 'transform 150ms',
+            }}
+          />
+        }
+      >
+        Stack Trace
+      </Button>
+
+      {expanded && (
+        <Text
+          size="xs"
+          c="dimmed"
+          style={{
+            fontFamily: 'monospace',
+            whiteSpace: 'pre-wrap',
+            textAlign: 'left',
+            maxHeight: 200,
+            overflow: 'auto',
+            padding: 8,
+            background: 'var(--bg-tertiary)',
+            borderRadius: 4,
+            width: '100%',
+            wordBreak: 'break-word',
+          }}
+        >
+          {error.stack || error.message}
+          {componentStack && `\n\nComponent Stack:${componentStack}`}
+        </Text>
+      )}
+
+      <CopyButton text={details} />
+    </>
+  );
 }
 
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -43,18 +127,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
   }
 
-  private copyErrorDetails = () => {
-    const { error, componentStack } = this.state;
-    const details = [
-      `Error: ${error?.message || 'Unknown'}`,
-      `\nComponent Stack:${componentStack || ' (unavailable)'}`,
-      `\nStack Trace:\n${error?.stack || '(unavailable)'}`,
-    ].join('\n');
-    navigator.clipboard.writeText(details).catch(() => {});
-  };
-
   render() {
     if (this.state.hasError) {
+      const { error, componentStack } = this.state;
       return (
         <Center h="100vh" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
           <Stack align="center" gap="md" maw={500} px="md" ta="center">
@@ -63,35 +138,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             </ThemeIcon>
             <Text size="xl" fw={700}>Something went wrong</Text>
             <Text size="sm" c="dimmed" style={{ wordBreak: 'break-word' }}>
-              {this.state.error?.message || 'An unexpected error occurred.'}
+              {error?.message || 'An unexpected error occurred.'}
             </Text>
-            {this.state.componentStack && (
-              <Text
-                size="xs"
-                c="dimmed"
-                style={{
-                  fontFamily: 'monospace',
-                  whiteSpace: 'pre-wrap',
-                  textAlign: 'left',
-                  maxHeight: 200,
-                  overflow: 'auto',
-                  padding: 8,
-                  background: 'var(--bg-tertiary)',
-                  borderRadius: 4,
-                  width: '100%',
-                }}
-              >
-                {this.state.componentStack.trim()}
-              </Text>
-            )}
-            <div style={{ display: 'flex', gap: 8 }}>
+            <Group gap="sm">
               <Button onClick={() => window.location.reload()} variant="filled" color="brand">
                 Reload Page
               </Button>
-              <Button onClick={this.copyErrorDetails} variant="light" color="gray">
-                Copy Error Details
-              </Button>
-            </div>
+            </Group>
+            {error && <DevModeDetails error={error} componentStack={componentStack} />}
           </Stack>
         </Center>
       );

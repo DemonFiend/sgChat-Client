@@ -12,6 +12,7 @@ import { AppLayout } from './layouts/AppLayout';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { SessionExpiredOverlay } from './components/ui/SessionExpiredOverlay';
 import { NotificationToast } from './components/ui/NotificationToast';
+import { RuntimeErrorOverlay } from './components/ui/RuntimeErrorOverlay';
 import { ScreenSharePicker } from './components/ui/ScreenSharePicker';
 import { UpdateModal } from './components/ui/UpdateModal';
 
@@ -89,6 +90,7 @@ export function App() {
         <AuthRouter />
         <SessionExpiredOverlay />
         <NotificationToast />
+        <RuntimeErrorOverlay />
         <ScreenSharePicker />
         <UpdateModal />
       </QueryClientProvider>

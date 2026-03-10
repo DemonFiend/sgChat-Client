@@ -6,6 +6,7 @@ import { useUIStore } from '../stores/uiStore';
 import { useThemeStore, type ThemeName, themeNames } from '../stores/themeStore';
 import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
 import { useKeybindsStore, KEYBIND_LABELS, DEFAULT_KEYBINDS } from '../stores/keybindsStore';
+import { useDevModeStore } from '../stores/devModeStore';
 import { useServerVersion } from '../hooks/useServerInfo';
 import { switchInputDevice, switchOutputDevice, setGlobalOutputVolume, applyAudioProcessingSettings } from '../lib/voiceService';
 import { VoiceBar } from '../components/voice/VoiceBar';
@@ -427,6 +428,8 @@ const THEME_OPTIONS: Array<{ id: ThemeName; name: string; colors: [string, strin
 function AppearanceSettings() {
   const theme = useThemeStore((s) => s.theme);
   const setTheme = useThemeStore((s) => s.setTheme);
+  const devMode = useDevModeStore((s) => s.enabled);
+  const toggleDevMode = useDevModeStore((s) => s.toggle);
   const [density, setDensity] = useState('cozy');
   const [fontSize, setFontSize] = useState(16);
 
@@ -504,6 +507,16 @@ function AppearanceSettings() {
           ]}
         />
       </div>
+
+      <Divider style={{ borderColor: 'var(--border)' }} />
+
+      <Text size="sm" fw={600}>Advanced</Text>
+      <Switch
+        label="Developer Mode"
+        description="Show detailed error messages and stack traces for debugging"
+        checked={devMode}
+        onChange={() => toggleDevMode()}
+      />
     </Stack>
   );
 }
