@@ -1964,7 +1964,10 @@ interface SoundboardSound {
 function SoundboardTab({ serverId }: { serverId: string }) {
   const { data: sounds, isLoading } = useQuery({
     queryKey: ['soundboard', serverId],
-    queryFn: () => api.get<SoundboardSound[]>(`/api/servers/${serverId}/soundboard`),
+    queryFn: async () => {
+      const res = await api.get<{ sounds: SoundboardSound[] }>(`/api/servers/${serverId}/soundboard`);
+      return res.sounds || [];
+    },
   });
   const [newName, setNewName] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);

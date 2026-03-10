@@ -482,7 +482,10 @@ function ChannelExportTab({ channelId }: { channelId: string }) {
   const [exporting, setExporting] = useState(false);
   const { data: exports, refetch } = useQuery({
     queryKey: ['channel-exports', channelId],
-    queryFn: () => api.get<ExportEntry[]>(`/api/channels/${channelId}/exports`),
+    queryFn: async () => {
+      const res = await api.get<ExportEntry[] | { exports: ExportEntry[] }>(`/api/channels/${channelId}/exports`);
+      return Array.isArray(res) ? res : (res.exports || []);
+    },
   });
 
   const handleExport = async () => {

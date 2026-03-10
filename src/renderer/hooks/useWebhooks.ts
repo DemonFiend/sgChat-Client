@@ -16,7 +16,10 @@ export interface Webhook {
 export function useWebhooks(serverId: string | null) {
   return useQuery({
     queryKey: ['webhooks', serverId],
-    queryFn: () => api.get<Webhook[]>(`/api/webhooks?server_id=${serverId}`),
+    queryFn: async () => {
+      const res = await api.get<{ webhooks: Webhook[] }>(`/api/webhooks?server_id=${serverId}`);
+      return res.webhooks || [];
+    },
     enabled: !!serverId,
   });
 }

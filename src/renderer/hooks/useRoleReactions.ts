@@ -29,7 +29,10 @@ export interface RoleReactionGroup {
 export function useRoleReactions(serverId: string | null) {
   return useQuery({
     queryKey: ['role-reactions', serverId],
-    queryFn: () => api.get<RoleReactionGroup[]>(`/api/servers/${serverId}/role-reactions`),
+    queryFn: async () => {
+      const res = await api.get<{ groups: RoleReactionGroup[] }>(`/api/servers/${serverId}/role-reactions`);
+      return res.groups || [];
+    },
     enabled: !!serverId,
   });
 }

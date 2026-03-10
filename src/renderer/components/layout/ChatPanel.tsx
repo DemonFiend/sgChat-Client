@@ -23,6 +23,13 @@ export function ChatPanel() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinnedOpen, setPinnedOpen] = useState(false);
   const [eventsOpen, setEventsOpen] = useState(false);
+
+  // Listen for toggle from server dropdown menu
+  useEffect(() => {
+    const handler = () => setEventsOpen((v) => !v);
+    window.addEventListener('toggleServerEvents', handler);
+    return () => window.removeEventListener('toggleServerEvents', handler);
+  }, []);
   const [threadsOpen, setThreadsOpen] = useState(false);
   const { data: pinnedMessages } = usePinnedMessages(activeChannelId);
   const unpinMessage = useUnpinMessage(activeChannelId || '');

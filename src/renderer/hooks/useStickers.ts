@@ -16,7 +16,10 @@ export interface Sticker {
 export function useStickers(serverId: string | null) {
   return useQuery({
     queryKey: ['stickers', serverId],
-    queryFn: () => api.get<Sticker[]>(`/api/servers/${serverId}/stickers`),
+    queryFn: async () => {
+      const res = await api.get<{ stickers: Sticker[] }>(`/api/servers/${serverId}/stickers`);
+      return res.stickers || [];
+    },
     enabled: !!serverId,
   });
 }

@@ -19,7 +19,10 @@ export interface Thread {
 export function useChannelThreads(channelId: string | null) {
   return useQuery({
     queryKey: ['threads', channelId],
-    queryFn: () => api.get<Thread[]>(`/api/channels/${channelId}/threads`),
+    queryFn: async () => {
+      const res = await api.get<{ threads: Thread[] }>(`/api/channels/${channelId}/threads`);
+      return res.threads || [];
+    },
     enabled: !!channelId,
   });
 }
