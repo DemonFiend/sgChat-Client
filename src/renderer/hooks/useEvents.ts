@@ -2,6 +2,8 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { queryClient } from '../lib/queryClient';
 
+export type RSVPStatus = 'interested' | 'tentative' | 'not_interested';
+
 export interface ServerEvent {
   id: string;
   server_id: string;
@@ -16,25 +18,38 @@ export interface ServerEvent {
   status: 'scheduled' | 'active' | 'cancelled' | 'completed';
   created_by: string;
   created_at: string;
-  rsvp_count?: { going: number; maybe: number; declined: number };
-  my_rsvp?: 'going' | 'maybe' | 'declined' | null;
+  rsvp_counts?: { interested: number; tentative: number; not_interested: number };
+  my_rsvp?: RSVPStatus | null;
 }
 
-export function useServerEvents(serverId: string | null) {
+export function useServerEvents(serverId: string | null, month?: string) {
+  const m = month || getCurrentMonth();
   return useQuery({
-    queryKey: ['events', serverId],
-    queryFn: () => api.get<ServerEvent[]>(`/api/servers/${serverId}/events`),
+    queryKey: ['events', serverId, m],
+    queryFn: async () => {
+      const res = await api.get<{ events: ServerEvent[] }>(`/api/servers/${serverId}/events?month=${m}`);
+      return res.events || [];
+    },
     enabled: !!serverId,
     staleTime: 60_000,
   });
 }
 
-export function useEventHistory(serverId: string | null) {
+export function useEventHistory(serverId: string | null, month?: string) {
+  const m = month || getCurrentMonth();
   return useQuery({
-    queryKey: ['events-history', serverId],
-    queryFn: () => api.get<ServerEvent[]>(`/api/servers/${serverId}/events/history`),
+    queryKey: ['events-history', serverId, m],
+    queryFn: async () => {
+      const res = await api.get<{ events: ServerEvent[] }>(`/api/servers/${serverId}/events/history?month=${m}`);
+      return res.events || [];
+    },
     enabled: !!serverId,
   });
+}
+
+function getCurrentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
 export function useCreateEvent(serverId: string) {
@@ -87,10 +102,11 @@ export function useDeleteEvent(serverId: string) {
 
 export function useRsvpEvent(serverId: string) {
   return useMutation({
-    mutationFn: ({ eventId, status }: { eventId: string; status: 'going' | 'maybe' | 'declined' }) =>
+    mutationFn: ({ eventId, status }: { eventId: string; status: RSVPStatus }) =>
       api.put(`/api/servers/${serverId}/events/${eventId}/rsvp`, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['events', serverId] });
+      queryClient.invalidateQueries({ queryKey: ['events-history', serverId] });
     },
   });
 }
