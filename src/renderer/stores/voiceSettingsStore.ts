@@ -40,7 +40,7 @@ const DEFAULTS: VoiceSettingsData = {
   echoCancellation: true,
   autoGainControl: true,
   vad: true,
-  aiNoiseSuppression: true,
+  aiNoiseSuppression: false,
 };
 
 function loadSettings(): VoiceSettingsData {

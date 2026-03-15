@@ -93,18 +93,25 @@ class NoiseSuppressionService {
 
   /**
    * Lazily load the DTLN WASM module.
+   * Includes a timeout to prevent hanging if the Emscripten runtime fails to bootstrap.
    */
   async loadModel(): Promise<void> {
     if (this._dtlnReady || this._loading) return;
     this._loading = true;
 
+    const LOAD_TIMEOUT_MS = 10_000;
     const t0 = performance.now();
     try {
       console.log('[NoiseSuppressionService] Loading DTLN model...');
 
-      // Dynamic import of dtln-rs — Vite will handle the module resolution
+      // Race against a timeout — dtln-rs init can hang if the Emscripten
+      // runtime is missing from the package (Module.postRun never fires)
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('DTLN model load timed out')), LOAD_TIMEOUT_MS),
+      );
+
       const { default: initDTLN } = await import('dtln-rs');
-      this._dtln = await initDTLN();
+      this._dtln = await Promise.race([initDTLN(), timeout]);
       this._dtlnReady = true;
 
       this._loadTimeMs = performance.now() - t0;
