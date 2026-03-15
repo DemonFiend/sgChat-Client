@@ -12,6 +12,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
 import { soundService } from './soundService';
 import { createAppAudioTrack, destroyAppAudioTrack } from './appAudioBridge';
+import { noiseSuppressionService } from './noiseSuppressionService';
 
 let currentRoom: Room | null = null;
 
@@ -212,6 +213,7 @@ export async function joinVoiceChannel(channelId: string): Promise<{
 
     // Read voice settings for audio capture defaults
     const voiceSettings = useVoiceSettingsStore.getState();
+    const useAiNs = voiceSettings.aiNoiseSuppression && noiseSuppressionService.checkCapabilities().supported;
 
     const room = new Room({
       adaptiveStream: true,
@@ -220,7 +222,7 @@ export async function joinVoiceChannel(channelId: string): Promise<{
         deviceId: voiceSettings.inputDevice !== 'default' ? voiceSettings.inputDevice : undefined,
         autoGainControl: voiceSettings.autoGainControl,
         echoCancellation: voiceSettings.echoCancellation,
-        noiseSuppression: voiceSettings.noiseSuppression,
+        noiseSuppression: useAiNs ? false : voiceSettings.noiseSuppression,
       },
       audioOutput: {
         deviceId: voiceSettings.outputDevice !== 'default' ? voiceSettings.outputDevice : undefined,
@@ -339,10 +341,33 @@ export async function joinVoiceChannel(channelId: string): Promise<{
     await room.connect(livekitUrl, livekitToken);
 
     if (canSpeak) {
-      try {
-        await room.localParticipant.setMicrophoneEnabled(true);
-      } catch {
-        // Token may restrict publishing (e.g. AFK channels) — silently continue
+      if (useAiNs) {
+        try {
+          await noiseSuppressionService.loadModel();
+          const rawStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              deviceId: voiceSettings.inputDevice !== 'default' ? { exact: voiceSettings.inputDevice } : undefined,
+              autoGainControl: voiceSettings.autoGainControl,
+              echoCancellation: voiceSettings.echoCancellation,
+              noiseSuppression: false,
+            },
+          });
+          const cleanStream = await noiseSuppressionService.processOutboundTrack(rawStream);
+          const cleanTrack = cleanStream.getAudioTracks()[0];
+          await room.localParticipant.publishTrack(cleanTrack, {
+            source: Track.Source.Microphone,
+          });
+          console.log('[VoiceService] Microphone enabled with AI noise suppression');
+        } catch (nsErr) {
+          console.warn('[VoiceService] AI NS failed, falling back to browser NS:', nsErr);
+          await room.localParticipant.setMicrophoneEnabled(true);
+        }
+      } else {
+        try {
+          await room.localParticipant.setMicrophoneEnabled(true);
+        } catch {
+          // Token may restrict publishing (e.g. AFK channels) — silently continue
+        }
       }
     }
 
@@ -378,6 +403,7 @@ export async function leaveVoiceChannel(): Promise<void> {
     screenShareAudioTracks.clear();
     screenShareVideoElements.forEach((video) => { video.pause(); video.srcObject = null; video.remove(); });
     screenShareVideoElements.clear();
+    await noiseSuppressionService.destroy();
     currentRoom.disconnect();
     currentRoom = null;
     clearParticipantInfoCache();
@@ -707,8 +733,13 @@ export function setGlobalOutputVolume(volume: number): void {
  */
 export async function applyAudioProcessingSettings(): Promise<void> {
   if (!currentRoom) return;
-  const { noiseSuppression, echoCancellation, autoGainControl, inputDevice } =
+  const { noiseSuppression, echoCancellation, autoGainControl, inputDevice, aiNoiseSuppression } =
     useVoiceSettingsStore.getState();
+
+  // When AI NS is active, browser noiseSuppression constraint stays false
+  const effectiveNoiseSuppression = aiNoiseSuppression && noiseSuppressionService.checkCapabilities().supported
+    ? false
+    : noiseSuppression;
 
   const localPub = currentRoom.localParticipant.getTrackPublication(Track.Source.Microphone);
   if (!localPub?.track?.mediaStreamTrack) return;
@@ -716,7 +747,7 @@ export async function applyAudioProcessingSettings(): Promise<void> {
   try {
     await localPub.track.mediaStreamTrack.applyConstraints({
       echoCancellation,
-      noiseSuppression,
+      noiseSuppression: effectiveNoiseSuppression,
       autoGainControl,
       deviceId: inputDevice !== 'default' ? { exact: inputDevice } : undefined,
     });
@@ -728,7 +759,7 @@ export async function applyAudioProcessingSettings(): Promise<void> {
         deviceId: inputDevice !== 'default' ? inputDevice : undefined,
         autoGainControl,
         echoCancellation,
-        noiseSuppression,
+        noiseSuppression: effectiveNoiseSuppression,
       });
     }
   }

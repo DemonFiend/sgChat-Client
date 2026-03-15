@@ -9,6 +9,7 @@ import { useKeybindsStore, KEYBIND_LABELS, DEFAULT_KEYBINDS } from '../stores/ke
 import { useDevModeStore } from '../stores/devModeStore';
 import { useServerVersion } from '../hooks/useServerInfo';
 import { switchInputDevice, switchOutputDevice, setGlobalOutputVolume, applyAudioProcessingSettings } from '../lib/voiceService';
+import { noiseSuppressionService, type CpuLevel } from '../lib/noiseSuppressionService';
 import { VoiceBar } from '../components/voice/VoiceBar';
 import { AvatarPicker } from '../components/ui/AvatarPicker';
 import { useQuery } from '@tanstack/react-query';
@@ -683,7 +684,13 @@ function VoiceSettings() {
   const setEchoCancellationSetting = useVoiceSettingsStore((s) => s.setEchoCancellation);
   const setAutoGainControlSetting = useVoiceSettingsStore((s) => s.setAutoGainControl);
   const setVadSetting = useVoiceSettingsStore((s) => s.setVad);
+  const aiNoiseSuppression = useVoiceSettingsStore((s) => s.aiNoiseSuppression);
+  const setAiNoiseSuppressionSetting = useVoiceSettingsStore((s) => s.setAiNoiseSuppression);
   const validateDevices = useVoiceSettingsStore((s) => s.validateDevices);
+
+  const [aiNsSupported, setAiNsSupported] = useState(true);
+  const [aiNsUnsupportedReason, setAiNsUnsupportedReason] = useState<string | null>(null);
+  const [cpuLevel, setCpuLevel] = useState<CpuLevel>('low');
 
   const [inputDevices, setInputDevices] = useState<{ value: string; label: string }[]>([
     { value: 'default', label: 'Default — System Microphone' },
@@ -733,6 +740,15 @@ function VoiceSettings() {
     navigator.mediaDevices.addEventListener('devicechange', onChange);
     return () => navigator.mediaDevices.removeEventListener('devicechange', onChange);
   }, [validateDevices]);
+
+  // Check AI noise suppression capabilities and subscribe to CPU level
+  useEffect(() => {
+    const caps = noiseSuppressionService.checkCapabilities();
+    setAiNsSupported(caps.supported);
+    if (!caps.supported) setAiNsUnsupportedReason(caps.reason || 'Not supported');
+    const unsub = noiseSuppressionService.onCpuLevelChange(setCpuLevel);
+    return unsub;
+  }, []);
 
   const handleInputDeviceChange = (deviceId: string | null) => {
     if (!deviceId) return;
@@ -898,15 +914,45 @@ function VoiceSettings() {
         onChange={(e) => setVadSetting(e.currentTarget.checked)}
       />
 
-      <Switch
-        label="Noise Suppression"
-        description="Reduce background noise from your microphone"
-        checked={noiseSuppression}
-        onChange={(e) => {
-          setNoiseSuppressionSetting(e.currentTarget.checked);
-          applyAudioProcessingSettings();
-        }}
-      />
+      <div>
+        <Group gap={8} mb={4}>
+          <Text size="sm" fw={500}>AI Noise Suppression</Text>
+          {aiNoiseSuppression && aiNsSupported && (
+            <div style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: cpuLevel === 'low' ? '#4ade80' : cpuLevel === 'moderate' ? '#facc15' : '#ef4444',
+            }} />
+          )}
+        </Group>
+        <Switch
+          label=""
+          description={
+            aiNsSupported
+              ? 'AI-powered noise removal using DTLN (processes audio locally)'
+              : aiNsUnsupportedReason || 'Not supported in this environment'
+          }
+          checked={aiNoiseSuppression}
+          disabled={!aiNsSupported}
+          onChange={(e) => {
+            setAiNoiseSuppressionSetting(e.currentTarget.checked);
+            applyAudioProcessingSettings();
+          }}
+        />
+      </div>
+
+      {!aiNoiseSuppression && (
+        <Switch
+          label="Browser Noise Suppression"
+          description="Basic browser-level noise reduction (fallback)"
+          checked={noiseSuppression}
+          onChange={(e) => {
+            setNoiseSuppressionSetting(e.currentTarget.checked);
+            applyAudioProcessingSettings();
+          }}
+        />
+      )}
 
       <Switch
         label="Echo Cancellation"
@@ -937,7 +983,7 @@ function AvatarHistory({ onRevert }: { onRevert: (url: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const { data: history } = useQuery({
     queryKey: ['avatar-history'],
-    queryFn: () => api.get<Array<{ url: string; uploaded_at: string }>>('/api/users/me/avatar/history'),
+    queryFn: () => api.getArray<{ url: string; uploaded_at: string }>('/api/users/me/avatar/history'),
     enabled: expanded,
   });
 

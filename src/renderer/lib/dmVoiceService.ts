@@ -1,5 +1,7 @@
 import { Room, RoomEvent, Track } from 'livekit-client';
 import { api } from './api';
+import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
+import { noiseSuppressionService } from './noiseSuppressionService';
 
 let dmRoom: Room | null = null;
 
@@ -29,9 +31,21 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
       livekit_url: string;
     }>(`/api/voice/dm/join/${dmChannelId}`);
 
+    const voiceSettings = useVoiceSettingsStore.getState();
+    const useAiNs = voiceSettings.aiNoiseSuppression && noiseSuppressionService.checkCapabilities().supported;
+
     const room = new Room({
       adaptiveStream: true,
       dynacast: true,
+      audioCaptureDefaults: {
+        deviceId: voiceSettings.inputDevice !== 'default' ? voiceSettings.inputDevice : undefined,
+        autoGainControl: voiceSettings.autoGainControl,
+        echoCancellation: voiceSettings.echoCancellation,
+        noiseSuppression: useAiNs ? false : voiceSettings.noiseSuppression,
+      },
+      audioOutput: {
+        deviceId: voiceSettings.outputDevice !== 'default' ? voiceSettings.outputDevice : undefined,
+      },
     });
 
     room.on(RoomEvent.TrackSubscribed, (track) => {
@@ -66,7 +80,31 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
     });
 
     await room.connect(response.livekit_url, response.livekit_token);
-    await room.localParticipant.setMicrophoneEnabled(true);
+
+    if (useAiNs) {
+      try {
+        await noiseSuppressionService.loadModel();
+        const rawStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: voiceSettings.inputDevice !== 'default' ? { exact: voiceSettings.inputDevice } : undefined,
+            autoGainControl: voiceSettings.autoGainControl,
+            echoCancellation: voiceSettings.echoCancellation,
+            noiseSuppression: false,
+          },
+        });
+        const cleanStream = await noiseSuppressionService.processOutboundTrack(rawStream);
+        const cleanTrack = cleanStream.getAudioTracks()[0];
+        await room.localParticipant.publishTrack(cleanTrack, {
+          source: Track.Source.Microphone,
+        });
+        console.log('[DMVoiceService] Microphone enabled with AI noise suppression');
+      } catch (nsErr) {
+        console.warn('[DMVoiceService] AI NS failed, falling back to browser NS:', nsErr);
+        await room.localParticipant.setMicrophoneEnabled(true);
+      }
+    } else {
+      await room.localParticipant.setMicrophoneEnabled(true);
+    }
 
     dmRoom = room;
     emit('connected', { dmChannelId });
@@ -80,6 +118,7 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
 
 export async function leaveDMVoice(): Promise<void> {
   if (dmRoom) {
+    await noiseSuppressionService.destroy();
     dmRoom.disconnect();
     dmRoom = null;
     emit('disconnected', null);

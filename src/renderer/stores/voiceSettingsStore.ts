@@ -11,6 +11,7 @@ interface VoiceSettingsData {
   echoCancellation: boolean;
   autoGainControl: boolean;
   vad: boolean;
+  aiNoiseSuppression: boolean;
 }
 
 interface VoiceSettingsState extends VoiceSettingsData {
@@ -22,6 +23,7 @@ interface VoiceSettingsState extends VoiceSettingsData {
   setEchoCancellation: (enabled: boolean) => void;
   setAutoGainControl: (enabled: boolean) => void;
   setVad: (enabled: boolean) => void;
+  setAiNoiseSuppression: (enabled: boolean) => void;
   /**
    * Validate saved devices against currently available hardware.
    * If a saved device ID is no longer present, reset it to 'default'.
@@ -38,6 +40,7 @@ const DEFAULTS: VoiceSettingsData = {
   echoCancellation: true,
   autoGainControl: true,
   vad: true,
+  aiNoiseSuppression: true,
 };
 
 function loadSettings(): VoiceSettingsData {
@@ -79,6 +82,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set) => ({
   setEchoCancellation: (enabled) => set(autoPersist('echoCancellation')(enabled)),
   setAutoGainControl: (enabled) => set(autoPersist('autoGainControl')(enabled)),
   setVad: (enabled) => set(autoPersist('vad')(enabled)),
+  setAiNoiseSuppression: (enabled) => set(autoPersist('aiNoiseSuppression')(enabled)),
 
   validateDevices: (availableInputIds, availableOutputIds) =>
     set((state) => {
