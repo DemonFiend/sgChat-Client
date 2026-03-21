@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
 import path from 'path';
 import { registerAppProtocol, handleAppProtocol } from './protocol';
 import { initTray, destroyTray } from './tray';
@@ -8,6 +8,7 @@ import { restoreWindowState, trackWindowState } from './window-state';
 import { hasServerUrl, getServerUrl, getAccessToken } from './store';
 import { negotiateCryptoSession } from './crypto';
 import { initAppAudioCapture, startAppAudioCapture, stopAppAudioCapture } from './app-audio-capture';
+import { getEnhancedSources } from './screen-sources';
 import { initCrashReporter } from './crash-reporter';
 import { initUpdateChecker } from './update-checker';
 
@@ -146,25 +147,14 @@ if (!gotSingleInstanceLock) {
     session.defaultSession.setDisplayMediaRequestHandler(
       async (_request, callback) => {
         try {
-          const sources = await desktopCapturer.getSources({
-            types: ['screen', 'window'],
-            thumbnailSize: { width: 320, height: 180 },
-            fetchWindowIcons: true,
-          });
+          const { serialized, rawSources } = await getEnhancedSources();
 
-          if (!mainWindow || sources.length === 0) {
+          if (!mainWindow || serialized.length === 0) {
             callback({});
             return;
           }
 
-          // Send sources to renderer for the custom picker UI
-          const serialized = sources.map((s) => ({
-            id: s.id,
-            name: s.name,
-            thumbnail: s.thumbnail.toDataURL(),
-            appIcon: s.appIcon?.toDataURL() || null,
-            display_id: s.display_id,
-          }));
+          // Send enhanced sources (including minimized windows) to renderer picker
           mainWindow.webContents.send('screen-share:show-picker', serialized);
 
           // Wait for the renderer to respond with a selected source + audio mode
@@ -177,8 +167,14 @@ if (!gotSingleInstanceLock) {
             return;
           }
 
-          const selected = sources.find((s) => s.id === selection.id);
+          // Look up the selected source in the raw desktopCapturer results
+          const selected = rawSources.find((s) => s.id === selection.id);
           if (!selected) {
+            // Selected source is a minimized window (not in desktopCapturer results).
+            // The server web app's Electron path uses getUserMedia directly,
+            // so this callback path may not be hit for minimized windows.
+            // If it IS hit (e.g. via getDisplayMedia), we can't provide a real source.
+            console.warn('[screen-share] Selected minimized window not in desktopCapturer results');
             callback({});
             return;
           }

@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, Notification, app, desktopCapturer, net, clipboard } from 'electron';
+import { ipcMain, BrowserWindow, Notification, app, net, clipboard } from 'electron';
 import {
   getAutoStart, setAutoStart,
   getServerUrl, setServerUrl, hasServerUrl,
@@ -16,6 +16,7 @@ import {
   hasActiveSession,
 } from './crypto';
 import { stopAppAudioCapture, isAppAudioSupported } from './app-audio-capture';
+import { getEnhancedSources } from './screen-sources';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // ── Window controls ────────────────────────────────────────────────────
@@ -216,18 +217,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // ── Screen share ──────────────────────────────────────────────────────
   ipcMain.handle('screen-share:getSources', async () => {
     try {
-      const sources = await desktopCapturer.getSources({
-        types: ['screen', 'window'],
-        thumbnailSize: { width: 320, height: 180 },
-        fetchWindowIcons: true,
-      });
-      return sources.map((s) => ({
-        id: s.id,
-        name: s.name,
-        thumbnail: s.thumbnail.toDataURL(),
-        appIcon: s.appIcon?.toDataURL() || null,
-        display_id: s.display_id,
-      }));
+      const { serialized } = await getEnhancedSources();
+      return serialized;
     } catch (err) {
       console.error('[ipc] Failed to get screen sources:', err);
       return [];

@@ -12,6 +12,7 @@ interface ScreenSource {
   thumbnail: string;
   appIcon: string | null;
   display_id: string;
+  isMinimized?: boolean;
 }
 
 export function ScreenSharePicker() {
@@ -113,18 +114,38 @@ export function ScreenSharePicker() {
           transition: 'border-color 0.15s, background 0.15s',
         }}
       >
-        <img
-          src={source.thumbnail}
-          alt={source.name}
-          style={{
-            width: '100%',
-            height: 120,
-            objectFit: 'contain',
-            borderRadius: 4,
-            background: '#000',
-            display: 'block',
-          }}
-        />
+        <div style={{ position: 'relative' }}>
+          <img
+            src={source.thumbnail}
+            alt={source.name}
+            style={{
+              width: '100%',
+              height: 120,
+              objectFit: 'contain',
+              borderRadius: 4,
+              background: '#000',
+              display: 'block',
+              opacity: source.isMinimized ? 0.6 : 1,
+            }}
+          />
+          {source.isMinimized && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 4,
+                right: 4,
+                background: 'rgba(0,0,0,0.7)',
+                color: '#999',
+                fontSize: 10,
+                padding: '2px 6px',
+                borderRadius: 3,
+                lineHeight: 1.2,
+              }}
+            >
+              Minimized
+            </div>
+          )}
+        </div>
         <Group gap={6} mt={6} wrap="nowrap">
           {source.appIcon && (
             <img
