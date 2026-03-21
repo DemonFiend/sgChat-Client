@@ -5,7 +5,7 @@ import { initTray, destroyTray } from './tray';
 import { registerShortcuts, unregisterShortcuts } from './shortcuts';
 import { registerIpcHandlers } from './ipc';
 import { restoreWindowState, trackWindowState } from './window-state';
-import { hasServerUrl } from './store';
+import { hasServerUrl, getServerUrl, getAccessToken } from './store';
 import { negotiateCryptoSession } from './crypto';
 import { initAppAudioCapture, startAppAudioCapture, stopAppAudioCapture } from './app-audio-capture';
 import { initCrashReporter } from './crash-reporter';
@@ -115,6 +115,20 @@ if (!gotSingleInstanceLock) {
     handleAppProtocol();
     mainWindow = createWindow();
     registerIpcHandlers(mainWindow);
+
+    // Inject auth headers on direct HTTP requests to the server (e.g. <img src>)
+    // These bypass the IPC API proxy and need the JWT token added manually
+    session.defaultSession.webRequest.onBeforeSendHeaders(
+      { urls: ['http://*/*', 'https://*/*'] },
+      (details, callback) => {
+        const serverUrl = getServerUrl();
+        const token = getAccessToken();
+        if (serverUrl && token && details.url.startsWith(serverUrl)) {
+          details.requestHeaders['Authorization'] = `Bearer ${token}`;
+        }
+        callback({ requestHeaders: details.requestHeaders });
+      },
+    );
 
     // Initialize per-app audio capture (sets binary paths for packaged builds)
     initAppAudioCapture();

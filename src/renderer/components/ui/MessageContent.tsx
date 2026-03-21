@@ -4,7 +4,9 @@ import { isImageUrl, getImageType, extractImageUrls } from '../../lib/imageUtils
 import { parseMentions, type ParsedMention } from '../../lib/mentionUtils';
 import { renderMarkdown } from '../../lib/markdownParser';
 import { useEmojiStore } from '../../stores/emojiStore';
+import { resolveAssetUrl } from '../../lib/api';
 import { UserMentionBadge, ChannelMentionBadge, RoleMentionBadge, BroadcastMentionBadge } from './MentionBadges';
+import { UrlEmbed } from './UrlEmbed';
 
 export interface MessageContentProps {
   content: string;
@@ -147,11 +149,10 @@ function TextWithEmojis({ text }: { text: string }) {
           return (
             <Tooltip key={i} label={`:${part.shortcode}:`} position="top" withArrow openDelay={300}>
               <img
-                src={part.url}
+                src={resolveAssetUrl(part.url)}
                 alt={`:${part.shortcode}:`}
-                width={20}
-                height={20}
-                style={{ objectFit: 'contain', verticalAlign: 'text-bottom', display: 'inline', margin: '0 1px' }}
+                loading="lazy"
+                style={{ width: '1.375em', height: '1.375em', objectFit: 'contain', verticalAlign: 'text-bottom', display: 'inline', margin: '0 1px' }}
               />
             </Tooltip>
           );
@@ -162,8 +163,26 @@ function TextWithEmojis({ text }: { text: string }) {
   );
 }
 
+/** Extract non-image URLs from content for embed previews */
+function extractEmbedUrls(content: string): string[] {
+  const urlRegex = /https?:\/\/[^\s<]+/g;
+  const matches = content.match(urlRegex);
+  if (!matches) return [];
+  // Deduplicate and exclude image URLs
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const url of matches) {
+    if (!seen.has(url) && !isImageUrl(url)) {
+      seen.add(url);
+      result.push(url);
+    }
+  }
+  return result;
+}
+
 export function MessageContent({ content, isOwnMessage, compact }: MessageContentProps) {
   const segments = useMemo(() => parseContentSegments(content), [content]);
+  const embedUrls = useMemo(() => extractEmbedUrls(content), [content]);
 
   return (
     <span>
@@ -178,6 +197,9 @@ export function MessageContent({ content, isOwnMessage, compact }: MessageConten
             return <span key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}><TextWithEmojis text={segment.value} /></span>;
         }
       })}
+      {embedUrls.map((url) => (
+        <UrlEmbed key={url} url={url} />
+      ))}
     </span>
   );
 }

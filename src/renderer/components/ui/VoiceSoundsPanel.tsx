@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ActionIcon, Button, Group, Loader, Stack, Text, Tooltip } from '@mantine/core';
 import { IconPlayerPlay, IconTrash, IconUpload } from '@tabler/icons-react';
-import { api } from '../../lib/api';
+import { api, ensureArray } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { soundService } from '../../lib/soundService';
 import { toastStore } from '../../stores/toastNotifications';
@@ -22,7 +22,7 @@ const ACCEPTED_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg'];
 export function VoiceSoundsPanel({ serverId }: VoiceSoundsPanelProps) {
   const { data: sounds, isLoading } = useQuery({
     queryKey: ['voice-sounds', serverId],
-    queryFn: () => api.get<any[]>(`/api/users/me/servers/${serverId}/sounds`),
+    queryFn: async () => ensureArray<any>(await api.get(`/api/users/me/servers/${serverId}/sounds`)),
     enabled: !!serverId,
   });
 

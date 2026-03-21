@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActionIcon, Badge, Group, Menu, Text, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog, IconBell, IconCalendarEvent, IconHash, IconLink, IconPlus } from '@tabler/icons-react';
+import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog, IconBell, IconCalendarEvent, IconHash, IconLink, IconPlus, IconShield, IconDatabase, IconHistory, IconMoodSmile, IconHeartHandshake } from '@tabler/icons-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useNotificationStore } from '../../stores/notificationStore';
@@ -185,26 +185,57 @@ export function TitleBar() {
             );
           })}
 
-          {/* Server Settings — admin only, after Friends */}
+          {/* Server Admin — admin only, dropdown with section links */}
           {showServerSettings && (
-            <UnstyledButton
-              onClick={() => setServerSettingsOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '4px 12px',
-                borderRadius: 16,
-                background: 'transparent',
-                color: 'var(--text-muted)',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                transition: 'background 0.15s, color 0.15s',
-              }}
-            >
-              <IconServerCog size={14} />
-              Admin
-            </UnstyledButton>
+            <Menu shadow="md" width={200} position="bottom" withArrow>
+              <Menu.Target>
+                <UnstyledButton
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 12px',
+                    borderRadius: 16,
+                    background: view === 'server-admin' ? 'var(--accent)' : 'transparent',
+                    color: view === 'server-admin' ? 'var(--accent-text)' : 'var(--text-muted)',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    transition: 'background 0.15s, color 0.15s',
+                  }}
+                >
+                  <IconServerCog size={14} />
+                  Admin
+                </UnstyledButton>
+              </Menu.Target>
+              <Menu.Dropdown style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+                <Menu.Item leftSection={<IconSettings size={14} />} onClick={() => setServerSettingsOpen(true)}>
+                  Server Settings
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Label>Administration</Menu.Label>
+                <Menu.Item leftSection={<IconShield size={14} />} onClick={() => useUIStore.getState().openAdminView('roles')}>
+                  Roles & Permissions
+                </Menu.Item>
+                <Menu.Item leftSection={<IconUsers size={14} />} onClick={() => useUIStore.getState().openAdminView('members')}>
+                  Members
+                </Menu.Item>
+                <Menu.Item leftSection={<IconDatabase size={14} />} onClick={() => useUIStore.getState().openAdminView('storage')}>
+                  Storage Dashboard
+                </Menu.Item>
+                <Menu.Item leftSection={<IconHistory size={14} />} onClick={() => useUIStore.getState().openAdminView('audit')}>
+                  Audit Log
+                </Menu.Item>
+                <Menu.Item leftSection={<IconMoodSmile size={14} />} onClick={() => useUIStore.getState().openAdminView('emojis')}>
+                  Emoji Packs
+                </Menu.Item>
+                <Menu.Item leftSection={<IconHeartHandshake size={14} />} onClick={() => useUIStore.getState().openAdminView('role-reactions')}>
+                  Role Reactions
+                </Menu.Item>
+                <Menu.Item leftSection={<IconServer2 size={14} />} onClick={() => useUIStore.getState().openAdminView('relay-servers')}>
+                  Relay Servers
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
           )}
 
           {/* User Settings — always visible, at end */}

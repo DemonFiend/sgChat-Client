@@ -1,12 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Avatar, Group, Indicator, Menu, Text, TextInput } from '@mantine/core';
-import { IconCircleFilled, IconClock, IconWorld } from '@tabler/icons-react';
+import { ActionIcon, Avatar, Group, Indicator, Menu, Select, Text, TextInput, Tooltip } from '@mantine/core';
+import { IconCircleFilled, IconClock, IconSettings, IconWorld } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../stores/authStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { emitPresenceUpdate, emitStatusCommentUpdate } from '../../api/socket';
 import { api } from '../../lib/api';
+
+const CLEAR_AFTER_OPTIONS = [
+  { value: '', label: "Don't clear" },
+  { value: '30', label: '30 minutes' },
+  { value: '60', label: '1 hour' },
+  { value: '240', label: '4 hours' },
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: 'This week' },
+];
 
 const STATUS_OPTIONS = [
   { value: 'online', label: 'Online', color: 'var(--status-online)' },
@@ -25,8 +34,10 @@ const STATUS_COLOR_MAP: Record<string, string> = {
 export function UserInfoPanel() {
   const user = useAuthStore((s) => s.user);
   const activeServerId = useUIStore((s) => s.activeServerId);
+  const setView = useUIStore((s) => s.setView);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [customStatus, setCustomStatus] = useState('');
+  const [clearAfter, setClearAfter] = useState('');
   const updateStatus = useAuthStore((s) => s.updateStatus);
   const updateCustomStatus = useAuthStore((s) => s.updateCustomStatus);
   const currentStatus = usePresenceStore((s) => (user ? s.statuses[user.id] : undefined)) || user?.status || 'online';
@@ -64,11 +75,36 @@ export function UserInfoPanel() {
     setStatusMenuOpen(false);
   };
 
-  const handleCustomStatusSubmit = () => {
-    if (customStatus.trim()) {
-      emitStatusCommentUpdate(customStatus.trim());
-      updateCustomStatus(customStatus.trim());
+  const computeExpiresAt = (value: string): string | null => {
+    if (!value) return null;
+    const now = new Date();
+    if (value === 'today') {
+      const end = new Date(now);
+      end.setHours(23, 59, 59, 999);
+      return end.toISOString();
     }
+    if (value === 'week') {
+      const end = new Date(now);
+      const daysUntilSunday = (7 - end.getDay()) % 7 || 7;
+      end.setDate(end.getDate() + daysUntilSunday);
+      end.setHours(23, 59, 59, 999);
+      return end.toISOString();
+    }
+    const minutes = parseInt(value, 10);
+    if (!isNaN(minutes)) {
+      return new Date(now.getTime() + minutes * 60_000).toISOString();
+    }
+    return null;
+  };
+
+  const handleCustomStatusSubmit = () => {
+    const text = customStatus.trim();
+    if (text) {
+      const expiresAt = computeExpiresAt(clearAfter);
+      emitStatusCommentUpdate(text, null, expiresAt);
+      updateCustomStatus(text, expiresAt);
+    }
+    setClearAfter('');
     setStatusMenuOpen(false);
   };
 
@@ -90,6 +126,7 @@ export function UserInfoPanel() {
                 offset={4}
                 position="bottom-end"
                 withBorder
+                styles={{ indicator: { transition: 'background-color 300ms ease, border-color 300ms ease' } }}
               >
                 <Avatar
                   src={user.avatar_url}
@@ -115,13 +152,27 @@ export function UserInfoPanel() {
             ))}
             <Menu.Divider />
             <Menu.Label>Custom Status</Menu.Label>
-            <div style={{ padding: '4px 12px 8px' }}>
+            <div style={{ padding: '4px 12px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <TextInput
                 size="xs"
                 placeholder="What are you up to?"
                 value={customStatus || statusComment}
                 onChange={(e) => setCustomStatus(e.currentTarget.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleCustomStatusSubmit(); }}
+              />
+              <Select
+                size="xs"
+                label="Clear after"
+                data={CLEAR_AFTER_OPTIONS}
+                value={clearAfter}
+                onChange={(v) => setClearAfter(v ?? '')}
+                allowDeselect={false}
+                comboboxProps={{ withinPortal: false }}
+                styles={{
+                  label: { fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: 2 },
+                  input: { background: 'var(--bg-primary)', borderColor: 'var(--border)', fontSize: '0.7rem' },
+                  dropdown: { background: 'var(--bg-tertiary)', borderColor: 'var(--border)' },
+                }}
               />
             </div>
           </Menu.Dropdown>
@@ -131,6 +182,18 @@ export function UserInfoPanel() {
           <Text size="xs" fw={600} truncate>{user.username}</Text>
           <Text size="xs" c="dimmed" truncate>{statusComment || user?.custom_status || 'Online'}</Text>
         </div>
+
+        <Tooltip label="User Settings" position="top" withArrow>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="sm"
+            onClick={() => setView('settings')}
+            style={{ flexShrink: 0 }}
+          >
+            <IconSettings size={16} />
+          </ActionIcon>
+        </Tooltip>
       </Group>
 
       {/* Row 2: Clocks */}

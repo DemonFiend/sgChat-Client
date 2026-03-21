@@ -108,6 +108,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     isSupported: () => ipcRenderer.invoke('app-audio:isSupported'),
   },
 
+  // Clipboard
+  clipboard: {
+    writeText: (text: string) => ipcRenderer.invoke('clipboard:writeText', text),
+  },
+
   // Crash reporting
   crashReport: {
     submit: (report: { error_type: string; error_message: string; stack_trace: string; metadata?: Record<string, unknown> }) =>

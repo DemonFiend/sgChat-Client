@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+import type { AdminSection } from '../pages/ServerAdminView';
+
 interface ReplyTarget {
   id: string;
   content: string;
@@ -11,15 +13,24 @@ interface UIState {
   activeChannelId: string | null;
   activeDMId: string | null;
   activeThreadId: string | null;
-  view: 'servers' | 'dms' | 'friends' | 'settings';
+  view: 'servers' | 'dms' | 'friends' | 'settings' | 'server-admin';
+  adminSection: AdminSection;
   memberListVisible: boolean;
+  memberListWidth: number;
+  channelSidebarWidth: number;
+  eventsOpen: boolean;
   replyTo: ReplyTarget | null;
 
   setActiveServer: (serverId: string) => void;
   setActiveChannel: (channelId: string) => void;
   setActiveDM: (dmId: string) => void;
   setView: (view: UIState['view']) => void;
+  setAdminSection: (section: AdminSection) => void;
+  openAdminView: (section?: AdminSection) => void;
   toggleMemberList: () => void;
+  setMemberListWidth: (width: number) => void;
+  setChannelSidebarWidth: (width: number) => void;
+  toggleEventsPanel: () => void;
   setReplyTo: (target: ReplyTarget | null) => void;
   openThread: (threadId: string) => void;
   closeThread: () => void;
@@ -31,7 +42,11 @@ export const useUIStore = create<UIState>((set) => ({
   activeDMId: null,
   activeThreadId: null,
   view: 'servers',
+  adminSection: 'roles',
   memberListVisible: true,
+  memberListWidth: 240,
+  channelSidebarWidth: 240,
+  eventsOpen: false,
   replyTo: null,
 
   setActiveServer: (serverId) =>
@@ -46,8 +61,26 @@ export const useUIStore = create<UIState>((set) => ({
   setView: (view) =>
     set({ view }),
 
+  setAdminSection: (section) =>
+    set({ adminSection: section }),
+
+  openAdminView: (section) =>
+    set((s) => ({
+      view: 'server-admin',
+      adminSection: section ?? s.adminSection,
+    })),
+
   toggleMemberList: () =>
     set((s) => ({ memberListVisible: !s.memberListVisible })),
+
+  setMemberListWidth: (width) =>
+    set({ memberListWidth: Math.max(180, Math.min(400, width)) }),
+
+  setChannelSidebarWidth: (width) =>
+    set({ channelSidebarWidth: Math.max(192, Math.min(384, width)) }),
+
+  toggleEventsPanel: () =>
+    set((s) => ({ eventsOpen: !s.eventsOpen })),
 
   setReplyTo: (target) =>
     set({ replyTo: target }),

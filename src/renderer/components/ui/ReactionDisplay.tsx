@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Group, Popover, ScrollArea, Stack, Text, Tooltip, UnstyledButton } from '@mantine/core';
 import type { MessageReaction } from '../../hooks/useMessages';
+import { resolveAssetUrl } from '../../lib/api';
+import { useEmojiStore } from '../../stores/emojiStore';
 
 interface ReactionDisplayProps {
   reactions: MessageReaction[];
@@ -11,7 +13,7 @@ export function ReactionDisplay({ reactions, onToggle }: ReactionDisplayProps) {
   if (!reactions || reactions.length === 0) return null;
 
   return (
-    <Group gap={4} mt={4}>
+    <Group gap={4} mt={4} wrap="wrap" style={{ overflow: 'hidden', maxWidth: '100%' }}>
       {reactions.map((r) => (
         <ReactionBadge key={r.emoji_id || r.emoji} reaction={r} onToggle={onToggle} />
       ))}
@@ -21,12 +23,16 @@ export function ReactionDisplay({ reactions, onToggle }: ReactionDisplayProps) {
 
 function ReactionBadge({ reaction: r, onToggle }: { reaction: MessageReaction; onToggle: ReactionDisplayProps['onToggle'] }) {
   const [viewerOpen, setViewerOpen] = useState(false);
+  const findByShortcode = useEmojiStore((s) => s.findByShortcode);
   const isCustom = r.type === 'custom';
 
-  const emojiContent = isCustom && r.image_url ? (
+  // Resolve image URL: prefer API-provided, fall back to emoji store lookup
+  const resolvedUrl = r.image_url || (isCustom && r.shortcode ? findByShortcode(r.shortcode)?.image_url : null);
+
+  const emojiContent = isCustom && resolvedUrl ? (
     <Tooltip label={`:${r.shortcode || r.emoji}:`} position="top" withArrow openDelay={200}>
       <img
-        src={r.image_url}
+        src={resolveAssetUrl(resolvedUrl)}
         alt={r.shortcode || r.emoji}
         width={16}
         height={16}
@@ -64,8 +70,8 @@ function ReactionBadge({ reaction: r, onToggle }: { reaction: MessageReaction; o
       </Popover.Target>
       <Popover.Dropdown style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: 0 }}>
         <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          {isCustom && r.image_url ? (
-            <img src={r.image_url} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
+          {isCustom && resolvedUrl ? (
+            <img src={resolveAssetUrl(resolvedUrl)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
           ) : (
             <span style={{ fontSize: '1.2em' }}>{r.emoji}</span>
           )}

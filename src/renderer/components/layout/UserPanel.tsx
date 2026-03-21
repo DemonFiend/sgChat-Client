@@ -119,6 +119,7 @@ export function UserPanel() {
               offset={4}
               position="bottom-end"
               withBorder
+              styles={{ indicator: { transition: 'background-color 300ms ease' } }}
             >
               <Avatar
                 src={user.avatar_url}

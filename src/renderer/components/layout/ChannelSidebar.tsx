@@ -5,7 +5,7 @@ import {
   IconHash, IconVolume, IconChevronDown, IconChevronRight,
   IconSpeakerphone, IconMusic, IconPlus, IconMoon, IconSettings,
   IconBell, IconBellOff, IconBellRinging, IconCrown, IconInfoCircle,
-  IconCheck,
+  IconCheck, IconCalendar, IconUserCheck, IconShield,
 } from '@tabler/icons-react';
 import { useChannelNotificationStore, type NotificationLevel } from '../../stores/channelNotificationStore';
 import { useChannels, type Channel, type ChannelType } from '../../hooks/useChannels';
@@ -13,9 +13,11 @@ import { useCategories } from '../../hooks/useCategories';
 import { useChannelReadState } from '../../hooks/useServerInfo';
 import { useUIStore } from '../../stores/uiStore';
 import { useServers } from '../../hooks/useServers';
+import { useAuthStore } from '../../stores/authStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { hasPermission } from '../../stores/permissions';
+import { hasPermission, canManageServer, isAdmin } from '../../stores/permissions';
+import { useRoleReactions } from '../../hooks/useRoleReactions';
 import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { toastStore } from '../../stores/toastNotifications';
@@ -24,6 +26,8 @@ import { VoicePanel } from '../voice/VoicePanel';
 import { VoiceParticipantsList } from '../ui/VoiceParticipantsList';
 import { ChannelSettingsModal } from '../ui/ChannelSettingsModal';
 import { CategorySettingsModal } from '../ui/CategorySettingsModal';
+import { RolePickerModal } from '../ui/RolePickerModal';
+import { ServerSettingsModal } from '../ui/ServerSettingsModal';
 
 const CHANNEL_ICONS: Record<ChannelType, typeof IconHash> = {
   text: IconHash,
@@ -44,15 +48,35 @@ export function ChannelSidebar() {
   const activeServerId = useUIStore((s) => s.activeServerId);
   const activeChannelId = useUIStore((s) => s.activeChannelId);
   const setActiveChannel = useUIStore((s) => s.setActiveChannel);
+  const channelSidebarWidth = useUIStore((s) => s.channelSidebarWidth);
+  const setChannelSidebarWidth = useUIStore((s) => s.setChannelSidebarWidth);
+  const openAdminView = useUIStore((s) => s.openAdminView);
+  const setView = useUIStore((s) => s.setView);
+  const currentUser = useAuthStore((s) => s.user);
   const { data: servers } = useServers();
   const { data: channels } = useChannels(activeServerId);
   const { data: fetchedCategories } = useCategories(activeServerId);
+  const { data: roleReactionGroups } = useRoleReactions(activeServerId);
   const unreads = useUnreadStore((s) => s.unreads);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [motdVisible, setMotdVisible] = useState(true);
   const [categorySettingsId, setCategorySettingsId] = useState<string | null>(null);
+  const [rolePickerOpen, setRolePickerOpen] = useState(false);
+  const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
+  const eventsOpen = useUIStore((s) => s.eventsOpen);
+  const toggleEventsPanel = useUIStore((s) => s.toggleEventsPanel);
+
+  // Resize drag state
+  const resizeRef = useRef(false);
 
   const activeServer = servers?.find((s) => s.id === activeServerId);
+
+  // Permissions for admin/settings buttons
+  const showAdminButtons = canManageServer(activeServer?.owner_id);
+  const showSettingsButton = canManageServer(activeServer?.owner_id);
+
+  // Self-assignable roles available?
+  const hasSelfAssignableRoles = (roleReactionGroups?.length ?? 0) > 0;
   const channelNotifLoaded = useChannelNotificationStore((s) => s.loaded);
   const fetchChannelNotifSettings = useChannelNotificationStore((s) => s.fetchAll);
 
@@ -119,17 +143,50 @@ export function ChannelSidebar() {
     }
   }, [activeChannelId, channels, setActiveChannel]);
 
-  const serverMotd = activeServer?.motd;
+  const rawMotd = activeServer?.motd || (activeServer as any)?.message_of_the_day;
+
+  // MOTD variable substitution: {username}, {servername}
+  const serverMotd = rawMotd
+    ? rawMotd
+        .replace(/\{username\}/gi, currentUser?.username ?? 'User')
+        .replace(/\{servername\}/gi, activeServer?.name ?? 'Server')
+    : null;
+
+  // Resize handle handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    resizeRef.current = true;
+    const startX = e.clientX;
+    const startWidth = useUIStore.getState().channelSidebarWidth;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizeRef.current) return;
+      const newWidth = startWidth + (ev.clientX - startX);
+      setChannelSidebarWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      resizeRef.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [setChannelSidebarWidth]);
 
   if (!activeServerId) return null;
 
   return (
     <div style={{
-      width: 240,
+      width: channelSidebarWidth,
       background: 'var(--bg-secondary)',
       display: 'flex',
       flexDirection: 'column',
       flexShrink: 0,
+      position: 'relative',
     }}>
       {/* Server banner header */}
       <div style={{
@@ -153,17 +210,67 @@ export function ChannelSidebar() {
             borderRadius: 'inherit',
           }} />
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', zIndex: 1, width: '100%' }}>
           {activeServer?.icon_url && (
             <Avatar src={activeServer.icon_url} size={32} radius="md" />
           )}
           <Text fw={700} size="sm" truncate style={{
             color: activeServer?.banner_url ? '#fff' : 'var(--text-primary)',
             textShadow: activeServer?.banner_url ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
-            maxWidth: 160,
+            flex: 1,
+            minWidth: 0,
           }}>
             {activeServer?.name || 'Server'}
           </Text>
+          {/* Sidebar header action buttons */}
+          <Group gap={2} style={{ flexShrink: 0 }}>
+            <Tooltip label="Server Events" withArrow position="bottom">
+              <ActionIcon
+                variant={eventsOpen ? 'light' : 'subtle'}
+                color={eventsOpen ? 'brand' : activeServer?.banner_url ? 'white' : 'gray'}
+                size={24}
+                onClick={toggleEventsPanel}
+              >
+                <IconCalendar size={14} />
+              </ActionIcon>
+            </Tooltip>
+            {hasSelfAssignableRoles && (
+              <Tooltip label="Role Picker" withArrow position="bottom">
+                <ActionIcon
+                  variant="subtle"
+                  color={activeServer?.banner_url ? 'white' : 'gray'}
+                  size={24}
+                  onClick={() => setRolePickerOpen(true)}
+                >
+                  <IconUserCheck size={14} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+            {showSettingsButton && (
+              <Tooltip label="Server Settings" withArrow position="bottom">
+                <ActionIcon
+                  variant="subtle"
+                  color={activeServer?.banner_url ? 'white' : 'gray'}
+                  size={24}
+                  onClick={() => setServerSettingsOpen(true)}
+                >
+                  <IconSettings size={14} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+            {showAdminButtons && (
+              <Tooltip label="Admin Panel" withArrow position="bottom">
+                <ActionIcon
+                  variant="subtle"
+                  color={activeServer?.banner_url ? 'white' : 'gray'}
+                  size={24}
+                  onClick={() => openAdminView('roles')}
+                >
+                  <IconShield size={14} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </Group>
         </div>
       </div>
 
@@ -316,6 +423,40 @@ export function ChannelSidebar() {
           serverId={activeServerId}
         />
       )}
+
+      {/* Server settings modal */}
+      {serverSettingsOpen && activeServerId && (
+        <ServerSettingsModal
+          opened={serverSettingsOpen}
+          onClose={() => setServerSettingsOpen(false)}
+          serverId={activeServerId}
+        />
+      )}
+
+      {/* Role picker modal */}
+      {rolePickerOpen && activeServerId && (
+        <RolePickerModal
+          opened={rolePickerOpen}
+          onClose={() => setRolePickerOpen(false)}
+          serverId={activeServerId}
+        />
+      )}
+
+      {/* Resize drag handle on right edge */}
+      <div
+        onMouseDown={handleResizeStart}
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          width: 4,
+          height: '100%',
+          cursor: 'col-resize',
+          zIndex: 10,
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.opacity = '0.4'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.opacity = '1'; }}
+      />
     </div>
   );
 }
@@ -384,7 +525,7 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <Menu opened={notifMenuOpen} onChange={setNotifMenuOpen} position="right-start" withArrow>
+      <Menu opened={notifMenuOpen} onChange={(o) => { if (!o) setNotifMenuOpen(false); }} position="right-start" withArrow>
         <Menu.Target>
           <UnstyledButton
             onClick={handleClick}
@@ -491,9 +632,40 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
         </Menu.Dropdown>
       </Menu>
 
+      {/* Voice participants: live data for our channel, API data for other channels */}
       {isVoiceType && isInThisVoiceChannel && voiceParticipants.length > 0 && (
         <div style={{ paddingLeft: 28, paddingTop: 2, paddingBottom: 2 }}>
           <VoiceParticipantsList participants={voiceParticipants} compact />
+        </div>
+      )}
+      {isVoiceType && !isInThisVoiceChannel && (channel.voice_participants?.length ?? 0) > 0 && (
+        <div style={{ paddingLeft: 28, paddingTop: 2, paddingBottom: 4 }}>
+          {channel.voice_participants!.map((user) => (
+            <div
+              key={user.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '2px 0',
+              }}
+            >
+              <Avatar
+                src={user.avatar_url}
+                size={20}
+                radius="xl"
+                color="brand"
+              >
+                {user.username?.[0]?.toUpperCase()}
+              </Avatar>
+              <Text size="xs" c="dimmed" truncate style={{ flex: 1 }}>
+                {user.username}
+              </Text>
+              {user.is_muted && (
+                <IconVolume size={12} style={{ opacity: 0.4, flexShrink: 0 }} />
+              )}
+            </div>
+          ))}
         </div>
       )}
 

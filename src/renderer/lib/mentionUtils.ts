@@ -50,23 +50,32 @@ export interface ParsedMention {
 
 /**
  * Parse mention patterns from message content.
- * Formats: <@userId>, <#channelId>, <@&roleId>, @everyone, @here
+ * Formats:
+ *   <@userId>   — user mention
+ *   <@!userId>  — nickname mention (treated as user)
+ *   <#channelId> — channel mention
+ *   <@&roleId>  — role mention
+ *   @everyone   — broadcast everyone
+ *   @here       — broadcast here
  */
 export function parseMentions(content: string): ParsedMention[] {
   const mentions: ParsedMention[] = [];
-  const regex = /<@(\w+)>|<#(\w+)>|<@&(\w+)>|(@everyone|@here)/g;
+  const regex = /<@!?([\w-]+)>|<#([\w-]+)>|<@&([\w-]+)>|(@everyone|@here)/g;
   let match;
 
   while ((match = regex.exec(content)) !== null) {
-    if (match[1]) {
-      mentions.push({ type: 'user', id: match[1], raw: match[0], start: match.index, end: match.index + match[0].length });
+    const start = match.index;
+    const end = start + match[0].length;
+    if (match[1] && !match[0].startsWith('<@&')) {
+      // User mention: <@id> or <@!id>
+      mentions.push({ type: 'user', id: match[1], raw: match[0], start, end });
     } else if (match[2]) {
-      mentions.push({ type: 'channel', id: match[2], raw: match[0], start: match.index, end: match.index + match[0].length });
+      mentions.push({ type: 'channel', id: match[2], raw: match[0], start, end });
     } else if (match[3]) {
-      mentions.push({ type: 'role', id: match[3], raw: match[0], start: match.index, end: match.index + match[0].length });
+      mentions.push({ type: 'role', id: match[3], raw: match[0], start, end });
     } else if (match[4]) {
       const t = match[4] === '@everyone' ? 'everyone' : 'here';
-      mentions.push({ type: t, raw: match[0], start: match.index, end: match.index + match[0].length });
+      mentions.push({ type: t, raw: match[0], start, end });
     }
   }
 

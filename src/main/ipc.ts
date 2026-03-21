@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, Notification, app, desktopCapturer, net } from 'electron';
+import { ipcMain, BrowserWindow, Notification, app, desktopCapturer, net, clipboard } from 'electron';
 import {
   getAutoStart, setAutoStart,
   getServerUrl, setServerUrl, hasServerUrl,
@@ -241,6 +241,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle('app-audio:isSupported', () => {
     return isAppAudioSupported();
+  });
+
+  // ── Clipboard ────────────────────────────────────────────────────────
+  ipcMain.handle('clipboard:writeText', (_event, text: string) => {
+    clipboard.writeText(text);
   });
 
   // ── Window events ──────────────────────────────────────────────────────

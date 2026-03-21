@@ -19,6 +19,21 @@ export type { ScreenShareQuality };
 
 export type VoiceConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 
+export type DMCallPhase = 'idle' | 'notifying' | 'waiting' | 'connected';
+
+export interface IncomingDMCall {
+  callerId: string;
+  callerName: string;
+  callerAvatar: string | null;
+  dmChannelId: string;
+}
+
+export interface PendingDMCallInfo {
+  friendId: string;
+  friendName: string;
+  dmChannelId: string;
+}
+
 export interface VoicePermissions {
   canSpeak: boolean;
   canVideo: boolean;
@@ -57,6 +72,17 @@ interface VoiceState {
   isSpeaker: boolean;
   isHandRaised: boolean;
 
+  // DM call state
+  incomingDMCall: IncomingDMCall | null;
+  dmCallPhase: DMCallPhase;
+  remoteParticipantLeft: boolean;
+  pendingDMCallInfo: PendingDMCallInfo | null;
+
+  setIncomingDMCall: (call: IncomingDMCall | null) => void;
+  setDMCallPhase: (phase: DMCallPhase) => void;
+  setRemoteParticipantLeft: (left: boolean) => void;
+  setPendingDMCallInfo: (info: PendingDMCallInfo | null) => void;
+
   join: (channelId: string, channelName?: string, channelType?: string) => Promise<{ success: boolean; error?: string }>;
   leave: () => Promise<void>;
   toggleMute: () => Promise<void>;
@@ -86,6 +112,17 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   error: null,
   isSpeaker: false,
   isHandRaised: false,
+
+  // DM call state
+  incomingDMCall: null,
+  dmCallPhase: 'idle',
+  remoteParticipantLeft: false,
+  pendingDMCallInfo: null,
+
+  setIncomingDMCall: (call) => set({ incomingDMCall: call }),
+  setDMCallPhase: (phase) => set({ dmCallPhase: phase }),
+  setRemoteParticipantLeft: (left) => set({ remoteParticipantLeft: left }),
+  setPendingDMCallInfo: (info) => set({ pendingDMCallInfo: info }),
 
   join: async (channelId, channelName, channelType) => {
     set({ connectionState: 'connecting', error: null });
@@ -133,6 +170,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       error: null,
       isSpeaker: false,
       isHandRaised: false,
+      dmCallPhase: 'idle',
+      remoteParticipantLeft: false,
+      pendingDMCallInfo: null,
     });
   },
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Text } from '@mantine/core';
 import { useEmojiStore, type CustomEmoji } from '../../stores/emojiStore';
+import { resolveAssetUrl } from '../../lib/api';
 
 interface EmojiAutocompleteProps {
   /** Full input text */
@@ -112,7 +113,7 @@ export function EmojiAutocomplete({ text, cursorPosition, onSelect, inputRef }: 
           }}
         >
           <img
-            src={emoji.image_url}
+            src={resolveAssetUrl(emoji.image_url)}
             alt={emoji.shortcode}
             width={20}
             height={20}

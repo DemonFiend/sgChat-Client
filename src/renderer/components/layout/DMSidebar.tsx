@@ -30,6 +30,7 @@ export function DMSidebar({ onCreateDM }: DMSidebarProps) {
   const [search, setSearch] = useState('');
 
   const filtered = conversations?.filter((conv) => {
+    if (!conv.participants?.length) return false;
     if (!search.trim()) return true;
     const other = conv.participants.find((p) => p.id !== user?.id) || conv.participants[0];
     return other.username.toLowerCase().includes(search.toLowerCase());
@@ -105,7 +106,8 @@ export function DMSidebar({ onCreateDM }: DMSidebarProps) {
       <ScrollArea style={{ flex: 1 }} scrollbarSize={4} type="hover">
         <Stack gap={2} px={8}>
           {filtered?.map((conv) => {
-            const otherUser = conv.participants.find((p) => p.id !== user?.id) || conv.participants[0];
+            const otherUser = conv.participants?.find((p) => p.id !== user?.id) || conv.participants?.[0];
+            if (!otherUser) return null;
             return (
               <DMItem
                 key={conv.id}
@@ -160,7 +162,7 @@ function DMItem({ conversation, otherUser, active, onClick }: {
         transition: 'background 0.1s',
       }}
     >
-      <Indicator color={statusColor as any} size={8} offset={3} position="bottom-end" withBorder>
+      <Indicator color={statusColor as any} size={8} offset={3} position="bottom-end" withBorder styles={{ indicator: { transition: 'background-color 300ms ease' } }}>
         <Avatar src={otherUser.avatar_url} size={32} radius="xl" color="brand">
           {otherUser.username.charAt(0).toUpperCase()}
         </Avatar>

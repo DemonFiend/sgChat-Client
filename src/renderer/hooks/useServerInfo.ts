@@ -70,7 +70,7 @@ export function useDMStorageStats(dmId: string | null) {
 export function useReactionsList(messageId: string | null) {
   return useQuery({
     queryKey: ['reactions', messageId],
-    queryFn: () => api.get<any[]>(`/api/messages/${messageId}/reactions`),
+    queryFn: () => api.getArray<any>(`/api/messages/${messageId}/reactions`),
     enabled: !!messageId,
   });
 }
@@ -79,7 +79,7 @@ export function useReactionsList(messageId: string | null) {
 export function useDMExports(dmId: string | null) {
   return useQuery({
     queryKey: ['dm-exports', dmId],
-    queryFn: () => api.get<any[]>(`/api/dms/${dmId}/exports`),
+    queryFn: () => api.getArray<any>(`/api/dms/${dmId}/exports`),
     enabled: !!dmId,
   });
 }
@@ -97,7 +97,7 @@ export function useCreateDMExport() {
 export function useChannelSegments(channelId: string | null) {
   return useQuery({
     queryKey: ['channel-segments', channelId],
-    queryFn: () => api.get<any[]>(`/api/channels/${channelId}/segments`),
+    queryFn: () => api.getArray<any>(`/api/channels/${channelId}/segments`),
     enabled: !!channelId,
   });
 }
@@ -105,7 +105,7 @@ export function useChannelSegments(channelId: string | null) {
 export function useSegmentMessages(channelId: string | null, segmentId: string | null) {
   return useQuery({
     queryKey: ['segment-messages', channelId, segmentId],
-    queryFn: () => api.get<any[]>(`/api/channels/${channelId}/segments/${segmentId}/messages`),
+    queryFn: () => api.getArray<any>(`/api/channels/${channelId}/segments/${segmentId}/messages`),
     enabled: !!channelId && !!segmentId,
   });
 }

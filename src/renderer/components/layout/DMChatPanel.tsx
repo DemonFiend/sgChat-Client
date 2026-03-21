@@ -5,12 +5,13 @@ import { useDMConversations, useDMMessages, useSendDM } from '../../hooks/useDMC
 import { useAuthStore } from '../../stores/authStore';
 import { emitJoinDM, emitLeaveDM, emitDMAck } from '../../api/socket';
 import { usePresenceStore } from '../../stores/presenceStore';
-import { joinDMVoice, leaveDMVoice, toggleDMMute, onDMVoiceEvent } from '../../lib/dmVoiceService';
+import { joinDMVoice, leaveDMVoice, toggleDMMute, toggleDMVideo, onDMVoiceEvent } from '../../lib/dmVoiceService';
 import { DMVoiceControls } from '../ui/DMVoiceControls';
 import { DMSettingsModal } from '../ui/DMSettingsModal';
 import { toastStore } from '../../stores/toastNotifications';
 import { MessageGroup } from '../messages/MessageGroup';
 import { MessageInput } from '../messages/MessageInput';
+import { DMCallArea } from '../ui/DMCallArea';
 import type { Message } from '../../hooks/useMessages';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -38,7 +39,7 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
   const sendDM = useSendDM(conversationId);
 
   const conversation = conversations?.find((c) => c.id === conversationId);
-  const otherUser = conversation?.participants.find((p) => p.id !== user?.id) || conversation?.participants[0];
+  const otherUser = conversation?.participants?.find((p) => p.id !== user?.id) || conversation?.participants?.[0];
   const status = usePresenceStore((s) => (otherUser ? s.statuses[otherUser.id] : undefined) || 'offline');
   const statusColor = STATUS_COLORS[status] || 'gray';
 
@@ -109,6 +110,15 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
         conversationId={conversationId}
       />
 
+      {/* DM Call Area */}
+      <DMCallArea
+        dmChannelId={conversationId}
+        friendName={otherUser?.username || 'Unknown'}
+        friendAvatarUrl={otherUser?.avatar_url}
+        currentUserAvatarUrl={user?.avatar_url}
+        currentUserDisplayName={user?.display_name || user?.username}
+      />
+
       {/* Messages */}
       <ScrollArea style={{ flex: 1 }} scrollbarSize={6} type="hover">
         <Stack gap={0} p={16} pb={4}>
@@ -165,6 +175,7 @@ function DMHeader({ username, status, statusColor, avatarUrl, conversationId }: 
 }) {
   const [isInCall, setIsInCall] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOn, setIsVideoOn] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
@@ -176,6 +187,7 @@ function DMHeader({ username, status, statusColor, avatarUrl, conversationId }: 
         case 'disconnected':
           setIsInCall(false);
           setIsMuted(false);
+          setIsVideoOn(false);
           break;
       }
     });
@@ -194,6 +206,11 @@ function DMHeader({ username, status, statusColor, avatarUrl, conversationId }: 
     setIsMuted(!nowEnabled);
   };
 
+  const handleToggleVideo = async () => {
+    const nowEnabled = await toggleDMVideo();
+    setIsVideoOn(nowEnabled);
+  };
+
   return (
     <div style={{
       height: 48,
@@ -204,7 +221,7 @@ function DMHeader({ username, status, statusColor, avatarUrl, conversationId }: 
       flexShrink: 0,
       gap: 10,
     }}>
-      <Indicator color={statusColor as any} size={8} offset={3} position="bottom-end" withBorder>
+      <Indicator color={statusColor as any} size={8} offset={3} position="bottom-end" withBorder styles={{ indicator: { transition: 'background-color 300ms ease' } }}>
         <Avatar src={avatarUrl} size={28} radius="xl" color="brand">
           {username?.charAt(0).toUpperCase() || '?'}
         </Avatar>
@@ -216,9 +233,11 @@ function DMHeader({ username, status, statusColor, avatarUrl, conversationId }: 
       <DMVoiceControls
         isInCall={isInCall}
         isMuted={isMuted}
+        isVideoOn={isVideoOn}
         onCall={handleCall}
         onHangup={leaveDMVoice}
         onToggleMute={handleToggleMute}
+        onToggleVideo={handleToggleVideo}
       />
       <Tooltip label="DM Settings" position="bottom" withArrow>
         <ActionIcon variant="subtle" color="gray" size={28} onClick={() => setSettingsOpen(true)}>

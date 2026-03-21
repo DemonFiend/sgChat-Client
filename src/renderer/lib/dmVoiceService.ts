@@ -133,6 +133,14 @@ export async function toggleDMMute(): Promise<boolean> {
   return !enabled;
 }
 
+export async function toggleDMVideo(): Promise<boolean> {
+  if (!dmRoom) return false;
+  const enabled = dmRoom.localParticipant.isCameraEnabled;
+  await dmRoom.localParticipant.setCameraEnabled(!enabled);
+  emit('participant-update', getDMParticipants(dmRoom));
+  return !enabled;
+}
+
 export function isDMConnected(): boolean {
   return dmRoom !== null && dmRoom.state === 'connected';
 }

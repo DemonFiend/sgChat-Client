@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, ensureArray } from '../lib/api';
 import { queryClient } from '../lib/queryClient';
 
 export interface MessageReaction {
@@ -139,7 +139,7 @@ export function useRemoveReaction(channelId: string) {
 export function usePinnedMessages(channelId: string | null) {
   return useQuery({
     queryKey: ['pinned-messages', channelId],
-    queryFn: () => api.get<Message[]>(`/api/channels/${channelId}/pinned`),
+    queryFn: async () => ensureArray<Message>(await api.get(`/api/channels/${channelId}/pinned`)),
     enabled: !!channelId,
   });
 }

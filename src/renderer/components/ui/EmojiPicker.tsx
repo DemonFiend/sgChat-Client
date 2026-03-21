@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { ActionIcon, ScrollArea, Text, TextInput, Tooltip } from '@mantine/core';
 import { IconSearch, IconX, IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import { useEmojiStore, type CustomEmoji, type EmojiPack } from '../../stores/emojiStore';
+import { resolveAssetUrl } from '../../lib/api';
 
 interface EmojiPickerProps {
   isOpen: boolean;
@@ -137,7 +138,7 @@ export function EmojiPicker({ isOpen, onClose, onSelect, anchorRef }: EmojiPicke
                   }}
                 >
                   {firstEmoji ? (
-                    <img src={firstEmoji.image_url} alt={pack.name} width={24} height={24} style={{ objectFit: 'contain' }} />
+                    <img src={resolveAssetUrl(firstEmoji.image_url)} alt={pack.name} width={24} height={24} style={{ objectFit: 'contain' }} />
                   ) : (
                     <Text size="xs" c="dimmed">{pack.name.charAt(0)}</Text>
                   )}
@@ -235,7 +236,7 @@ function EmojiButton({ emoji, onSelect }: { emoji: CustomEmoji; onSelect: (e: Cu
         onClick={() => onSelect(emoji)}
       >
         <img
-          src={emoji.image_url}
+          src={resolveAssetUrl(emoji.image_url)}
           alt={emoji.shortcode}
           width={24}
           height={24}

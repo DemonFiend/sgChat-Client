@@ -45,13 +45,13 @@ interface Role {
 export function CategorySettingsModal({ opened, onClose, categoryId, serverId }: CategorySettingsModalProps) {
   const { data: categories } = useQuery({
     queryKey: ['categories', serverId],
-    queryFn: () => api.get<CategoryData[]>(`/api/servers/${serverId}/categories`),
+    queryFn: () => api.getArray<CategoryData>(`/api/servers/${serverId}/categories`),
     enabled: opened && !!serverId,
   });
 
   const { data: roles } = useQuery({
     queryKey: ['roles', serverId],
-    queryFn: () => api.get<Role[]>(`/api/servers/${serverId}/roles`),
+    queryFn: () => api.getArray<Role>(`/api/servers/${serverId}/roles`),
     enabled: opened && !!serverId,
   });
 
@@ -136,6 +136,7 @@ export function CategorySettingsModal({ opened, onClose, categoryId, serverId }:
       title={`Category Settings — ${category?.name || ''}`}
       centered
       size="lg"
+      transitionProps={{ transition: 'pop', duration: 200 }}
     >
       {/* Tabs */}
       <Group gap={0} mb={16} style={{ borderBottom: '1px solid var(--border)' }}>

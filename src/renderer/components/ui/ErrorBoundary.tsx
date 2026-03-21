@@ -17,7 +17,12 @@ function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(text).then(() => {
+    const electronAPI = (window as any).electronAPI;
+    const doCopy = electronAPI?.clipboard?.writeText
+      ? electronAPI.clipboard.writeText(text)
+      : navigator.clipboard.writeText(text);
+
+    doCopy.then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => {

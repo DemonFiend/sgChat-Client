@@ -38,7 +38,7 @@ export function VoiceParticipantsList({ participants, compact }: VoiceParticipan
 
   const handleOpenDM = async (userId: string) => {
     try {
-      const result = await api.post<{ id: string }>(`/api/dms/user/${userId}`);
+      const result = await api.post<{ id: string }>('/api/dms', { user_id: userId });
       await queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
       useUIStore.getState().setView('dms');
       useUIStore.getState().setActiveDM(result.id);

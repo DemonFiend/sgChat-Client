@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, ensureArray } from '../lib/api';
 
 export interface Category {
   id: string;
@@ -11,7 +11,7 @@ export interface Category {
 export function useCategories(serverId: string | null) {
   return useQuery({
     queryKey: ['categories', serverId],
-    queryFn: () => api.get<Category[]>(`/api/servers/${serverId}/categories`),
+    queryFn: async () => ensureArray<Category>(await api.get(`/api/servers/${serverId}/categories`)),
     enabled: !!serverId,
   });
 }

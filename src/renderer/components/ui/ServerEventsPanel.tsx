@@ -107,10 +107,9 @@ export function ServerEventsPanel({ serverId }: ServerEventsPanelProps) {
       </div>
 
       {/* Content */}
-      <ScrollArea style={{ flex: 1 }} scrollbarSize={6} type="hover">
-        <div style={{ padding: 16 }}>
+      {viewMode === 'calendar' ? (
+        <div style={{ flex: 1, padding: 16, minHeight: 0 }}>
           {loading && <Text size="sm" c="dimmed" ta="center" py={32}>Loading events...</Text>}
-
           {!loading && sortedEvents.length === 0 && (
             <Stack align="center" py={40} gap={8}>
               <IconCalendar size={40} style={{ color: 'var(--text-muted)', opacity: 0.5 }} />
@@ -122,20 +121,33 @@ export function ServerEventsPanel({ serverId }: ServerEventsPanelProps) {
               )}
             </Stack>
           )}
-
-          {viewMode === 'list' && (
+          {!loading && sortedEvents.length > 0 && (
+            <CalendarGrid events={sortedEvents} currentMonth={currentMonth} onEventClick={setSelectedEvent} />
+          )}
+        </div>
+      ) : (
+        <ScrollArea style={{ flex: 1 }} scrollbarSize={6} type="hover">
+          <div style={{ padding: 16 }}>
+            {loading && <Text size="sm" c="dimmed" ta="center" py={32}>Loading events...</Text>}
+            {!loading && sortedEvents.length === 0 && (
+              <Stack align="center" py={40} gap={8}>
+                <IconCalendar size={40} style={{ color: 'var(--text-muted)', opacity: 0.5 }} />
+                <Text size="sm" c="dimmed">{showHistory ? 'No past events this month' : 'No upcoming events'}</Text>
+                {canManage && !showHistory && (
+                  <Button size="xs" variant="light" leftSection={<IconCalendarPlus size={14} />} onClick={() => setCreateOpen(true)}>
+                    Create Event
+                  </Button>
+                )}
+              </Stack>
+            )}
             <Stack gap={8}>
               {sortedEvents.map((event) => (
                 <EventCard key={event.id} event={event} serverId={serverId} onSelect={() => setSelectedEvent(event)} />
               ))}
             </Stack>
-          )}
-
-          {viewMode === 'calendar' && (
-            <CalendarGrid events={sortedEvents} currentMonth={currentMonth} onEventClick={setSelectedEvent} />
-          )}
-        </div>
-      </ScrollArea>
+          </div>
+        </ScrollArea>
+      )}
 
       {/* Create Event Modal */}
       <CreateEventModal serverId={serverId} opened={createOpen} onClose={() => setCreateOpen(false)} />
@@ -244,10 +256,11 @@ function CalendarGrid({ events, currentMonth, onEventClick }: { events: ServerEv
   }, [y, mo, events]);
 
   const today = new Date();
+  const numRows = Math.ceil(daysInMonth.length / 7);
 
   return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+    <div style={{ height: '100%' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridTemplateRows: `auto repeat(${numRows}, 1fr)`, gap: 2, height: '100%' }}>
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
           <Text key={d} size="xs" c="dimmed" ta="center" fw={600} py={4}>{d}</Text>
         ))}
@@ -260,7 +273,6 @@ function CalendarGrid({ events, currentMonth, onEventClick }: { events: ServerEv
             <div
               key={i}
               style={{
-                minHeight: 48,
                 padding: 2,
                 borderRadius: 4,
                 background: isToday ? 'var(--bg-active)' : day.date ? 'var(--bg-secondary)' : 'transparent',

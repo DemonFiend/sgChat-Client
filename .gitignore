@@ -31,10 +31,17 @@ src-tauri/
 # Claude Code
 .claude/
 
-# Plan files
+# Plan/working files
 clientplan.md
 SERVER-CHANGES.md
 server-handoff.md
+
+# Conversation artifacts / working docs
+CLIENT-API-REFERENCE.md
+Noise-suppression.md
+client-changes.md
+server-changes.md
+srv-api-endpoint.md
 
 # Beads issue tracking
 .beads/

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { Component, useEffect, useState, type CSSProperties, type ReactNode, type ErrorInfo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader, Center, Text, Stack } from '@mantine/core';
+import { Button, Loader, Center, Text, Stack } from '@mantine/core';
 import { ChannelSidebar } from '../components/layout/ChannelSidebar';
 import { ChatPanel } from '../components/layout/ChatPanel';
 import { MemberList } from '../components/layout/MemberList';
@@ -15,6 +15,45 @@ import { useServerPopupStore } from '../stores/serverPopup';
 import { useEmojiManifest } from '../hooks/useEmojis';
 import { api } from '../lib/api';
 import { queryClient } from '../lib/queryClient';
+
+/** Lightweight error boundary that isolates panel crashes from the rest of the layout */
+class PanelErrorBoundary extends Component<
+  { children: ReactNode; label?: string; width?: number },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: ReactNode; label?: string; width?: number }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error(`[PanelErrorBoundary:${this.props.label || 'panel'}]`, error.message, info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      const style: CSSProperties = {
+        background: 'var(--bg-primary)',
+        ...(this.props.width ? { width: this.props.width, flexShrink: 0 } : { flex: 1 }),
+      };
+      return (
+        <Center style={style} h="100%">
+          <Stack align="center" gap="sm">
+            <Text c="dimmed">Something went wrong.</Text>
+            <Button size="xs" variant="light" onClick={() => this.setState({ hasError: false, error: null })}>
+              Try Again
+            </Button>
+          </Stack>
+        </Center>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export function ServerView() {
   const activeServerId = useUIStore((s) => s.activeServerId);
@@ -71,14 +110,20 @@ export function ServerView() {
 
   return (
     <>
-      <ChannelSidebar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {isUnclaimed && (
-          <UnclaimedServerBanner onClaim={() => setClaimModalOpen(true)} />
-        )}
-        <ChatPanel />
-      </div>
-      <MemberList />
+      <PanelErrorBoundary label="sidebar" width={240}>
+        <ChannelSidebar />
+      </PanelErrorBoundary>
+      <PanelErrorBoundary label="chat">
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+          {isUnclaimed && (
+            <UnclaimedServerBanner onClaim={() => setClaimModalOpen(true)} />
+          )}
+          <ChatPanel />
+        </div>
+      </PanelErrorBoundary>
+      <PanelErrorBoundary label="members" width={240}>
+        <MemberList />
+      </PanelErrorBoundary>
 
       {/* Claim admin modal */}
       <ClaimAdminModal

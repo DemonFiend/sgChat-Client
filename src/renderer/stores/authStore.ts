@@ -12,11 +12,17 @@ export interface User {
   avatar_url: string | null;
   banner_url: string | null;
   bio: string | null;
+  pronouns: string | null;
   status: 'online' | 'idle' | 'dnd' | 'offline';
   custom_status: string | null;
   custom_status_expires_at: string | null;
   created_at: string;
   permissions?: UserPermissions;
+  privacy_friend_requests?: 'anyone' | 'friends_of_friends' | 'nobody';
+  privacy_dms?: 'server_members' | 'friends_only';
+  privacy_show_online?: boolean;
+  privacy_show_activity?: boolean;
+  two_factor_enabled?: boolean;
 }
 
 export type AuthErrorReason = 'session_expired' | 'server_unreachable' | 'token_invalid';

@@ -20,6 +20,7 @@ export interface RoleReactionGroup {
   channel_id: string;
   message_id?: string;
   server_id: string;
+  /** Server returns `enabled`; aliased to `is_active` for UI convenience */
   is_active: boolean;
   exclusive: boolean;
   created_at: string;
@@ -30,8 +31,12 @@ export function useRoleReactions(serverId: string | null) {
   return useQuery({
     queryKey: ['role-reactions', serverId],
     queryFn: async () => {
-      const res = await api.get<{ groups: RoleReactionGroup[] }>(`/api/servers/${serverId}/role-reactions`);
-      return res.groups || [];
+      const res = await api.get<{ groups: any[] }>(`/api/servers/${serverId}/role-reactions`);
+      // Server returns `enabled`; map to `is_active` for the client interface
+      return (res.groups || []).map((g) => ({
+        ...g,
+        is_active: g.enabled ?? g.is_active ?? false,
+      })) as RoleReactionGroup[];
     },
     enabled: !!serverId,
   });
@@ -61,7 +66,18 @@ export function useUpdateRoleReactionGroup(serverId: string) {
   return useMutation({
     mutationFn: ({ groupId, ...data }: { groupId: string; name?: string; description?: string; channel_id?: string; exclusive?: boolean }) =>
       api.patch(`/api/servers/${serverId}/role-reactions/groups/${groupId}`, data),
-    onSuccess: () => {
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ['role-reactions', serverId] });
+      const previous = queryClient.getQueryData<RoleReactionGroup[]>(['role-reactions', serverId]);
+      queryClient.setQueryData<RoleReactionGroup[]>(['role-reactions', serverId], (old) =>
+        old?.map((g) => g.id === variables.groupId ? { ...g, ...variables, id: g.id } : g),
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['role-reactions', serverId], context.previous);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['role-reactions', serverId] });
     },
   });
@@ -79,8 +95,8 @@ export function useDeleteRoleReactionGroup(serverId: string) {
 
 export function useToggleRoleReactionGroup(serverId: string) {
   return useMutation({
-    mutationFn: (groupId: string) =>
-      api.patch(`/api/servers/${serverId}/role-reactions/groups/${groupId}/toggle`),
+    mutationFn: ({ groupId, enabled }: { groupId: string; enabled: boolean }) =>
+      api.patch(`/api/servers/${serverId}/role-reactions/groups/${groupId}/toggle`, { enabled }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['role-reactions', serverId] });
     },
@@ -113,10 +129,20 @@ export function useDeleteRoleReactionMapping(serverId: string) {
   });
 }
 
+export function useReorderRoleReactionMappings(serverId: string) {
+  return useMutation({
+    mutationFn: ({ groupId, mappingIds }: { groupId: string; mappingIds: string[] }) =>
+      api.patch(`/api/servers/${serverId}/role-reactions/groups/${groupId}/mappings/reorder`, { mapping_ids: mappingIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['role-reactions', serverId] });
+    },
+  });
+}
+
 export function useFormatRoleReactionChannel(serverId: string) {
   return useMutation({
-    mutationFn: (groupId: string) =>
-      api.post(`/api/servers/${serverId}/role-reactions/format-channel`, { group_id: groupId }),
+    mutationFn: (channelId: string) =>
+      api.post(`/api/servers/${serverId}/role-reactions/format-channel`, { channel_id: channelId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['role-reactions', serverId] });
     },

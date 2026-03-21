@@ -9,7 +9,10 @@ import { ServerView } from '../pages/ServerView';
 import { DMView } from '../pages/DMView';
 import { FriendsView } from '../pages/FriendsView';
 import { SettingsView } from '../pages/SettingsView';
+import { ServerAdminView } from '../pages/ServerAdminView';
 import { CommandPalette } from '../components/ui/CommandPalette';
+import { DMCallStatusBar } from '../components/ui/DMCallStatusBar';
+import { GlobalIncomingCall } from '../components/ui/GlobalIncomingCall';
 
 export function AppLayout() {
   const view = useUIStore((s) => s.view);
@@ -43,13 +46,16 @@ export function AppLayout() {
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <TitleBar />
+      <DMCallStatusBar />
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {view === 'servers' && <ServerView />}
         {view === 'dms' && <DMView />}
         {view === 'friends' && <FriendsView />}
         {view === 'settings' && <SettingsView />}
+        {view === 'server-admin' && <ServerAdminView />}
       </div>
       <CommandPalette />
+      <GlobalIncomingCall />
     </div>
   );
 }

@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Avatar, Badge, Button, Group, HoverCard, Indicator, Modal, ScrollArea, Select, Skeleton, Stack, Text } from '@mantine/core';
-import { IconDeviceGamepad2, IconHeadphones, IconEye, IconBroadcast, IconTrophy, IconSparkles } from '@tabler/icons-react';
-import { api } from '../../lib/api';
+import { Avatar, Badge, Button, Group, HoverCard, Indicator, Modal, ScrollArea, Select, Skeleton, Stack, Text, TextInput } from '@mantine/core';
+import { IconDeviceGamepad2, IconHeadphones, IconEye, IconBroadcast, IconTrophy, IconSparkles, IconSearch } from '@tabler/icons-react';
+import { api, ensureArray } from '../../lib/api';
 import { useUIStore } from '../../stores/uiStore';
 import { toastStore } from '../../stores/toastNotifications';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useActivityStore, type UserActivity } from '../../stores/activityStore';
 import { useAuthStore } from '../../stores/authStore';
 import { UserContextMenu } from '../ui/UserContextMenu';
+import { WarningsModal } from '../ui/WarningsModal';
 import { useSendFriendRequest, useFriends, useRemoveFriend, useBlockUser } from '../../hooks/useFriends';
 import { queryClient } from '../../lib/queryClient';
 
@@ -35,11 +36,48 @@ interface Member {
 export function MemberList() {
   const activeServerId = useUIStore((s) => s.activeServerId);
   const memberListVisible = useUIStore((s) => s.memberListVisible);
+  const memberListWidth = useUIStore((s) => s.memberListWidth);
+  const setMemberListWidth = useUIStore((s) => s.setMemberListWidth);
   const currentUserId = useAuthStore((s) => s.user?.id);
   const { data: friends } = useFriends();
   const sendFriendRequest = useSendFriendRequest();
   const removeFriend = useRemoveFriend();
   const blockUser = useBlockUser();
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Resize state
+  const isResizing = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    isResizing.current = true;
+    startX.current = e.clientX;
+    startWidth.current = memberListWidth;
+    e.preventDefault();
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!isResizing.current) return;
+      // Dragging left edge: moving left increases width, moving right decreases
+      const delta = startX.current - ev.clientX;
+      setMemberListWidth(startWidth.current + delta);
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [memberListWidth, setMemberListWidth]);
 
   // Context menu state
   const [ctxMenu, setCtxMenu] = useState<{ userId: string; username: string; x: number; y: number } | null>(null);
@@ -56,7 +94,7 @@ export function MemberList() {
   const { data: members, isLoading: membersLoading } = useQuery({
     queryKey: ['members', activeServerId],
     queryFn: async () => {
-      const raw = await api.get<any[]>(`/api/servers/${activeServerId}/members`);
+      const raw = ensureArray<any>(await api.get(`/api/servers/${activeServerId}/members`));
       return raw.map((m) => ({
         ...m,
         id: m.user_id || m.id, // Server returns user_id, normalize to id
@@ -68,7 +106,7 @@ export function MemberList() {
 
   const { data: roles } = useQuery({
     queryKey: ['roles', activeServerId],
-    queryFn: () => api.get<Role[]>(`/api/servers/${activeServerId}/roles`),
+    queryFn: async () => ensureArray<Role>(await api.get(`/api/servers/${activeServerId}/roles`)),
     enabled: !!activeServerId && memberListVisible,
   });
 
@@ -91,11 +129,12 @@ export function MemberList() {
   if (membersLoading) {
     return (
       <div style={{
-        width: 240,
+        width: memberListWidth,
         background: 'var(--bg-secondary)',
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
+        position: 'relative',
       }}>
         <Stack gap={8} p={12}>
           <Skeleton height={12} width={80} radius="sm" />
@@ -110,6 +149,15 @@ export function MemberList() {
     );
   }
 
+  // Filter members by search query
+  const query = searchQuery.trim().toLowerCase();
+  const filteredMembers = query
+    ? (members || []).filter((m) =>
+        m.username.toLowerCase().includes(query) ||
+        (m.display_name && m.display_name.toLowerCase().includes(query))
+      )
+    : (members || []);
+
   // Group members by their highest hoisted role
   const hoistedRoles = (roles || [])
     .filter((r) => r.hoist || r.is_hoisted)
@@ -119,7 +167,7 @@ export function MemberList() {
   const assigned = new Set<string>();
 
   for (const role of hoistedRoles) {
-    const roleMembers = (members || []).filter(
+    const roleMembers = filteredMembers.filter(
       (m) => m.roles?.some((r) => r.id === role.id) && !assigned.has(m.id)
     );
     if (roleMembers.length > 0) {
@@ -129,7 +177,7 @@ export function MemberList() {
   }
 
   // Remaining online/offline
-  const remaining = (members || []).filter((m) => !assigned.has(m.id));
+  const remaining = filteredMembers.filter((m) => !assigned.has(m.id));
   const online = remaining.filter((m) => statuses[m.id] && statuses[m.id] !== 'offline');
   const offline = remaining.filter((m) => !statuses[m.id] || statuses[m.id] === 'offline');
 
@@ -138,12 +186,46 @@ export function MemberList() {
 
   return (
     <div style={{
-      width: 240,
+      width: memberListWidth,
       background: 'var(--bg-secondary)',
       flexShrink: 0,
       display: 'flex',
       flexDirection: 'column',
+      position: 'relative',
     }}>
+      {/* Resize drag handle on left edge */}
+      <div
+        onMouseDown={handleResizeStart}
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 4,
+          cursor: 'col-resize',
+          zIndex: 10,
+        }}
+      />
+
+      {/* Search input */}
+      <div style={{ padding: '8px 8px 0' }}>
+        <TextInput
+          placeholder="Search members..."
+          size="xs"
+          leftSection={<IconSearch size={14} />}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.currentTarget.value)}
+          styles={{
+            input: {
+              background: 'var(--bg-primary)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-primary)',
+              '&::placeholder': { color: 'var(--text-muted)' },
+            },
+          }}
+        />
+      </div>
+
       <ScrollArea style={{ flex: 1 }} scrollbarSize={4} type="hover">
         <Stack gap={2} p={8}>
           {grouped.map((group) => (
@@ -288,38 +370,6 @@ export function MemberList() {
   );
 }
 
-function WarningsModal({ opened, onClose, userId, username, serverId }: {
-  opened: boolean; onClose: () => void; userId: string; username: string; serverId: string;
-}) {
-  const { data: warnings, isLoading } = useQuery({
-    queryKey: ['warnings', serverId, userId],
-    queryFn: () => api.get<any[]>(`/api/servers/${serverId}/members/${userId}/warnings`),
-    enabled: opened && !!serverId && !!userId,
-  });
-
-  return (
-    <Modal opened={opened} onClose={onClose} title={`Warnings — ${username}`} centered size="md"
-      styles={{ content: { background: 'var(--bg-primary)' }, header: { background: 'var(--bg-primary)' } }}>
-      <Stack gap={8}>
-        {isLoading && <Text size="sm" c="dimmed">Loading...</Text>}
-        {!isLoading && (!warnings || warnings.length === 0) && (
-          <Text size="sm" c="dimmed">No warnings on record</Text>
-        )}
-        {(warnings || []).map((w: any, i: number) => (
-          <div key={w.id || i} style={{ padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 6, borderLeft: '3px solid #f0ad4e' }}>
-            <Group justify="space-between" mb={4}>
-              <Text size="xs" fw={600}>Warning #{i + 1}</Text>
-              <Text size="xs" c="dimmed">{new Date(w.created_at).toLocaleString()}</Text>
-            </Group>
-            {w.reason && <Text size="sm">{w.reason}</Text>}
-            {w.warned_by_username && <Text size="xs" c="dimmed">By: {w.warned_by_username}</Text>}
-          </div>
-        ))}
-      </Stack>
-    </Modal>
-  );
-}
-
 const ACTIVITY_ICONS: Record<string, typeof IconDeviceGamepad2> = {
   playing: IconDeviceGamepad2,
   listening: IconHeadphones,
@@ -372,7 +422,14 @@ function MemberItem({ member, offline, roleColor, onContextMenu }: { member: Mem
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
           onContextMenu={onContextMenu}
         >
-          <Indicator color={statusColor} size={8} offset={3} position="bottom-end" withBorder>
+          <Indicator
+            color={statusColor}
+            size={8}
+            offset={3}
+            position="bottom-end"
+            withBorder
+            styles={{ indicator: { transition: 'background-color 300ms ease, border-color 300ms ease' } }}
+          >
             <Avatar src={member.avatar_url} size={32} radius="xl" color="brand">
               {member.username.charAt(0).toUpperCase()}
             </Avatar>

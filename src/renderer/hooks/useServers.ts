@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, ensureArray } from '../lib/api';
 
 export interface Server {
   id: string;
@@ -12,6 +12,6 @@ export interface Server {
 export function useServers() {
   return useQuery({
     queryKey: ['servers'],
-    queryFn: () => api.get<Server[]>('/api/servers/'),
+    queryFn: async () => ensureArray<Server>(await api.get('/api/servers/')),
   });
 }

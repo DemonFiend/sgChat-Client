@@ -1,5 +1,5 @@
-import { ActionIcon, Button, Divider, Group, Kbd, Modal, NavLink, PasswordInput, Progress, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton } from '@mantine/core';
-import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay, IconRefresh, IconLock, IconMail, IconHistory } from '@tabler/icons-react';
+import { ActionIcon, Button, CopyButton, Divider, Group, Kbd, Modal, NavLink, PasswordInput, Progress, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton, Image, Paper, SimpleGrid, Tooltip } from '@mantine/core';
+import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay, IconRefresh, IconLock, IconMail, IconHistory, IconShield, IconEye, IconEyeOff, IconUpload, IconCopy, IconMusic, IconTrash } from '@tabler/icons-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
@@ -8,6 +8,7 @@ import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
 import { useKeybindsStore, KEYBIND_LABELS, DEFAULT_KEYBINDS } from '../stores/keybindsStore';
 import { useDevModeStore } from '../stores/devModeStore';
 import { useServerVersion } from '../hooks/useServerInfo';
+import { useToastStore } from '../stores/toastNotifications';
 import { switchInputDevice, switchOutputDevice, setGlobalOutputVolume, applyAudioProcessingSettings } from '../lib/voiceService';
 import { noiseSuppressionService, type CpuLevel } from '../lib/noiseSuppressionService';
 import { VoiceBar } from '../components/voice/VoiceBar';
@@ -135,10 +136,17 @@ export function SettingsView() {
 function ProfileSettings({ user }: { user: any }) {
   const updateAvatarUrl = useAuthStore((s) => s.updateAvatarUrl);
   const updateUser = useAuthStore((s) => s.updateUser);
+  const addToast = useToastStore((s) => s.addToast);
   const [displayName, setDisplayName] = useState(user?.display_name || '');
   const [bio, setBio] = useState(user?.bio || '');
+  const [pronouns, setPronouns] = useState(user?.pronouns || '');
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Custom status with clear-after
+  const [customStatus, setCustomStatus] = useState(user?.custom_status || '');
+  const [clearAfter, setClearAfter] = useState<string | null>(null);
+  const [statusSaving, setStatusSaving] = useState(false);
 
   // Email change
   const [emailModalOpen, setEmailModalOpen] = useState(false);
@@ -155,6 +163,26 @@ function ProfileSettings({ user }: { user: any }) {
   const [pwError, setPwError] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
 
+  // Privacy settings
+  const [friendRequests, setFriendRequests] = useState<string>(user?.privacy_friend_requests || 'anyone');
+  const [dmPrivacy, setDmPrivacy] = useState<string>(user?.privacy_dms || 'server_members');
+  const [showOnline, setShowOnline] = useState(user?.privacy_show_online !== false);
+  const [showActivity, setShowActivity] = useState(user?.privacy_show_activity !== false);
+  const [privacySaving, setPrivacySaving] = useState(false);
+
+  // 2FA
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(user?.two_factor_enabled || false);
+  const [tfaSetupOpen, setTfaSetupOpen] = useState(false);
+  const [tfaQrUrl, setTfaQrUrl] = useState<string | null>(null);
+  const [tfaBackupCodes, setTfaBackupCodes] = useState<string[]>([]);
+  const [tfaVerifyCode, setTfaVerifyCode] = useState('');
+  const [tfaStep, setTfaStep] = useState<'qr' | 'verify' | 'backup'>('qr');
+  const [tfaLoading, setTfaLoading] = useState(false);
+  const [tfaError, setTfaError] = useState('');
+  const [tfaDisableOpen, setTfaDisableOpen] = useState(false);
+  const [tfaDisablePassword, setTfaDisablePassword] = useState('');
+  const [tfaDisableLoading, setTfaDisableLoading] = useState(false);
+
   const handleSaveProfile = async () => {
     setIsSaving(true);
     setSaved(false);
@@ -162,14 +190,47 @@ function ProfileSettings({ user }: { user: any }) {
       const res = await electronAPI.api.request('PATCH', '/api/users/me', {
         display_name: displayName || null,
         bio: bio || null,
+        pronouns: pronouns || null,
       });
       if (res.ok) {
-        updateUser({ display_name: displayName || null, bio: bio || null });
+        updateUser({ display_name: displayName || null, bio: bio || null, pronouns: pronouns || null });
         setSaved(true);
+        addToast({ type: 'system', title: 'Profile Updated', message: 'Your profile has been saved.' });
         setTimeout(() => setSaved(false), 2000);
       }
     } catch { /* ignore */ }
     setIsSaving(false);
+  };
+
+  const handleSaveCustomStatus = async () => {
+    setStatusSaving(true);
+    try {
+      let expiresAt: string | null = null;
+      if (clearAfter) {
+        const now = new Date();
+        switch (clearAfter) {
+          case '30m': expiresAt = new Date(now.getTime() + 30 * 60 * 1000).toISOString(); break;
+          case '1h': expiresAt = new Date(now.getTime() + 60 * 60 * 1000).toISOString(); break;
+          case '4h': expiresAt = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString(); break;
+          case 'today': {
+            const eod = new Date(now);
+            eod.setHours(23, 59, 59, 999);
+            expiresAt = eod.toISOString();
+            break;
+          }
+          case 'week': expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(); break;
+        }
+      }
+      const res = await electronAPI.api.request('PATCH', '/api/users/me/status', {
+        custom_status: customStatus || null,
+        custom_status_expires_at: expiresAt,
+      });
+      if (res.ok) {
+        useAuthStore.getState().updateCustomStatus(customStatus || null, expiresAt);
+        addToast({ type: 'system', title: 'Status Updated', message: customStatus ? 'Custom status set.' : 'Custom status cleared.' });
+      }
+    } catch { /* ignore */ }
+    setStatusSaving(false);
   };
 
   const handleChangeEmail = async () => {
@@ -188,6 +249,7 @@ function ProfileSettings({ user }: { user: any }) {
         setEmailModalOpen(false);
         setNewEmail('');
         setEmailPassword('');
+        addToast({ type: 'system', title: 'Email Changed', message: 'Your email has been updated.' });
       } else {
         setEmailError(res.body?.message || 'Failed to change email');
       }
@@ -217,6 +279,7 @@ function ProfileSettings({ user }: { user: any }) {
         setCurrentPw('');
         setNewPw('');
         setConfirmPw('');
+        addToast({ type: 'system', title: 'Password Changed', message: 'Your password has been updated.' });
       } else {
         setPwError(res.body?.message || 'Failed to change password');
       }
@@ -224,6 +287,76 @@ function ProfileSettings({ user }: { user: any }) {
       setPwError(err instanceof Error ? err.message : 'Failed to change password');
     }
     setPwSaving(false);
+  };
+
+  const handleSavePrivacy = async () => {
+    setPrivacySaving(true);
+    try {
+      const res = await electronAPI.api.request('PATCH', '/api/users/me/privacy', {
+        privacy_friend_requests: friendRequests,
+        privacy_dms: dmPrivacy,
+        privacy_show_online: showOnline,
+        privacy_show_activity: showActivity,
+      });
+      if (res.ok) {
+        updateUser({
+          privacy_friend_requests: friendRequests as any,
+          privacy_dms: dmPrivacy as any,
+          privacy_show_online: showOnline,
+          privacy_show_activity: showActivity,
+        });
+        addToast({ type: 'system', title: 'Privacy Updated', message: 'Your privacy settings have been saved.' });
+      }
+    } catch { /* ignore */ }
+    setPrivacySaving(false);
+  };
+
+  const handleSetup2FA = async () => {
+    setTfaLoading(true);
+    setTfaError('');
+    try {
+      const data = await api.post<{ qr_code: string; backup_codes: string[] }>('/api/users/2fa/setup');
+      setTfaQrUrl(data.qr_code);
+      setTfaBackupCodes(data.backup_codes || []);
+      setTfaStep('qr');
+      setTfaVerifyCode('');
+      setTfaSetupOpen(true);
+    } catch (err: unknown) {
+      setTfaError(err instanceof Error ? err.message : 'Failed to start 2FA setup');
+    }
+    setTfaLoading(false);
+  };
+
+  const handleVerify2FA = async () => {
+    setTfaLoading(true);
+    setTfaError('');
+    try {
+      await api.post('/api/users/2fa/verify', { code: tfaVerifyCode });
+      setTfaStep('backup');
+      setTwoFactorEnabled(true);
+      updateUser({ two_factor_enabled: true });
+      addToast({ type: 'system', title: '2FA Enabled', message: 'Two-factor authentication is now active.' });
+    } catch (err: unknown) {
+      setTfaError(err instanceof Error ? err.message : 'Invalid verification code');
+    }
+    setTfaLoading(false);
+  };
+
+  const handleDisable2FA = async () => {
+    setTfaDisableLoading(true);
+    setTfaError('');
+    try {
+      const hashedPw = await electronAPI.auth.hashPassword(tfaDisablePassword);
+      await api.post('/api/users/2fa/disable', { password: hashedPw });
+      setTwoFactorEnabled(false);
+      updateUser({ two_factor_enabled: false });
+      setTfaDisableOpen(false);
+      setTfaDisablePassword('');
+      addToast({ type: 'system', title: '2FA Disabled', message: 'Two-factor authentication has been removed.' });
+    } catch (err: unknown) {
+      setTfaError(err instanceof Error ? err.message : 'Failed to disable 2FA');
+    }
+    setTfaDisableLoading(false);
   };
 
   return (
@@ -241,6 +374,40 @@ function ProfileSettings({ user }: { user: any }) {
 
       {/* Banner upload */}
       <BannerUpload currentBannerUrl={user?.banner_url} onBannerChange={(url) => updateUser({ banner_url: url })} />
+
+      <Divider style={{ borderColor: 'var(--border)' }} />
+
+      {/* Custom Status with Clear After */}
+      <Stack gap={8}>
+        <Text size="sm" fw={600}>Custom Status</Text>
+        <Group align="flex-end" gap={8}>
+          <TextInput
+            placeholder="What's on your mind?"
+            value={customStatus}
+            onChange={(e) => setCustomStatus(e.currentTarget.value)}
+            maxLength={128}
+            style={{ flex: 1 }}
+          />
+          <Select
+            placeholder="Clear after..."
+            value={clearAfter}
+            onChange={setClearAfter}
+            data={[
+              { value: 'none', label: "Don't clear" },
+              { value: '30m', label: '30 minutes' },
+              { value: '1h', label: '1 hour' },
+              { value: '4h', label: '4 hours' },
+              { value: 'today', label: 'Today' },
+              { value: 'week', label: 'This week' },
+            ]}
+            clearable
+            style={{ width: 160 }}
+          />
+        </Group>
+        <Button size="xs" variant="light" onClick={handleSaveCustomStatus} loading={statusSaving} style={{ alignSelf: 'flex-start' }}>
+          {customStatus ? 'Set Status' : 'Clear Status'}
+        </Button>
+      </Stack>
 
       <Divider style={{ borderColor: 'var(--border)' }} />
 
@@ -274,6 +441,13 @@ function ProfileSettings({ user }: { user: any }) {
           onChange={(e) => setDisplayName(e.currentTarget.value)}
           maxLength={32}
         />
+        <TextInput
+          label="Pronouns"
+          placeholder="e.g. they/them, she/her, he/him"
+          value={pronouns}
+          onChange={(e) => setPronouns(e.currentTarget.value)}
+          maxLength={40}
+        />
         <Textarea
           label="Bio"
           placeholder="Tell us about yourself..."
@@ -293,6 +467,72 @@ function ProfileSettings({ user }: { user: any }) {
           >
             {saved ? 'Saved!' : 'Save Changes'}
           </Button>
+        </Group>
+      </Stack>
+
+      <Divider style={{ borderColor: 'var(--border)' }} />
+
+      {/* Privacy Settings */}
+      <Stack gap={12}>
+        <Text size="lg" fw={600}>Privacy</Text>
+        <Select
+          label="Who can send you friend requests"
+          value={friendRequests}
+          onChange={(v) => v && setFriendRequests(v)}
+          data={[
+            { value: 'anyone', label: 'Anyone' },
+            { value: 'friends_of_friends', label: 'Friends of friends' },
+            { value: 'nobody', label: 'Nobody' },
+          ]}
+        />
+        <Select
+          label="Who can send you direct messages"
+          value={dmPrivacy}
+          onChange={(v) => v && setDmPrivacy(v)}
+          data={[
+            { value: 'server_members', label: 'Server members' },
+            { value: 'friends_only', label: 'Friends only' },
+          ]}
+        />
+        <Switch
+          label="Show Online Status"
+          description="Let others see when you're online"
+          checked={showOnline}
+          onChange={(e) => setShowOnline(e.currentTarget.checked)}
+        />
+        <Switch
+          label="Show Activity"
+          description="Display what you're currently doing"
+          checked={showActivity}
+          onChange={(e) => setShowActivity(e.currentTarget.checked)}
+        />
+        <Button size="sm" variant="light" onClick={handleSavePrivacy} loading={privacySaving} style={{ alignSelf: 'flex-start' }}>
+          Save Privacy Settings
+        </Button>
+      </Stack>
+
+      <Divider style={{ borderColor: 'var(--border)' }} />
+
+      {/* Security — 2FA */}
+      <Stack gap={12}>
+        <Text size="lg" fw={600}>Security</Text>
+        <Group gap={12} align="center">
+          <IconShield size={20} style={{ color: twoFactorEnabled ? 'var(--accent)' : 'var(--text-muted)' }} />
+          <div style={{ flex: 1 }}>
+            <Text size="sm" fw={500}>Two-Factor Authentication</Text>
+            <Text size="xs" c="dimmed">
+              {twoFactorEnabled ? 'Your account is secured with 2FA.' : 'Add an extra layer of security to your account.'}
+            </Text>
+          </div>
+          {twoFactorEnabled ? (
+            <Button variant="light" color="red" size="sm" onClick={() => { setTfaDisablePassword(''); setTfaError(''); setTfaDisableOpen(true); }}>
+              Disable 2FA
+            </Button>
+          ) : (
+            <Button variant="light" size="sm" leftSection={<IconShield size={14} />} onClick={handleSetup2FA} loading={tfaLoading}>
+              Enable 2FA
+            </Button>
+          )}
         </Group>
       </Stack>
 
@@ -357,6 +597,87 @@ function ProfileSettings({ user }: { user: any }) {
           <Group justify="flex-end" mt={8}>
             <Button variant="subtle" onClick={() => setPwModalOpen(false)}>Cancel</Button>
             <Button onClick={handleChangePassword} loading={pwSaving}>Change Password</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* 2FA Setup Modal */}
+      <Modal opened={tfaSetupOpen} onClose={() => setTfaSetupOpen(false)} title="Set Up Two-Factor Authentication" centered size="md">
+        <Stack gap={16}>
+          {tfaError && <Text size="sm" c="red">{tfaError}</Text>}
+
+          {tfaStep === 'qr' && (
+            <>
+              <Text size="sm">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.).</Text>
+              {tfaQrUrl && (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>
+                  <img src={tfaQrUrl} alt="2FA QR Code" style={{ width: 200, height: 200, imageRendering: 'pixelated' }} />
+                </div>
+              )}
+              <Group justify="flex-end">
+                <Button variant="subtle" onClick={() => setTfaSetupOpen(false)}>Cancel</Button>
+                <Button onClick={() => { setTfaStep('verify'); setTfaError(''); }}>Next</Button>
+              </Group>
+            </>
+          )}
+
+          {tfaStep === 'verify' && (
+            <>
+              <Text size="sm">Enter the 6-digit code from your authenticator app to verify setup.</Text>
+              <TextInput
+                label="Verification Code"
+                placeholder="000000"
+                value={tfaVerifyCode}
+                onChange={(e) => setTfaVerifyCode(e.currentTarget.value.replace(/\D/g, '').slice(0, 6))}
+                maxLength={6}
+                style={{ fontFamily: 'monospace' }}
+              />
+              <Group justify="flex-end">
+                <Button variant="subtle" onClick={() => setTfaStep('qr')}>Back</Button>
+                <Button onClick={handleVerify2FA} loading={tfaLoading} disabled={tfaVerifyCode.length !== 6}>Verify</Button>
+              </Group>
+            </>
+          )}
+
+          {tfaStep === 'backup' && (
+            <>
+              <Text size="sm" fw={500} c="yellow.5">Save these backup codes in a secure location. Each code can only be used once.</Text>
+              <Paper p={16} style={{ background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <SimpleGrid cols={2} spacing={4}>
+                  {tfaBackupCodes.map((code, i) => (
+                    <Text key={i} size="sm" style={{ fontFamily: 'monospace' }}>{code}</Text>
+                  ))}
+                </SimpleGrid>
+              </Paper>
+              <CopyButton value={tfaBackupCodes.join('\n')}>
+                {({ copied, copy }) => (
+                  <Button variant="light" size="sm" leftSection={<IconCopy size={14} />} onClick={copy}>
+                    {copied ? 'Copied!' : 'Copy All Codes'}
+                  </Button>
+                )}
+              </CopyButton>
+              <Group justify="flex-end">
+                <Button onClick={() => setTfaSetupOpen(false)}>Done</Button>
+              </Group>
+            </>
+          )}
+        </Stack>
+      </Modal>
+
+      {/* Disable 2FA Modal */}
+      <Modal opened={tfaDisableOpen} onClose={() => setTfaDisableOpen(false)} title="Disable Two-Factor Authentication" centered>
+        <Stack gap={12}>
+          {tfaError && <Text size="sm" c="red">{tfaError}</Text>}
+          <Text size="sm">Enter your password to disable two-factor authentication.</Text>
+          <PasswordInput
+            label="Password"
+            value={tfaDisablePassword}
+            onChange={(e) => setTfaDisablePassword(e.currentTarget.value)}
+            placeholder="Enter your password"
+          />
+          <Group justify="flex-end" mt={8}>
+            <Button variant="subtle" onClick={() => setTfaDisableOpen(false)}>Cancel</Button>
+            <Button color="red" onClick={handleDisable2FA} loading={tfaDisableLoading}>Disable 2FA</Button>
           </Group>
         </Stack>
       </Modal>
@@ -687,6 +1008,18 @@ function VoiceSettings() {
   const aiNoiseSuppression = useVoiceSettingsStore((s) => s.aiNoiseSuppression);
   const setAiNoiseSuppressionSetting = useVoiceSettingsStore((s) => s.setAiNoiseSuppression);
   const validateDevices = useVoiceSettingsStore((s) => s.validateDevices);
+  const joinSoundEnabled = useVoiceSettingsStore((s) => s.joinSoundEnabled);
+  const leaveSoundEnabled = useVoiceSettingsStore((s) => s.leaveSoundEnabled);
+  const joinSoundUrl = useVoiceSettingsStore((s) => s.joinSoundUrl);
+  const leaveSoundUrl = useVoiceSettingsStore((s) => s.leaveSoundUrl);
+  const setJoinSoundEnabled = useVoiceSettingsStore((s) => s.setJoinSoundEnabled);
+  const setLeaveSoundEnabled = useVoiceSettingsStore((s) => s.setLeaveSoundEnabled);
+  const setJoinSoundUrl = useVoiceSettingsStore((s) => s.setJoinSoundUrl);
+  const setLeaveSoundUrl = useVoiceSettingsStore((s) => s.setLeaveSoundUrl);
+  const addToast = useToastStore((s) => s.addToast);
+
+  const joinSoundRef = useRef<HTMLInputElement>(null);
+  const leaveSoundRef = useRef<HTMLInputElement>(null);
 
   const [aiNsSupported, setAiNsSupported] = useState(true);
   const [aiNsUnsupportedReason, setAiNsUnsupportedReason] = useState<string | null>(null);
@@ -973,6 +1306,127 @@ function VoiceSettings() {
           applyAudioProcessingSettings();
         }}
       />
+
+      <Divider style={{ borderColor: 'var(--border)' }} />
+
+      {/* Voice Sounds */}
+      <Text size="lg" fw={600}>Voice Sounds</Text>
+      <Text c="dimmed" size="sm">Control sounds played when users join or leave voice channels.</Text>
+
+      <Stack gap={12}>
+        <Group justify="space-between">
+          <div style={{ flex: 1 }}>
+            <Switch
+              label="Join Sound"
+              description="Play a sound when someone joins the voice channel"
+              checked={joinSoundEnabled}
+              onChange={(e) => setJoinSoundEnabled(e.currentTarget.checked)}
+            />
+          </div>
+          {joinSoundEnabled && (
+            <Group gap={4}>
+              <Button
+                variant="light"
+                size="xs"
+                leftSection={<IconPlayerPlay size={14} />}
+                onClick={() => {
+                  const audio = new Audio(joinSoundUrl || '/sounds/voice-join.mp3');
+                  audio.volume = outputVolume / 100;
+                  audio.play().catch(() => {});
+                }}
+              >
+                Preview
+              </Button>
+              <Button
+                variant="light"
+                size="xs"
+                leftSection={<IconUpload size={14} />}
+                onClick={() => joinSoundRef.current?.click()}
+              >
+                Custom
+              </Button>
+              {joinSoundUrl && (
+                <ActionIcon variant="subtle" color="red" size={24} onClick={() => setJoinSoundUrl(null)} title="Reset to default">
+                  <IconTrash size={14} />
+                </ActionIcon>
+              )}
+            </Group>
+          )}
+        </Group>
+
+        <Group justify="space-between">
+          <div style={{ flex: 1 }}>
+            <Switch
+              label="Leave Sound"
+              description="Play a sound when someone leaves the voice channel"
+              checked={leaveSoundEnabled}
+              onChange={(e) => setLeaveSoundEnabled(e.currentTarget.checked)}
+            />
+          </div>
+          {leaveSoundEnabled && (
+            <Group gap={4}>
+              <Button
+                variant="light"
+                size="xs"
+                leftSection={<IconPlayerPlay size={14} />}
+                onClick={() => {
+                  const audio = new Audio(leaveSoundUrl || '/sounds/voice-leave.mp3');
+                  audio.volume = outputVolume / 100;
+                  audio.play().catch(() => {});
+                }}
+              >
+                Preview
+              </Button>
+              <Button
+                variant="light"
+                size="xs"
+                leftSection={<IconUpload size={14} />}
+                onClick={() => leaveSoundRef.current?.click()}
+              >
+                Custom
+              </Button>
+              {leaveSoundUrl && (
+                <ActionIcon variant="subtle" color="red" size={24} onClick={() => setLeaveSoundUrl(null)} title="Reset to default">
+                  <IconTrash size={14} />
+                </ActionIcon>
+              )}
+            </Group>
+          )}
+        </Group>
+
+        {joinSoundUrl && (
+          <Text size="xs" c="dimmed">Custom join sound: {joinSoundUrl.split('/').pop()}</Text>
+        )}
+        {leaveSoundUrl && (
+          <Text size="xs" c="dimmed">Custom leave sound: {leaveSoundUrl.split('/').pop()}</Text>
+        )}
+      </Stack>
+
+      {/* Hidden file inputs for custom sound uploads */}
+      <input ref={joinSoundRef} type="file" accept="audio/*" style={{ display: 'none' }} onChange={async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          const data = await api.upload<{ url: string }>('/api/users/voice-sounds', file, { type: 'join' });
+          setJoinSoundUrl(data.url);
+          addToast({ type: 'system', title: 'Sound Uploaded', message: 'Custom join sound set.' });
+        } catch {
+          addToast({ type: 'warning', title: 'Upload Failed', message: 'Could not upload custom sound.' });
+        }
+        e.target.value = '';
+      }} />
+      <input ref={leaveSoundRef} type="file" accept="audio/*" style={{ display: 'none' }} onChange={async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          const data = await api.upload<{ url: string }>('/api/users/voice-sounds', file, { type: 'leave' });
+          setLeaveSoundUrl(data.url);
+          addToast({ type: 'system', title: 'Sound Uploaded', message: 'Custom leave sound set.' });
+        } catch {
+          addToast({ type: 'warning', title: 'Upload Failed', message: 'Could not upload custom sound.' });
+        }
+        e.target.value = '';
+      }} />
     </Stack>
   );
 }

@@ -10,7 +10,10 @@ import { useUIStore } from '../stores/uiStore';
 import { useChannelNotificationStore } from '../stores/channelNotificationStore';
 import { useAuthStore } from '../stores/authStore';
 import { soundService } from '../lib/soundService';
+import { blockedUsersStore } from '../stores/blockedUsersStore';
+import { ignoredUsersStore } from '../stores/ignoredUsersStore';
 import { cacheParticipantInfo, updateServerVoiceState } from '../lib/voiceService';
+import { isDMConnected } from '../lib/dmVoiceService';
 import {
   setKeyMaterial, encrypt as cryptoEncrypt, decrypt as cryptoDecrypt,
   isEncryptedEnvelope, hasActiveSession as hasCryptoSession,
@@ -78,6 +81,9 @@ export async function connectSocket(): Promise<void> {
     lastSequences = data.sequences || {};
     // Trigger initial data refetch
     queryClient.invalidateQueries();
+    // Load blocked/ignored user lists
+    blockedUsersStore.fetchBlocked();
+    ignoredUsersStore.fetchIgnored();
   });
 
   socket.on('gateway.resumed', async (rawData: any) => {
@@ -208,7 +214,8 @@ export function disconnectSocket(): void {
 function isAfkChannel(channelId: string): boolean {
   const queries = queryClient.getQueriesData<any[]>({ queryKey: ['channels'] });
   for (const [, channels] of queries) {
-    const ch = channels?.find((c: any) => c.id === channelId);
+    if (!Array.isArray(channels)) continue;
+    const ch = channels.find((c: any) => c.id === channelId);
     if (ch) return !!ch.is_afk_channel;
   }
   return false;
@@ -473,11 +480,11 @@ function handleEvent(type: string, data: any): void {
     // Server sends DM typing as { user_id } — resolve conversation from cache
     case 'dm.typing.start': {
       const dmConversations = queryClient.getQueryData<any[]>(['dm-conversations']);
-      const dmConv = dmConversations?.find((c) =>
-        c.participants.some((p: any) => p.id === data.user_id),
-      );
+      const dmConv = Array.isArray(dmConversations)
+        ? dmConversations.find((c) => c.participants?.some((p: any) => p.id === data.user_id))
+        : undefined;
       if (dmConv) {
-        const participant = dmConv.participants.find((p: any) => p.id === data.user_id);
+        const participant = dmConv.participants?.find((p: any) => p.id === data.user_id);
         useTypingStore.getState().addTyping(
           `dm:${dmConv.id}`,
           data.user_id,
@@ -488,9 +495,9 @@ function handleEvent(type: string, data: any): void {
     }
     case 'dm.typing.stop': {
       const dmConvs = queryClient.getQueryData<any[]>(['dm-conversations']);
-      const conv = dmConvs?.find((c) =>
-        c.participants.some((p: any) => p.id === data.user_id),
-      );
+      const conv = Array.isArray(dmConvs)
+        ? dmConvs.find((c) => c.participants?.some((p: any) => p.id === data.user_id))
+        : undefined;
       if (conv) {
         useTypingStore.getState().removeTyping(`dm:${conv.id}`, data.user_id);
       }
@@ -527,6 +534,18 @@ function handleEvent(type: string, data: any): void {
           soundService.playVoiceJoin();
         }
       }
+      // Detect incoming DM call from another user
+      if (data.is_dm_call && data.dm_channel_id && data.user && !isSelf) {
+        // Only suppress if already in a DM call (allow notification while in server voice)
+        if (!(voiceState.connectionState === 'connected' && isDMConnected())) {
+          useVoiceStore.getState().setIncomingDMCall({
+            callerId: data.user.id,
+            callerName: data.user.display_name || data.user.username,
+            callerAvatar: data.user.avatar_url || null,
+            dmChannelId: data.dm_channel_id,
+          });
+        }
+      }
       break;
     }
     case 'voice.leave': {
@@ -545,6 +564,13 @@ function handleEvent(type: string, data: any): void {
           soundService.playUrl(data.custom_sound_url);
         } else {
           soundService.playVoiceLeave();
+        }
+      }
+      // Detect caller cancellation — caller left DM call before we answered
+      if (data.is_dm_call && data.dm_channel_id) {
+        const incoming = useVoiceStore.getState().incomingDMCall;
+        if (incoming && incoming.dmChannelId === data.dm_channel_id) {
+          useVoiceStore.getState().setIncomingDMCall(null);
         }
       }
       break;

@@ -131,7 +131,11 @@ function ErrorToast({ error, onDismiss }: { error: CaughtError; onDismiss: () =>
       ? `${error.message}\n\n${error.stack}`
       : error.message;
 
-    navigator.clipboard.writeText(text).then(() => {
+    const doCopy = electronAPI?.clipboard?.writeText
+      ? electronAPI.clipboard.writeText(text)
+      : navigator.clipboard.writeText(text);
+
+    doCopy.then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => {

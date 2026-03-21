@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActionIcon, Group, Text, Textarea, Tooltip } from '@mantine/core';
-import { IconGif, IconPaperclip, IconMoodSmile, IconSend, IconSticker, IconX, IconEyeOff, IconEye } from '@tabler/icons-react';
+import { IconGif, IconPaperclip, IconMoodSmile, IconSend, IconSticker, IconX, IconEyeOff, IconEye, IconFileText } from '@tabler/icons-react';
 import { useSendMessage } from '../../hooks/useMessages';
 import { emitTypingStart, emitTypingStop } from '../../api/socket';
 import { useUIStore } from '../../stores/uiStore';
@@ -9,8 +9,10 @@ import { toastStore } from '../../stores/toastNotifications';
 import { GifPicker } from '../ui/GifPicker';
 import { EmojiPicker } from '../ui/EmojiPicker';
 import { EmojiAutocomplete } from '../ui/EmojiAutocomplete';
+import { MentionAutocomplete } from '../ui/MentionAutocomplete';
 import { StickerPicker } from '../ui/StickerPicker';
 import { SlashCommandAutocomplete } from '../ui/SlashCommandAutocomplete';
+import { useChatInputStore } from '../../stores/chatInputStore';
 import type { CustomEmoji } from '../../stores/emojiStore';
 
 interface MessageInputProps {
@@ -34,8 +36,11 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const activeServerId = useUIStore((s) => s.activeServerId);
   const replyTo = useUIStore((s) => s.replyTo);
   const setReplyTo = useUIStore((s) => s.setReplyTo);
+  const pendingMention = useChatInputStore((s) => s.pendingMention);
+  const clearPendingMention = useChatInputStore((s) => s.clearPendingMention);
 
   // Focus textarea on custom event (fired by double-click on channel)
   useEffect(() => {
@@ -43,6 +48,15 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
     window.addEventListener('focusChatInput', handler);
     return () => window.removeEventListener('focusChatInput', handler);
   }, []);
+
+  // Inject pending mention from context menu "Mention" action
+  useEffect(() => {
+    if (pendingMention) {
+      setContent((prev) => `${prev}<@${pendingMention.userId}> `);
+      clearPendingMention();
+      textareaRef.current?.focus();
+    }
+  }, [pendingMention, clearPendingMention]);
 
   const handleEmojiSelect = useCallback((emoji: CustomEmoji) => {
     const shortcode = `:${emoji.shortcode}: `;
@@ -58,8 +72,71 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
     });
   }, []);
 
+  const handleMentionSelect = useCallback((wireFormat: string, triggerStart: number, triggerEnd: number) => {
+    setContent((prev) => {
+      const before = prev.slice(0, triggerStart);
+      const after = prev.slice(triggerEnd);
+      return `${before}${wireFormat}${after}`;
+    });
+  }, []);
+
   const MAX_MESSAGE_LENGTH = 2000;
   const isOverLimit = content.length > MAX_MESSAGE_LENGTH;
+
+  // @stime transform: replace @stime <time> with <t:unixTimestamp>
+  const transformStime = useCallback((text: string): string => {
+    return text.replace(/@stime\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/gi, (_, timeStr: string) => {
+      const cleaned = timeStr.trim().toLowerCase();
+      let hours = 0;
+      let minutes = 0;
+
+      // Parse "3pm", "3:30pm", "3:30 PM", "15:00"
+      const match12 = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
+      const match24 = cleaned.match(/^(\d{1,2}):(\d{2})$/);
+
+      if (match12) {
+        hours = parseInt(match12[1], 10);
+        minutes = match12[2] ? parseInt(match12[2], 10) : 0;
+        if (match12[3] === 'pm' && hours !== 12) hours += 12;
+        if (match12[3] === 'am' && hours === 12) hours = 0;
+      } else if (match24) {
+        hours = parseInt(match24[1], 10);
+        minutes = parseInt(match24[2], 10);
+      } else {
+        return _;  // no valid parse, leave as-is
+      }
+
+      if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return _;
+
+      const now = new Date();
+      now.setHours(hours, minutes, 0, 0);
+      const timestamp = Math.floor(now.getTime() / 1000);
+      return `<t:${timestamp}>`;
+    });
+  }, []);
+
+  // Send content as a .txt file when over the character limit
+  const handleSendAsFile = useCallback(async () => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+
+    const blob = new Blob([trimmed], { type: 'text/plain' });
+    const file = new File([blob], 'message.txt', { type: 'text/plain' });
+
+    try {
+      await api.upload(`/api/channels/${channelId}/messages/upload`, file);
+      setContent('');
+      setReplyTo(null);
+      lastTypingEmit.current = 0;
+      emitTypingStop(channelId);
+    } catch (err) {
+      toastStore.addToast({
+        type: 'warning',
+        title: 'Upload Failed',
+        message: `Failed to send as file: ${(err as any)?.message || 'Unknown error'}`,
+      });
+    }
+  }, [content, channelId, setReplyTo]);
 
   const handleSend = async () => {
     const trimmed = content.trim();
@@ -91,11 +168,12 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
     }
 
     if (trimmed) {
+      const transformed = transformStime(trimmed);
       if (onSendOverride) {
-        onSendOverride(trimmed);
+        onSendOverride(transformed);
       } else {
         sendMessage.mutate({
-          content: trimmed,
+          content: transformed,
           reply_to_id: replyTo?.id,
         });
       }
@@ -243,6 +321,13 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
             onSelect={(cmd) => setContent(cmd)}
             inputRef={textareaRef}
           />
+          <MentionAutocomplete
+            text={content}
+            cursorPosition={cursorPos}
+            serverId={activeServerId}
+            onSelect={handleMentionSelect}
+            inputRef={textareaRef}
+          />
           <EmojiAutocomplete
             text={content}
             cursorPosition={cursorPos}
@@ -280,11 +365,12 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
                 position: 'absolute',
                 bottom: 2,
                 right: 4,
-                color: content.length > 2000 ? 'var(--danger, #ff4444)' : content.length > 1800 ? '#f0ad4e' : 'var(--text-muted)',
-                fontWeight: content.length > 2000 ? 700 : 400,
+                color: isOverLimit ? 'var(--danger, #ff4444)' : content.length >= 1800 ? '#f0ad4e' : 'var(--text-muted)',
+                fontWeight: isOverLimit ? 700 : 400,
               }}
             >
-              {content.length}/2000
+              {content.length}/{MAX_MESSAGE_LENGTH}
+              {isOverLimit && ' — Message too long'}
             </Text>
           )}
         </div>
@@ -305,6 +391,18 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
               <IconMoodSmile size={18} />
             </ActionIcon>
           </Tooltip>
+          {isOverLimit && content.trim() && (
+            <Tooltip label="Send as text file" position="top" withArrow>
+              <ActionIcon
+                variant="filled"
+                color="yellow"
+                size={32}
+                onClick={handleSendAsFile}
+              >
+                <IconFileText size={16} />
+              </ActionIcon>
+            </Tooltip>
+          )}
           {(content.trim() || files.length > 0) && (
             <ActionIcon
               variant="filled"

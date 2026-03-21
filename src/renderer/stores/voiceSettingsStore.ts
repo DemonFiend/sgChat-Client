@@ -12,6 +12,10 @@ interface VoiceSettingsData {
   autoGainControl: boolean;
   vad: boolean;
   aiNoiseSuppression: boolean;
+  joinSoundEnabled: boolean;
+  leaveSoundEnabled: boolean;
+  joinSoundUrl: string | null;
+  leaveSoundUrl: string | null;
 }
 
 interface VoiceSettingsState extends VoiceSettingsData {
@@ -24,6 +28,10 @@ interface VoiceSettingsState extends VoiceSettingsData {
   setAutoGainControl: (enabled: boolean) => void;
   setVad: (enabled: boolean) => void;
   setAiNoiseSuppression: (enabled: boolean) => void;
+  setJoinSoundEnabled: (enabled: boolean) => void;
+  setLeaveSoundEnabled: (enabled: boolean) => void;
+  setJoinSoundUrl: (url: string | null) => void;
+  setLeaveSoundUrl: (url: string | null) => void;
   /**
    * Validate saved devices against currently available hardware.
    * If a saved device ID is no longer present, reset it to 'default'.
@@ -41,6 +49,10 @@ const DEFAULTS: VoiceSettingsData = {
   autoGainControl: true,
   vad: true,
   aiNoiseSuppression: false,
+  joinSoundEnabled: true,
+  leaveSoundEnabled: true,
+  joinSoundUrl: null,
+  leaveSoundUrl: null,
 };
 
 function loadSettings(): VoiceSettingsData {
@@ -83,6 +95,10 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set) => ({
   setAutoGainControl: (enabled) => set(autoPersist('autoGainControl')(enabled)),
   setVad: (enabled) => set(autoPersist('vad')(enabled)),
   setAiNoiseSuppression: (enabled) => set(autoPersist('aiNoiseSuppression')(enabled)),
+  setJoinSoundEnabled: (enabled) => set(autoPersist('joinSoundEnabled')(enabled)),
+  setLeaveSoundEnabled: (enabled) => set(autoPersist('leaveSoundEnabled')(enabled)),
+  setJoinSoundUrl: (url) => set(autoPersist('joinSoundUrl')(url)),
+  setLeaveSoundUrl: (url) => set(autoPersist('leaveSoundUrl')(url)),
 
   validateDevices: (availableInputIds, availableOutputIds) =>
     set((state) => {

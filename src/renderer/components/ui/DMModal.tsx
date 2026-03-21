@@ -33,7 +33,7 @@ export function DMModal({ opened, onClose }: DMModalProps) {
   const startDM = async (friendId: string) => {
     setLoading(friendId);
     try {
-      const result = await api.post<{ id: string }>(`/api/dms/user/${friendId}`);
+      const result = await api.post<{ id: string }>('/api/dms', { user_id: friendId });
       await queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
       setView('dms');
       setActiveDM(result.id);
@@ -51,6 +51,7 @@ export function DMModal({ opened, onClose }: DMModalProps) {
       onClose={onClose}
       title="New Direct Message"
       size="sm"
+      transitionProps={{ transition: 'pop', duration: 200 }}
       styles={{
         header: { background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' },
         body: { background: 'var(--bg-secondary)', padding: 0 },

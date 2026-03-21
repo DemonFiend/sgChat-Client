@@ -28,7 +28,8 @@ export const useChannelNotificationStore = create<ChannelNotificationState>((set
 
   fetchAll: async () => {
     try {
-      const res = await api.get<ChannelNotificationSetting[]>('/api/channels/notification-settings');
+      const raw = await api.get<{ settings: ChannelNotificationSetting[] }>('/api/channels/notification-settings');
+      const res = raw.settings || [];
       const map: Record<string, ChannelNotificationSetting> = {};
       for (const s of res) {
         map[s.channel_id] = s;

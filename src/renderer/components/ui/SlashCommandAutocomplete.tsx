@@ -21,7 +21,7 @@ export function SlashCommandAutocomplete({ text, cursorPosition, onSelect, input
 
   const { data: commands } = useQuery({
     queryKey: ['slash-commands'],
-    queryFn: () => api.get<SlashCommand[]>('/api/channels/commands'),
+    queryFn: () => api.getArray<SlashCommand>('/api/channels/commands'),
     staleTime: 5 * 60 * 1000,
   });
 

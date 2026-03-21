@@ -1,5 +1,5 @@
 import { useQuery, useInfiniteQuery, useMutation } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, ensureArray } from '../lib/api';
 import { queryClient } from '../lib/queryClient';
 import type { Message } from './useMessages';
 
@@ -17,17 +17,17 @@ export interface DMConversation {
 export function useDMConversations() {
   return useQuery({
     queryKey: ['dm-conversations'],
-    queryFn: () => api.get<DMConversation[]>('/api/dms/'),
+    queryFn: async () => ensureArray<DMConversation>(await api.get('/api/dms/')),
   });
 }
 
 export function useDMMessages(conversationId: string | null) {
   return useInfiniteQuery({
     queryKey: ['dm-messages', conversationId],
-    queryFn: ({ pageParam }) => {
+    queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams({ limit: '50' });
       if (pageParam) params.set('before', pageParam);
-      return api.get<Message[]>(`/api/dms/${conversationId}/messages?${params}`);
+      return ensureArray<Message>(await api.get(`/api/dms/${conversationId}/messages?${params}`));
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => {

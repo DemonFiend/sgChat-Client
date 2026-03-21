@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ActionIcon, Badge, Button, Divider, Group, Loader, Modal, NumberInput, ScrollArea, Select, Stack, Switch, Text,
+  ActionIcon, Badge, Button, Divider, Group, Loader, Modal, NumberInput, ScrollArea, Select, Slider, Stack, Switch, Text,
   TextInput, Textarea, Tooltip,
 } from '@mantine/core';
-import { IconDownload, IconPlus, IconTrash, IconChevronDown, IconChevronUp } from '@tabler/icons-react';
+import { IconDownload, IconPlus, IconTrash, IconChevronDown, IconChevronUp, IconNetwork } from '@tabler/icons-react';
 import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { useUIStore } from '../../stores/uiStore';
@@ -26,7 +26,22 @@ interface ChannelData {
   type: string;
   position: number;
   category_id?: string;
+  bitrate?: number;
+  user_limit?: number;
+  voice_relay_policy?: string;
+  preferred_relay_id?: string;
 }
+
+interface Relay {
+  id: string;
+  name: string;
+  region: string;
+  status: string;
+  last_health_status: string;
+  livekit_url: string;
+}
+
+const VOICE_CHANNEL_TYPES = ['voice', 'temp_voice', 'music', 'stage'];
 
 interface PermissionOverride {
   id: string;
@@ -61,9 +76,21 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
     enabled: opened && !!serverId,
   });
 
+  const isVoiceChannel = VOICE_CHANNEL_TYPES.includes(channel?.type || '');
+
+  const { data: relays } = useQuery({
+    queryKey: ['relays'],
+    queryFn: () => api.get<Relay[]>('/api/relays'),
+    enabled: opened && isVoiceChannel,
+  });
+
   const [activeTab, setActiveTab] = useState<'general' | 'permissions' | 'segments' | 'retention' | 'export'>('general');
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
+  const [bitrate, setBitrate] = useState(64);
+  const [userLimit, setUserLimit] = useState(0);
+  const [voiceRelayPolicy, setVoiceRelayPolicy] = useState<string>('auto');
+  const [preferredRelayId, setPreferredRelayId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -76,6 +103,10 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
     if (channel) {
       setName(channel.name || '');
       setTopic(channel.topic || '');
+      setBitrate(channel.bitrate ?? 64);
+      setUserLimit(channel.user_limit ?? 0);
+      setVoiceRelayPolicy(channel.voice_relay_policy ?? 'auto');
+      setPreferredRelayId(channel.preferred_relay_id ?? null);
     }
   }, [channel]);
 
@@ -91,10 +122,17 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.patch(`/api/channels/${channelId}`, {
+      const body: Record<string, any> = {
         name: name.trim().toLowerCase().replace(/\s+/g, '-'),
         topic: topic.trim(),
-      });
+      };
+      if (isVoiceChannel) {
+        body.bitrate = bitrate;
+        body.user_limit = userLimit;
+        body.voice_relay_policy = voiceRelayPolicy;
+        body.preferred_relay_id = voiceRelayPolicy === 'specific' ? preferredRelayId : null;
+      }
+      await api.patch(`/api/channels/${channelId}`, body);
       queryClient.invalidateQueries({ queryKey: ['channels', serverId] });
       queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
       onClose();
@@ -149,6 +187,7 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
       title={`Channel Settings — #${channel?.name || ''}`}
       centered
       size="lg"
+      transitionProps={{ transition: 'pop', duration: 200 }}
     >
       {/* Tabs */}
       <Group gap={0} mb={16} style={{ borderBottom: '1px solid var(--border)' }}>
@@ -232,6 +271,76 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
             maxRows={4}
             autosize
           />
+
+          {isVoiceChannel && (
+            <>
+              <Divider label="Voice Settings" labelPosition="left" style={{ borderColor: 'var(--border)' }} />
+
+              <div>
+                <Text size="sm" fw={500} mb={4}>Bitrate — {bitrate} kbps</Text>
+                <Slider
+                  value={bitrate}
+                  onChange={setBitrate}
+                  min={8}
+                  max={384}
+                  step={8}
+                  marks={[
+                    { value: 8, label: '8' },
+                    { value: 96, label: '96' },
+                    { value: 192, label: '192' },
+                    { value: 384, label: '384' },
+                  ]}
+                  label={(v) => `${v} kbps`}
+                />
+              </div>
+
+              <div>
+                <Text size="sm" fw={500} mb={4}>User Limit — {userLimit === 0 ? 'Unlimited' : userLimit}</Text>
+                <Slider
+                  value={userLimit}
+                  onChange={setUserLimit}
+                  min={0}
+                  max={99}
+                  step={1}
+                  marks={[
+                    { value: 0, label: '0' },
+                    { value: 25, label: '25' },
+                    { value: 50, label: '50' },
+                    { value: 99, label: '99' },
+                  ]}
+                  label={(v) => v === 0 ? 'Unlimited' : `${v}`}
+                />
+              </div>
+
+              <Select
+                label="Voice Relay Policy"
+                description="How the server picks a voice relay for this channel"
+                value={voiceRelayPolicy}
+                onChange={(v) => setVoiceRelayPolicy(v || 'auto')}
+                data={[
+                  { value: 'master', label: 'Main Server' },
+                  { value: 'auto', label: 'Best Relay (Lowest Latency)' },
+                  { value: 'specific', label: 'Specific Relay' },
+                ]}
+              />
+
+              {voiceRelayPolicy === 'specific' && (
+                <Select
+                  label="Preferred Relay"
+                  description="Select the relay server to use for this channel"
+                  placeholder="Choose a relay..."
+                  value={preferredRelayId}
+                  onChange={setPreferredRelayId}
+                  leftSection={<IconNetwork size={14} />}
+                  data={(relays || []).map((r) => ({
+                    value: r.id,
+                    label: `${r.name} (${r.region})`,
+                    disabled: r.status !== 'trusted' || r.last_health_status === 'unreachable',
+                  }))}
+                />
+              )}
+            </>
+          )}
 
           <Group>
             <Button onClick={handleSave} loading={saving} disabled={!name.trim()}>

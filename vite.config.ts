@@ -10,6 +10,7 @@ export default defineConfig({
     outDir: path.resolve(__dirname, 'dist/renderer'),
     emptyOutDir: true,
     target: 'chrome130',
+    sourcemap: true,
     rollupOptions: {
       input: path.resolve(__dirname, 'src/renderer/index.html'),
     },

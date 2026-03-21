@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
-import { ActionIcon, Group, Text, Tooltip } from '@mantine/core';
+import { useState, useEffect, useRef } from 'react';
+import { ActionIcon, Group, Text, TextInput, Tooltip } from '@mantine/core';
 import {
   IconMicrophone, IconMicrophoneOff,
   IconHeadphones, IconHeadphonesOff,
   IconPhoneOff, IconWifi, IconWifiOff,
-  IconMusic, IconAlertTriangle,
+  IconMusic, IconAlertTriangle, IconPencil,
 } from '@tabler/icons-react';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { getSocket } from '../../api/socket';
 import { ScreenShareButton } from '../ui/ScreenShareButton';
 import { SoundboardPanel } from '../ui/SoundboardPanel';
 import { StageControls } from './StageControls';
@@ -45,12 +46,40 @@ export function VoicePanel() {
   const raiseHand = useVoiceStore((s) => s.raiseHand);
   const lowerHand = useVoiceStore((s) => s.lowerHand);
   const [soundboardOpen, setSoundboardOpen] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState('');
+  const [editingStatus, setEditingStatus] = useState(false);
+  const [statusDraft, setStatusDraft] = useState('');
+  const statusInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize voice event listeners (quality polling, participant updates, reconnection)
   useEffect(() => {
     const cleanup = initListeners();
     return cleanup;
   }, [initListeners]);
+
+  // Focus input when entering edit mode
+  useEffect(() => {
+    if (editingStatus) {
+      statusInputRef.current?.focus();
+    }
+  }, [editingStatus]);
+
+  const handleStatusEditStart = () => {
+    setStatusDraft(voiceStatus);
+    setEditingStatus(true);
+  };
+
+  const handleStatusSave = () => {
+    const trimmed = statusDraft.trim();
+    setVoiceStatus(trimmed);
+    setEditingStatus(false);
+    getSocket()?.emit('voice:setStatus', { status: trimmed });
+  };
+
+  const handleStatusCancel = () => {
+    setEditingStatus(false);
+    setStatusDraft('');
+  };
 
   if (!connected && connectionState !== 'connecting' && connectionState !== 'reconnecting' && connectionState !== 'error') {
     return null;
@@ -134,6 +163,47 @@ export function VoicePanel() {
               </Text>
             )}
           </Group>
+        )}
+
+        {/* Voice status — click to edit */}
+        {editingStatus ? (
+          <TextInput
+            ref={statusInputRef}
+            value={statusDraft}
+            onChange={(e) => setStatusDraft(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleStatusSave();
+              if (e.key === 'Escape') handleStatusCancel();
+            }}
+            onBlur={handleStatusSave}
+            placeholder="Set a voice status..."
+            size="xs"
+            styles={{
+              input: {
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'var(--text-primary)',
+                fontSize: '0.7rem',
+                height: 24,
+                textAlign: 'center',
+              },
+            }}
+            style={{ maxWidth: 180, margin: '0 auto' }}
+          />
+        ) : (
+          <Tooltip label="Click to set voice status" position="top" withArrow>
+            <Group
+              gap={4}
+              justify="center"
+              style={{ cursor: 'pointer' }}
+              onClick={handleStatusEditStart}
+            >
+              <Text size="xs" c="dimmed" style={{ fontSize: '0.65rem', fontStyle: voiceStatus ? 'normal' : 'italic' }}>
+                {voiceStatus || 'Set a status'}
+              </Text>
+              <IconPencil size={10} style={{ color: 'var(--text-muted)', opacity: 0.6 }} />
+            </Group>
+          </Tooltip>
         )}
       </div>
 

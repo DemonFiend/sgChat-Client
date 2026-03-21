@@ -6,7 +6,10 @@ import type { Notification } from '../stores/notificationStore';
 export function useNotifications() {
   return useQuery({
     queryKey: ['notifications'],
-    queryFn: () => api.get<Notification[]>('/api/notifications'),
+    queryFn: async () => {
+      const res = await api.get<{ notifications: Notification[]; has_more: boolean }>('/api/notifications');
+      return res.notifications || [];
+    },
   });
 }
 
