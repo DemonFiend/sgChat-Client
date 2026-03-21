@@ -57,12 +57,7 @@ export const useIgnoredUsersStore = create<IgnoredUsersState>((set, get) => ({
     try {
       await api.post(`/api/users/${userId}/ignore`, {});
     } catch (err) {
-      const revertIds = new Set(get().ignoredUserIds);
-      revertIds.delete(userId);
-      set({
-        ignoredUserIds: revertIds,
-        ignoredUsers: get().ignoredUsers.filter((u) => u.id !== userId),
-      });
+      set({ ignoredUserIds: prevIds, ignoredUsers: prevUsers });
       console.error('[ignoredUsers] Failed to ignore user:', err);
     }
   },
@@ -78,12 +73,7 @@ export const useIgnoredUsersStore = create<IgnoredUsersState>((set, get) => ({
     try {
       await api.delete(`/api/users/${userId}/ignore`);
     } catch (err) {
-      const revertIds = new Set(get().ignoredUserIds);
-      revertIds.add(userId);
-      const revertUsers = removedUser
-        ? [...get().ignoredUsers, removedUser]
-        : get().ignoredUsers;
-      set({ ignoredUserIds: revertIds, ignoredUsers: revertUsers });
+      set({ ignoredUserIds: prevIds, ignoredUsers: prevUsers });
       console.error('[ignoredUsers] Failed to unignore user:', err);
     }
   },

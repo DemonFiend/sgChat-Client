@@ -62,7 +62,7 @@ export function MemberList() {
       if (!isResizing.current) return;
       // Dragging left edge: moving left increases width, moving right decreases
       const delta = startX.current - ev.clientX;
-      setMemberListWidth(startWidth.current + delta);
+      setMemberListWidth(Math.min(400, Math.max(180, startWidth.current + delta)));
     };
 
     const handleMouseUp = () => {

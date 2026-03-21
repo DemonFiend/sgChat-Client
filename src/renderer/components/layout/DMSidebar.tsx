@@ -33,7 +33,7 @@ export function DMSidebar({ onCreateDM }: DMSidebarProps) {
     if (!conv.participants?.length) return false;
     if (!search.trim()) return true;
     const other = conv.participants.find((p) => p.id !== user?.id) || conv.participants[0];
-    return other.username.toLowerCase().includes(search.toLowerCase());
+    return other?.username?.toLowerCase().includes(search.toLowerCase()) ?? false;
   });
 
   return (

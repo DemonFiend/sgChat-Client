@@ -257,6 +257,7 @@ function handleEvent(type: string, data: any): void {
 
     // DM messages
     case 'dm.message.new': {
+      if (!data.conversation_id) break;
       queryClient.invalidateQueries({ queryKey: ['dm-messages'] });
       queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
       // Track DM unread + toast for non-active conversation
@@ -336,8 +337,8 @@ function handleEvent(type: string, data: any): void {
           type: 'warning',
           title: 'Timed Out',
           message: data.reason
-            ? `You were timed out in ${data.server_name}: ${data.reason}`
-            : `You were timed out in ${data.server_name}`,
+            ? `You were timed out in ${data.server_name || 'the server'}: ${data.reason}`
+            : `You were timed out in ${data.server_name || 'the server'}`,
         });
       }
       break;
@@ -447,9 +448,14 @@ function handleEvent(type: string, data: any): void {
       queryClient.invalidateQueries({ queryKey: ['blocked-users'] });
       queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
       break;
+    case 'user.unblock':
+      queryClient.invalidateQueries({ queryKey: ['blocked-users'] });
+      queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
+      break;
 
     // Presence — update Zustand directly (ephemeral)
     case 'presence.update':
+      if (!data.user_id) break;
       usePresenceStore.getState().updatePresence(data.user_id, data.status);
       // presence.update may include activity
       if ('activity' in data) {
@@ -457,26 +463,34 @@ function handleEvent(type: string, data: any): void {
       }
       break;
     case 'status_comment.update':
+      if (!data.user_id) break;
       usePresenceStore.getState().updateStatusComment(data.user_id, data.status_comment);
       break;
 
     // Activity / Rich Presence
     case 'activity.update':
+      if (!data.user_id) break;
       useActivityStore.getState().updateActivity(data.user_id, data.activity || null);
       break;
 
     // Typing — update Zustand directly (ephemeral)
     // Server sends channel typing as { channel_id, user: { id, username, display_name } }
-    case 'typing.start':
+    case 'typing.start': {
+      const uid = data.user?.id || data.user_id;
+      if (!data.channel_id || !uid) break;
       useTypingStore.getState().addTyping(
         data.channel_id,
-        data.user?.id || data.user_id,
+        uid,
         data.user?.username || data.username || 'Someone',
       );
       break;
-    case 'typing.stop':
-      useTypingStore.getState().removeTyping(data.channel_id, data.user?.id || data.user_id);
+    }
+    case 'typing.stop': {
+      const uid = data.user?.id || data.user_id;
+      if (!data.channel_id || !uid) break;
+      useTypingStore.getState().removeTyping(data.channel_id, uid);
       break;
+    }
     // Server sends DM typing as { user_id } — resolve conversation from cache
     case 'dm.typing.start': {
       const dmConversations = queryClient.getQueryData<any[]>(['dm-conversations']);
@@ -535,7 +549,7 @@ function handleEvent(type: string, data: any): void {
         }
       }
       // Detect incoming DM call from another user
-      if (data.is_dm_call && data.dm_channel_id && data.user && !isSelf) {
+      if (data.is_dm_call && data.dm_channel_id && data.user?.id && !isSelf) {
         // Only suppress if already in a DM call (allow notification while in server voice)
         if (!(voiceState.connectionState === 'connected' && isDMConnected())) {
           useVoiceStore.getState().setIncomingDMCall({

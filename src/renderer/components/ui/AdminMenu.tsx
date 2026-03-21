@@ -60,6 +60,7 @@ export function AdminMenu({
         title: 'User Kicked',
         message: `${username} has been kicked from the server.`,
       });
+      setKickConfirm(false);
       onClose();
     } catch (err) {
       toastStore.addToast({
@@ -78,6 +79,7 @@ export function AdminMenu({
         title: 'User Banned',
         message: `${username} has been banned from the server.`,
       });
+      setBanConfirm(false);
       onClose();
     } catch (err) {
       toastStore.addToast({

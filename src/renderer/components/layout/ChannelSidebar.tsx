@@ -18,7 +18,7 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { hasPermission, canManageServer, isAdmin } from '../../stores/permissions';
 import { useRoleReactions } from '../../hooks/useRoleReactions';
-import { api } from '../../lib/api';
+import { api, resolveAssetUrl } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { toastStore } from '../../stores/toastNotifications';
 import { UserInfoPanel } from './UserInfoPanel';
@@ -162,7 +162,7 @@ export function ChannelSidebar() {
     const onMouseMove = (ev: MouseEvent) => {
       if (!resizeRef.current) return;
       const newWidth = startWidth + (ev.clientX - startX);
-      setChannelSidebarWidth(newWidth);
+      setChannelSidebarWidth(Math.min(384, Math.max(192, newWidth)));
     };
     const onMouseUp = () => {
       resizeRef.current = false;
@@ -192,7 +192,7 @@ export function ChannelSidebar() {
       <div style={{
         height: 120,
         background: activeServer?.banner_url
-          ? `url(${activeServer.banner_url}) center/cover no-repeat`
+          ? `url(${resolveAssetUrl(activeServer.banner_url)}) center/cover no-repeat`
           : 'linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%)',
         display: 'flex',
         alignItems: 'flex-end',

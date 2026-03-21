@@ -59,12 +59,7 @@ export const useBlockedUsersStore = create<BlockedUsersState>((set, get) => ({
     try {
       await api.post(`/api/users/${userId}/block`, {});
     } catch (err) {
-      const revertIds = new Set(get().blockedUserIds);
-      revertIds.delete(userId);
-      set({
-        blockedUserIds: revertIds,
-        blockedUsers: get().blockedUsers.filter((u) => u.id !== userId),
-      });
+      set({ blockedUserIds: prevIds, blockedUsers: prevUsers });
       console.error('[blockedUsers] Failed to block user:', err);
     }
   },
@@ -80,12 +75,7 @@ export const useBlockedUsersStore = create<BlockedUsersState>((set, get) => ({
     try {
       await api.delete(`/api/users/${userId}/block`);
     } catch (err) {
-      const revertIds = new Set(get().blockedUserIds);
-      revertIds.add(userId);
-      const revertUsers = removedUser
-        ? [...get().blockedUsers, removedUser]
-        : get().blockedUsers;
-      set({ blockedUserIds: revertIds, blockedUsers: revertUsers });
+      set({ blockedUserIds: prevIds, blockedUsers: prevUsers });
       console.error('[blockedUsers] Failed to unblock user:', err);
     }
   },

@@ -165,7 +165,7 @@ function TextWithEmojis({ text }: { text: string }) {
 
 /** Extract non-image URLs from content for embed previews */
 function extractEmbedUrls(content: string): string[] {
-  const urlRegex = /https?:\/\/[^\s<]+/g;
+  const urlRegex = /https?:\/\/[^\s<]+[^\s<.,;:!?)}\]]/g;
   const matches = content.match(urlRegex);
   if (!matches) return [];
   // Deduplicate and exclude image URLs

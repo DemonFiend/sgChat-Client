@@ -6,6 +6,9 @@ export default defineConfig({
   root: path.resolve(__dirname, 'src/renderer'),
   base: './',
   plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version || '0.0.0'),
+  },
   build: {
     outDir: path.resolve(__dirname, 'dist/renderer'),
     emptyOutDir: true,

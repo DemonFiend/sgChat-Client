@@ -36,7 +36,7 @@ export function ThreadPanel({ threadId, channelId, onClose }: ThreadPanelProps) 
   const groups: Message[][] = [];
   for (const msg of messages) {
     const lastGroup = groups[groups.length - 1];
-    if (lastGroup && msg.author && !msg.system_event && !lastGroup[0].system_event
+    if (lastGroup && msg.author?.id && !msg.system_event && !lastGroup[0].system_event
         && lastGroup[0].author?.id && lastGroup[0].author.id === msg.author.id) {
       const timeDiff = new Date(msg.created_at).getTime() - new Date(lastGroup[lastGroup.length - 1].created_at).getTime();
       if (timeDiff < 5 * 60 * 1000) {
