@@ -121,6 +121,37 @@ function emit(event: string, data: any) {
 // Per-user volume (0-200%)
 const userVolumes = new Map<string, number>();
 
+// Per-user local mute (client-side only, not reflected on server)
+const locallyMutedUsers = new Set<string>();
+
+export function isLocallyMuted(userId: string): boolean {
+  return locallyMutedUsers.has(userId);
+}
+
+export function toggleLocalMute(userId: string): boolean {
+  const wasMuted = locallyMutedUsers.has(userId);
+  if (wasMuted) {
+    locallyMutedUsers.delete(userId);
+  } else {
+    locallyMutedUsers.add(userId);
+  }
+
+  if (currentRoom) {
+    const participant = currentRoom.remoteParticipants.get(userId);
+    if (participant) {
+      participant.audioTrackPublications.forEach((pub) => {
+        if (pub.track) {
+          pub.track.attachedElements.forEach((el) => {
+            (el as HTMLMediaElement).muted = !wasMuted;
+          });
+        }
+      });
+    }
+  }
+
+  return !wasMuted;
+}
+
 // ── Participant info cache (populated from socket events) ────────────────────
 // Maps user ID → display info so we can resolve LiveKit identity UUIDs to names
 

@@ -10,7 +10,7 @@ import { useActivityStore, type UserActivity } from '../../stores/activityStore'
 import { useAuthStore } from '../../stores/authStore';
 import { UserContextMenu } from '../ui/UserContextMenu';
 import { WarningsModal } from '../ui/WarningsModal';
-import { useSendFriendRequest, useFriends, useRemoveFriend, useBlockUser } from '../../hooks/useFriends';
+import { useServers } from '../../hooks/useServers';
 import { queryClient } from '../../lib/queryClient';
 
 interface Role {
@@ -39,10 +39,8 @@ export function MemberList() {
   const memberListWidth = useUIStore((s) => s.memberListWidth);
   const setMemberListWidth = useUIStore((s) => s.setMemberListWidth);
   const currentUserId = useAuthStore((s) => s.user?.id);
-  const { data: friends } = useFriends();
-  const sendFriendRequest = useSendFriendRequest();
-  const removeFriend = useRemoveFriend();
-  const blockUser = useBlockUser();
+  const { data: servers } = useServers();
+  const activeServer = servers?.find((s) => s.id === activeServerId);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -80,15 +78,28 @@ export function MemberList() {
   }, [memberListWidth, setMemberListWidth]);
 
   // Context menu state
-  const [ctxMenu, setCtxMenu] = useState<{ userId: string; username: string; x: number; y: number } | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{
+    userId: string;
+    username: string;
+    displayName?: string;
+    x: number;
+    y: number;
+    roles?: Role[];
+  } | null>(null);
   const [timeoutTarget, setTimeoutTarget] = useState<{ userId: string; username: string } | null>(null);
   const [timeoutDuration, setTimeoutDuration] = useState<string | null>('300');
   const [warningsTarget, setWarningsTarget] = useState<{ userId: string; username: string } | null>(null);
-  const friendIds = new Set((friends || []).map((f: any) => f.friend_id || f.id));
 
   const handleContextMenu = useCallback((e: React.MouseEvent, member: Member) => {
     e.preventDefault();
-    setCtxMenu({ userId: member.id, username: member.username, x: e.clientX, y: e.clientY });
+    setCtxMenu({
+      userId: member.id,
+      username: member.username,
+      displayName: member.display_name,
+      x: e.clientX,
+      y: e.clientY,
+      roles: member.roles,
+    });
   }, []);
 
   const { data: members, isLoading: membersLoading } = useQuery({
@@ -261,57 +272,36 @@ export function MemberList() {
       {/* Right-click context menu */}
       {ctxMenu && (
         <UserContextMenu
-          userId={ctxMenu.userId}
-          username={ctxMenu.username}
-          isCurrentUser={ctxMenu.userId === currentUserId}
-          isFriend={friendIds.has(ctxMenu.userId)}
-          opened={true}
-          position={{ x: ctxMenu.x, y: ctxMenu.y }}
+          isOpen={true}
           onClose={() => setCtxMenu(null)}
+          position={{ x: ctxMenu.x, y: ctxMenu.y }}
+          targetUser={{
+            id: ctxMenu.userId,
+            username: ctxMenu.username,
+            display_name: ctxMenu.displayName,
+          }}
+          currentUserId={currentUserId || ''}
+          serverId={activeServerId || ''}
+          serverOwnerId={activeServer?.owner_id}
           onSendMessage={() => {
             useUIStore.getState().setView('dms');
             setCtxMenu(null);
           }}
-          onAddFriend={() => {
-            sendFriendRequest.mutate(ctxMenu.username);
-            setCtxMenu(null);
-          }}
-          onRemoveFriend={() => {
-            removeFriend.mutate(ctxMenu.userId);
-            setCtxMenu(null);
-          }}
-          onBlockUser={() => {
-            blockUser.mutate(ctxMenu.userId);
-            setCtxMenu(null);
-          }}
-          onWarn={activeServerId ? () => {
-            api.post(`/api/servers/${activeServerId}/members/${ctxMenu.userId}/warn`).then(() => {
-              toastStore.addToast({ type: 'system', title: 'Warning Sent', message: `Warned ${ctxMenu.username}` });
-            }).catch((err) => {
-              toastStore.addToast({ type: 'warning', title: 'Warn Failed', message: (err as any)?.message || 'Unknown error' });
-            });
-            setCtxMenu(null);
-          } : undefined}
-          onViewWarnings={activeServerId ? () => {
-            setWarningsTarget({ userId: ctxMenu.userId, username: ctxMenu.username });
-            setCtxMenu(null);
-          } : undefined}
           onTimeout={activeServerId ? () => {
             setTimeoutTarget({ userId: ctxMenu.userId, username: ctxMenu.username });
             setCtxMenu(null);
           } : undefined}
-          onKick={activeServerId ? () => {
-            api.post(`/api/servers/${activeServerId}/members/${ctxMenu.userId}/kick`).then(() => {
-              queryClient.invalidateQueries({ queryKey: ['members', activeServerId] });
-            }).catch(() => {});
-            setCtxMenu(null);
-          } : undefined}
-          onBan={activeServerId ? () => {
-            api.post(`/api/servers/${activeServerId}/members/${ctxMenu.userId}/ban`).then(() => {
-              queryClient.invalidateQueries({ queryKey: ['members', activeServerId] });
-            }).catch(() => {});
-            setCtxMenu(null);
-          } : undefined}
+          targetUserRoles={ctxMenu.roles?.map((r) => ({
+            id: r.id,
+            name: r.name,
+            color: r.color ?? null,
+          }))}
+          allServerRoles={(roles || []).map((r) => ({
+            id: r.id,
+            name: r.name,
+            color: r.color ?? null,
+            position: r.position,
+          }))}
         />
       )}
 

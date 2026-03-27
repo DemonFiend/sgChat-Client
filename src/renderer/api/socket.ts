@@ -430,17 +430,21 @@ function handleEvent(type: string, data: any): void {
 
     // Soundboard
     case 'soundboard.play': {
-      // Play the sound
+      // Play the sound via soundService for consistent volume handling
       if (data.sound_url) {
-        const audio = new Audio(data.sound_url);
-        audio.volume = 0.5;
-        audio.play().catch(() => {});
+        soundService.playUrl(data.sound_url);
       }
       break;
     }
     case 'soundboard.added':
     case 'soundboard.removed':
-      queryClient.invalidateQueries({ queryKey: ['soundboard'] });
+      // Scope invalidation to the specific server's soundboard query
+      if (data.server_id) {
+        queryClient.invalidateQueries({ queryKey: ['soundboard', data.server_id] });
+      } else {
+        // Fallback: invalidate all soundboard queries
+        queryClient.invalidateQueries({ queryKey: ['soundboard'] });
+      }
       break;
 
     // User blocking
