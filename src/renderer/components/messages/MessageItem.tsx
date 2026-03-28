@@ -6,7 +6,7 @@ import { useCreateThread } from '../../hooks/useThreads';
 import { useMessagePreview } from '../../hooks/useServerInfo';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
-import { MessageContent } from '../ui/MessageContent';
+import { MessageContent, AttachmentCard } from '../ui/MessageContent';
 import { ReactionPicker } from '../ui/ReactionPicker';
 import { ReactionDisplay } from '../ui/ReactionDisplay';
 import { isImageUrl } from '../../lib/imageUtils';
@@ -241,17 +241,7 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
               }}
             />
           ) : (
-            <Text
-              size="sm"
-              c="brand"
-              component="a"
-              href={att.url}
-              target="_blank"
-              rel="noopener"
-              style={{ textDecoration: 'none' }}
-            >
-              {att.filename}
-            </Text>
+            <AttachmentCard attachment={att} />
           )}
         </div>
       ))}
@@ -268,7 +258,7 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
       <ReactionPicker
         isOpen={reactionPickerOpen}
         onClose={() => setReactionPickerOpen(false)}
-        onSelect={(emoji) => handleReactionToggle(emoji, false)}
+        onSelect={(emoji, customEmojiId) => handleReactionToggle(emoji, false, customEmojiId ? 'custom' : 'unicode', customEmojiId)}
         anchorRef={reactionBtnRef.current}
       />
 

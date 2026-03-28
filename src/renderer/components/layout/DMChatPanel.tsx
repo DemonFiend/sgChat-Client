@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Avatar, Group, Indicator, ScrollArea, Skeleton, Stack, Text, Tooltip } from '@mantine/core';
-import { IconPhone, IconPhoneOff, IconSettings } from '@tabler/icons-react';
+import { IconBan, IconPhone, IconPhoneOff, IconSettings } from '@tabler/icons-react';
 import { useDMConversations, useDMMessages, useSendDM } from '../../hooks/useDMConversations';
 import { useAuthStore } from '../../stores/authStore';
-import { emitJoinDM, emitLeaveDM, emitDMAck } from '../../api/socket';
+import { emitJoinDM, emitLeaveDM, emitDMAck, emitTypingStart, emitTypingStop } from '../../api/socket';
 import { usePresenceStore } from '../../stores/presenceStore';
+import { useTypingStore } from '../../stores/typingStore';
+import { useBlockedUsersStore } from '../../stores/blockedUsersStore';
 import { joinDMVoice, leaveDMVoice, toggleDMMute, toggleDMVideo, onDMVoiceEvent } from '../../lib/dmVoiceService';
 import { DMVoiceControls } from '../ui/DMVoiceControls';
 import { DMSettingsModal } from '../ui/DMSettingsModal';
@@ -43,8 +45,36 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
   const status = usePresenceStore((s) => (otherUser ? s.statuses[otherUser.id] : undefined) || 'offline');
   const statusColor = STATUS_COLORS[status] || 'gray';
 
+  // Check if partner is blocked
+  const isBlocked = useBlockedUsersStore((s) => s.isBlocked);
+  const isPartnerBlocked = otherUser ? isBlocked(otherUser.id) : false;
+
   // Pages are fetched newest-first; reverse page order so oldest page comes first, then flatten
-  const messages = data?.pages ? [...data.pages].reverse().flatMap((page) => page) : [];
+  // Normalize system_event: server may send string or object
+  const messages = (data?.pages ? [...data.pages].reverse().flatMap((page) => page) : []).map((msg) => {
+    if (msg.system_event && typeof msg.system_event === 'object') {
+      return { ...msg, system_event: (msg.system_event as Record<string, string>).type || msg.system_event };
+    }
+    return msg;
+  });
+
+  // Typing emit — 3s timeout refs
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false);
+
+  const handleTypingEmit = () => {
+    if (!isTypingRef.current) {
+      isTypingRef.current = true;
+      emitTypingStart(conversationId);
+    }
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      if (isTypingRef.current) {
+        isTypingRef.current = false;
+        emitTypingStop(conversationId);
+      }
+    }, 3000);
+  };
 
   // Subscribe to DM room on mount, unsubscribe on unmount or conversation change
   useEffect(() => {
@@ -62,7 +92,24 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
     }
   }, [messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Cleanup typing timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (isTypingRef.current) emitTypingStop(conversationId);
+    };
+  }, [conversationId]);
+
   const handleSendMessage = (content: string) => {
+    // Stop typing indicator on send
+    if (isTypingRef.current) {
+      isTypingRef.current = false;
+      emitTypingStop(conversationId);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+    }
     sendDM.mutate(content);
   };
   const endRef = useRef<HTMLDivElement>(null);
@@ -150,18 +197,40 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
           )}
 
           {groups.map((group) => (
-            <MessageGroup key={group[0].id} messages={group} />
+            <MessageGroup key={group[0].id} messages={group} channelId={conversationId} />
           ))}
           <div ref={endRef} />
         </Stack>
       </ScrollArea>
 
-      {/* Message input */}
-      <MessageInput
-        channelId={conversationId}
-        channelName={otherUser?.username || 'DM'}
-        onSendOverride={handleSendMessage}
-      />
+      {/* DM Typing Indicator */}
+      <DMTypingIndicator conversationId={conversationId} />
+
+      {/* Blocked User Banner */}
+      {isPartnerBlocked && (
+        <div style={{
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          background: 'var(--bg-secondary)',
+          borderTop: '1px solid var(--border)',
+        }}>
+          <IconBan size={20} style={{ color: 'var(--mantine-color-red-6)', flexShrink: 0 }} />
+          <Text size="sm" c="dimmed">You have blocked this user. You cannot send them messages.</Text>
+        </div>
+      )}
+
+      {/* Message input (hidden when blocked) */}
+      {!isPartnerBlocked && (
+        <MessageInput
+          channelId={conversationId}
+          channelName={otherUser?.username || 'DM'}
+          onSendOverride={handleSendMessage}
+          onTyping={handleTypingEmit}
+        />
+      )}
     </div>
   );
 }
@@ -245,6 +314,35 @@ function DMHeader({ username, status, statusColor, avatarUrl, conversationId }: 
         </ActionIcon>
       </Tooltip>
       <DMSettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} dmId={conversationId} />
+    </div>
+  );
+}
+
+const TYPING_TIMEOUT = 8000;
+
+/** Animated bouncing dots typing indicator for DMs. */
+function DMTypingIndicator({ conversationId }: { conversationId: string }) {
+  // Select raw array from state (stable ref) — never call getTyping in a selector
+  const typingEntries = useTypingStore((s) => s.typing[`dm:${conversationId}`]);
+  const typing = typingEntries
+    ? typingEntries.filter((t) => Date.now() - t.timestamp < TYPING_TIMEOUT)
+    : [];
+
+  if (typing.length === 0) return null;
+
+  const names = typing.map((t) => t.username);
+  const text = names.length === 1
+    ? `${names[0]} is typing...`
+    : `${names.join(' and ')} are typing...`;
+
+  return (
+    <div style={{ height: 24, padding: '0 16px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 3 }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-muted)', animation: 'bounce 1.4s ease-in-out infinite', animationDelay: '0ms' }} />
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-muted)', animation: 'bounce 1.4s ease-in-out infinite', animationDelay: '150ms' }} />
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-muted)', animation: 'bounce 1.4s ease-in-out infinite', animationDelay: '300ms' }} />
+      </div>
+      <Text size="xs" c="dimmed" fs="italic">{text}</Text>
     </div>
   );
 }

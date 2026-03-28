@@ -1,9 +1,13 @@
 import React from 'react';
+import { renderCustomEmojis } from './emojiRenderer';
 
 /**
  * Discord-style markdown parser.
  * Supports: code blocks, inline code, bold, italic, bold-italic,
  * underline, strikethrough, spoilers, blockquotes.
+ *
+ * When `withEmojis` is true, leaf text nodes pass through renderCustomEmojis
+ * to replace :shortcode: patterns with inline emoji images.
  *
  * Does NOT parse inside code blocks/inline code.
  */
@@ -149,28 +153,40 @@ function parseInlineMarkdown(text: string): MarkdownNode[] {
 
 // --- React rendering ---
 
-function RenderNode({ node }: { node: MarkdownNode }) {
+function renderLeafText(content: string, withEmojis: boolean): React.ReactNode {
+  if (withEmojis) {
+    const parts = renderCustomEmojis(content);
+    if (parts.length === 1 && typeof parts[0] === 'string') return parts[0];
+    return <>{parts}</>;
+  }
+  return content;
+}
+
+function RenderNode({ node, withEmojis = false }: { node: MarkdownNode; withEmojis?: boolean }) {
+  const renderChildren = (children: MarkdownNode[]) =>
+    children.map((child, i) => <RenderNode key={i} node={child} withEmojis={withEmojis} />);
+
   switch (node.type) {
     case 'text':
       if (node.children && node.children.length > 0 && !(node.children.length === 1 && node.children[0].type === 'text')) {
-        return <>{node.children.map((child, i) => <RenderNode key={i} node={child} />)}</>;
+        return <>{renderChildren(node.children)}</>;
       }
-      return <>{node.content}</>;
+      return <>{renderLeafText(node.content, withEmojis)}</>;
 
     case 'bold':
-      return <strong>{node.children?.map((child, i) => <RenderNode key={i} node={child} />) ?? node.content}</strong>;
+      return <strong>{node.children ? renderChildren(node.children) : renderLeafText(node.content, withEmojis)}</strong>;
 
     case 'italic':
-      return <em>{node.children?.map((child, i) => <RenderNode key={i} node={child} />) ?? node.content}</em>;
+      return <em>{node.children ? renderChildren(node.children) : renderLeafText(node.content, withEmojis)}</em>;
 
     case 'boldItalic':
-      return <strong><em>{node.children?.map((child, i) => <RenderNode key={i} node={child} />) ?? node.content}</em></strong>;
+      return <strong><em>{node.children ? renderChildren(node.children) : renderLeafText(node.content, withEmojis)}</em></strong>;
 
     case 'underline':
-      return <u>{node.children?.map((child, i) => <RenderNode key={i} node={child} />) ?? node.content}</u>;
+      return <u>{node.children ? renderChildren(node.children) : renderLeafText(node.content, withEmojis)}</u>;
 
     case 'strikethrough':
-      return <s>{node.children?.map((child, i) => <RenderNode key={i} node={child} />) ?? node.content}</s>;
+      return <s>{node.children ? renderChildren(node.children) : renderLeafText(node.content, withEmojis)}</s>;
 
     case 'spoiler':
       return (
@@ -178,7 +194,7 @@ function RenderNode({ node }: { node: MarkdownNode }) {
           className="md-spoiler"
           onClick={(e) => (e.currentTarget.classList.toggle('md-spoiler--revealed'))}
         >
-          {node.children?.map((child, i) => <RenderNode key={i} node={child} />) ?? node.content}
+          {node.children ? renderChildren(node.children) : renderLeafText(node.content, withEmojis)}
         </span>
       );
 
@@ -195,25 +211,28 @@ function RenderNode({ node }: { node: MarkdownNode }) {
     case 'blockquote':
       return (
         <blockquote className="md-blockquote">
-          {node.children?.map((child, i) => <RenderNode key={i} node={child} />) ?? node.content}
+          {node.children ? renderChildren(node.children) : renderLeafText(node.content, withEmojis)}
         </blockquote>
       );
 
     default:
-      return <>{node.content}</>;
+      return <>{renderLeafText(node.content, withEmojis)}</>;
   }
 }
 
 /**
  * Parse Discord-style markdown text and return React elements.
  * Call this on text segments only (not on mentions or images).
+ *
+ * When `withEmojis` is true, leaf text nodes pass through renderCustomEmojis
+ * to replace :shortcode: patterns with inline emoji images.
  */
-export function renderMarkdown(text: string): React.ReactNode {
+export function renderMarkdown(text: string, withEmojis = false): React.ReactNode {
   const nodes = extractCodeBlocks(text);
   return (
     <>
       {nodes.map((node, i) => (
-        <RenderNode key={i} node={node} />
+        <RenderNode key={i} node={node} withEmojis={withEmojis} />
       ))}
     </>
   );
