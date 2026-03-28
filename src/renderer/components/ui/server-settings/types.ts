@@ -142,6 +142,56 @@ export const ROLE_PERMISSIONS = {
   ],
 } as const;
 
+// ── Access Control Types ─────────────────────────────────────────────
+
+export interface AccessControlSettings {
+  signups_disabled: boolean;
+  member_approvals_enabled: boolean;
+  approvals_skip_for_invited: boolean;
+  denial_cooldown_hours: number;
+}
+
+export interface IntakeQuestion {
+  id: string;
+  label: string;
+  type: 'text' | 'textarea' | 'select' | 'checkbox';
+  required: boolean;
+  max_length?: number;
+  placeholder?: string;
+  options?: string[];
+}
+
+export interface IntakeFormConfig {
+  questions: IntakeQuestion[];
+}
+
+export interface Approval {
+  id: string;
+  user_id: string;
+  username: string;
+  email?: string;
+  avatar_url: string | null;
+  user_created_at?: string;
+  status: 'pending' | 'approved' | 'denied';
+  responses: Record<string, string | boolean>;
+  invite_code: string | null;
+  denial_reason: string | null;
+  created_at: string;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+}
+
+export interface BlacklistEntry {
+  id: string;
+  type: 'email' | 'ip';
+  value: string;
+  reason: string | null;
+  created_by: string | null;
+  created_by_username: string | null;
+  created_at: string;
+}
+
 export function hasBit(perms: string | number | undefined, bit: number): boolean {
   const n = Number(perms || 0);
   return (n & (1 << bit)) !== 0;
