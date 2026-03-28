@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ActionIcon, Badge, Button, Divider, Group, Loader, Modal, NumberInput, ScrollArea, Select, Slider, Stack, Switch, Text,
+  ActionIcon, Badge, Button, Divider, Group, Loader, Modal, NumberInput, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text,
   TextInput, Textarea, Tooltip,
 } from '@mantine/core';
 import { IconDownload, IconPlus, IconTrash, IconChevronDown, IconChevronUp, IconNetwork } from '@tabler/icons-react';
@@ -42,6 +42,17 @@ interface Relay {
 }
 
 const VOICE_CHANNEL_TYPES = ['voice', 'temp_voice', 'music', 'stage'];
+const BITRATE_PRESETS = [32, 64, 96, 128, 256];
+
+function snapToPreset(kbps: number): number {
+  let closest = BITRATE_PRESETS[0];
+  let minDiff = Math.abs(kbps - closest);
+  for (const p of BITRATE_PRESETS) {
+    const diff = Math.abs(kbps - p);
+    if (diff < minDiff) { closest = p; minDiff = diff; }
+  }
+  return closest;
+}
 
 interface PermissionOverride {
   id: string;
@@ -103,7 +114,7 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
     if (channel) {
       setName(channel.name || '');
       setTopic(channel.topic || '');
-      setBitrate(channel.bitrate ?? 64);
+      setBitrate(snapToPreset(channel.bitrate ?? 64));
       setUserLimit(channel.user_limit ?? 0);
       setVoiceRelayPolicy(channel.voice_relay_policy ?? 'auto');
       setPreferredRelayId(channel.preferred_relay_id ?? null);
@@ -277,20 +288,22 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
               <Divider label="Voice Settings" labelPosition="left" style={{ borderColor: 'var(--border)' }} />
 
               <div>
-                <Text size="sm" fw={500} mb={4}>Bitrate — {bitrate} kbps</Text>
-                <Slider
-                  value={bitrate}
-                  onChange={setBitrate}
-                  min={8}
-                  max={384}
-                  step={8}
-                  marks={[
-                    { value: 8, label: '8' },
-                    { value: 96, label: '96' },
-                    { value: 192, label: '192' },
-                    { value: 384, label: '384' },
+                <Text size="sm" fw={500} mb={4}>Voice Quality — {bitrate} kbps</Text>
+                <Text size="xs" c="dimmed" mb={8}>Higher bitrate uses more bandwidth but improves audio clarity</Text>
+                <SegmentedControl
+                  value={String(bitrate)}
+                  onChange={(v) => setBitrate(Number(v))}
+                  fullWidth
+                  data={[
+                    { value: '32', label: '32 kbps\nLow' },
+                    { value: '64', label: '64 kbps\nNormal' },
+                    { value: '96', label: '96 kbps\nHigh' },
+                    { value: '128', label: '128 kbps\nVery High' },
+                    { value: '256', label: '256 kbps\nStudio' },
                   ]}
-                  label={(v) => `${v} kbps`}
+                  styles={{
+                    label: { whiteSpace: 'pre-line', textAlign: 'center', lineHeight: 1.3, fontSize: 'var(--mantine-font-size-xs)', padding: '6px 4px' },
+                  }}
                 />
               </div>
 
