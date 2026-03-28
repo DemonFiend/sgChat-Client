@@ -18,7 +18,17 @@ export function MOTDDisplay({ motd, onDismiss }: MOTDDisplayProps) {
     }}>
       <Group gap={8} wrap="nowrap">
         <IconInfoCircle size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-        <Text size="xs" style={{ flex: 1, whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+        <Text
+          size="xs"
+          lineClamp={5}
+          style={{
+            flex: 1,
+            whiteSpace: 'pre-wrap',
+            lineHeight: 1.4,
+            maxHeight: `calc(1.4em * 5)`,
+            overflow: 'hidden',
+          }}
+        >
           {motd}
         </Text>
         {onDismiss && (

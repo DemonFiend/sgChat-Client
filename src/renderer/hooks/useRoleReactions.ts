@@ -35,7 +35,7 @@ export function useRoleReactions(serverId: string | null) {
       // Server returns `enabled`; map to `is_active` for the client interface
       return (res.groups || []).map((g) => ({
         ...g,
-        is_active: g.enabled ?? g.is_active ?? false,
+        is_active: g.enabled ?? g.is_active ?? true,
       })) as RoleReactionGroup[];
     },
     enabled: !!serverId,
@@ -97,7 +97,18 @@ export function useToggleRoleReactionGroup(serverId: string) {
   return useMutation({
     mutationFn: ({ groupId, enabled }: { groupId: string; enabled: boolean }) =>
       api.patch(`/api/servers/${serverId}/role-reactions/groups/${groupId}/toggle`, { enabled }),
-    onSuccess: () => {
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ['role-reactions', serverId] });
+      const previous = queryClient.getQueryData<RoleReactionGroup[]>(['role-reactions', serverId]);
+      queryClient.setQueryData<RoleReactionGroup[]>(['role-reactions', serverId], (old) =>
+        old?.map((g) => g.id === variables.groupId ? { ...g, is_active: variables.enabled } : g),
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['role-reactions', serverId], context.previous);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['role-reactions', serverId] });
     },
   });

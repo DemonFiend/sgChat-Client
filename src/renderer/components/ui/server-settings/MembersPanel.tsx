@@ -4,7 +4,7 @@ import {
   ActionIcon, Avatar, Badge, Button, Checkbox, Divider,
   Group, NumberInput, Select, SimpleGrid, Stack, Text, TextInput, Textarea, Tooltip,
 } from '@mantine/core';
-import { IconBan, IconClock, IconUserMinus } from '@tabler/icons-react';
+import { IconBan, IconClock, IconClockOff, IconUserMinus } from '@tabler/icons-react';
 import { api } from '../../../lib/api';
 import { queryClient } from '../../../lib/queryClient';
 import { toastStore } from '../../../stores/toastNotifications';
@@ -290,6 +290,24 @@ export function MembersPanel({ serverId }: { serverId: string }) {
     if (timeoutMemberId !== userId) setSelectedMemberId(null);
   };
 
+  const handleRemoveTimeout = async (userId: string) => {
+    try {
+      await api.patch(`/api/servers/${serverId}/members/${userId}/timeout`, { timeout_until: null });
+      toastStore.addToast({
+        type: 'system',
+        title: 'Timeout Removed',
+        message: 'Timeout has been removed from the user.',
+      });
+      queryClient.invalidateQueries({ queryKey: ['members', serverId] });
+    } catch (err) {
+      toastStore.addToast({
+        type: 'warning',
+        title: 'Remove Timeout Failed',
+        message: (err as Error)?.message || 'Could not remove timeout.',
+      });
+    }
+  };
+
   return (
     <Stack gap={16}>
       <Group justify="space-between">
@@ -330,16 +348,29 @@ export function MembersPanel({ serverId }: { serverId: string }) {
                   <Text size="sm" truncate>{member.display_name || member.username}</Text>
                 </div>
                 <Group gap={4}>
-                  <Tooltip label="Timeout" withArrow>
-                    <ActionIcon
-                      variant={timeoutMemberId === memberId ? 'light' : 'subtle'}
-                      color="yellow"
-                      size={24}
-                      onClick={(e) => { e.stopPropagation(); handleToggleTimeout(memberId); }}
-                    >
-                      <IconClock size={14} />
-                    </ActionIcon>
-                  </Tooltip>
+                  {member.timeout_until && new Date(member.timeout_until) > new Date() ? (
+                    <Tooltip label="Remove Timeout" withArrow>
+                      <ActionIcon
+                        variant="light"
+                        color="green"
+                        size={24}
+                        onClick={(e) => { e.stopPropagation(); handleRemoveTimeout(memberId); }}
+                      >
+                        <IconClockOff size={14} />
+                      </ActionIcon>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip label="Timeout" withArrow>
+                      <ActionIcon
+                        variant={timeoutMemberId === memberId ? 'light' : 'subtle'}
+                        color="yellow"
+                        size={24}
+                        onClick={(e) => { e.stopPropagation(); handleToggleTimeout(memberId); }}
+                      >
+                        <IconClock size={14} />
+                      </ActionIcon>
+                    </Tooltip>
+                  )}
                   <Tooltip label="Kick" withArrow>
                     <ActionIcon variant="subtle" color="orange" size={24} onClick={(e) => { e.stopPropagation(); handleKick(memberId); }}>
                       <IconUserMinus size={14} />

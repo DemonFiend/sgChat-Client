@@ -50,6 +50,9 @@ export function RoleReactionEmbed({ roles, serverId, userRoleIds }: RoleReaction
         borderRadius: 8,
         background: 'var(--bg-secondary)',
         border: '1px solid var(--border)',
+        maxWidth: '100%',
+        overflow: 'hidden',
+        boxSizing: 'border-box',
       }}
     >
       <Text size="xs" fw={600} c="dimmed" mb={8}>

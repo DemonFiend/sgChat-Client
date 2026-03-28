@@ -156,7 +156,7 @@ export function ChatPanel() {
         {activeChannel?.topic && (
           <>
             <div style={{ width: 1, height: 20, background: 'var(--border)', position: 'relative', zIndex: 2 }} />
-            <Text size="xs" c="dimmed" truncate style={{ flex: 1, maxWidth: 300, position: 'relative', zIndex: 2 }}>
+            <Text size="xs" c="dimmed" truncate style={{ flex: 1, maxWidth: 450, position: 'relative', zIndex: 2 }}>
               {activeChannel.topic}
             </Text>
           </>

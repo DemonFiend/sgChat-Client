@@ -19,6 +19,7 @@ export interface Member {
   avatar_url?: string;
   roles?: { id: string; name: string; color?: string | null; position: number }[];
   joined_at?: string;
+  timeout_until?: string | null;
 }
 
 export interface Channel {

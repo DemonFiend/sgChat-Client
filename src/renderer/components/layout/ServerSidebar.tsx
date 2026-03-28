@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { ActionIcon, Avatar, Indicator, ScrollArea, Stack, Tooltip, Divider } from '@mantine/core';
-import { IconHome, IconPlus } from '@tabler/icons-react';
+import { IconHome, IconPlus, IconLogin } from '@tabler/icons-react';
 import { useServers, type Server } from '../../hooks/useServers';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { CreateServerModal } from '../ui/CreateServerModal';
+import { JoinServerModal } from '../ui/JoinServerModal';
 
 export function ServerSidebar() {
   const { data: servers } = useServers();
@@ -13,6 +14,7 @@ export function ServerSidebar() {
   const setView = useUIStore((s) => s.setView);
   const view = useUIStore((s) => s.view);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [joinModalOpen, setJoinModalOpen] = useState(false);
   const totalDMUnread = useUnreadStore((s) => {
     const dm = s.dmUnreads;
     let sum = 0;
@@ -93,7 +95,7 @@ export function ServerSidebar() {
           ))}
 
           {/* Add server button */}
-          <Tooltip label="Add Server" position="right" withArrow>
+          <Tooltip label="Create Server" position="right" withArrow>
             <ActionIcon
               variant="subtle"
               color="green"
@@ -105,6 +107,20 @@ export function ServerSidebar() {
               <IconPlus size={24} />
             </ActionIcon>
           </Tooltip>
+
+          {/* Join server button */}
+          <Tooltip label="Join Server" position="right" withArrow>
+            <ActionIcon
+              variant="subtle"
+              color="blue"
+              size={48}
+              radius="xl"
+              style={{ transition: 'border-radius 0.2s' }}
+              onClick={() => setJoinModalOpen(true)}
+            >
+              <IconLogin size={24} />
+            </ActionIcon>
+          </Tooltip>
         </Stack>
       </ScrollArea>
 
@@ -112,6 +128,12 @@ export function ServerSidebar() {
         opened={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
         onCreated={(server) => setActiveServer(server.id)}
+      />
+
+      <JoinServerModal
+        opened={joinModalOpen}
+        onClose={() => setJoinModalOpen(false)}
+        onJoined={(server) => setActiveServer(server.id)}
       />
     </div>
   );

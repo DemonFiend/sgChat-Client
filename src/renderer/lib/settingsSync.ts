@@ -15,6 +15,7 @@ export interface RemoteSettings {
   auto_gain_control?: boolean;
   vad?: boolean;
   ai_noise_suppression?: boolean;
+  input_sensitivity?: number;
   input_volume?: number;
   output_volume?: number;
   join_sound_enabled?: boolean;

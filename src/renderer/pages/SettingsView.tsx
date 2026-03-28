@@ -1050,6 +1050,12 @@ function NotificationSettings() {
   const setMentionOnly = useNotificationSettingsStore((s) => s.setMentionOnly);
   const [autoStart, setAutoStart] = useState(false);
 
+  useEffect(() => {
+    electronAPI?.getAutoStart?.().then((val: boolean) => {
+      if (typeof val === 'boolean') setAutoStart(val);
+    }).catch(() => {});
+  }, []);
+
   return (
     <Stack gap={24}>
       <Text size="xl" fw={700}>Notifications</Text>
@@ -1212,6 +1218,8 @@ function VoiceSettings() {
   const setEchoCancellationSetting = useVoiceSettingsStore((s) => s.setEchoCancellation);
   const setAutoGainControlSetting = useVoiceSettingsStore((s) => s.setAutoGainControl);
   const setVadSetting = useVoiceSettingsStore((s) => s.setVad);
+  const inputSensitivity = useVoiceSettingsStore((s) => s.inputSensitivity);
+  const setInputSensitivitySetting = useVoiceSettingsStore((s) => s.setInputSensitivity);
   const aiNoiseSuppression = useVoiceSettingsStore((s) => s.aiNoiseSuppression);
   const setAiNoiseSuppressionSetting = useVoiceSettingsStore((s) => s.setAiNoiseSuppression);
   const validateDevices = useVoiceSettingsStore((s) => s.validateDevices);
@@ -1453,6 +1461,30 @@ function VoiceSettings() {
         checked={vad}
         onChange={(e) => setVadSetting(e.currentTarget.checked)}
       />
+
+      {vad && (
+        <div>
+          <Text size="sm" fw={500} mb={4}>Input Sensitivity</Text>
+          <Text size="xs" c="dimmed" mb={8}>
+            Audio below this threshold will be ignored. Lower values pick up more sound.
+          </Text>
+          <Slider
+            value={inputSensitivity}
+            onChange={setInputSensitivitySetting}
+            min={0}
+            max={100}
+            step={1}
+            marks={[
+              { value: 0, label: '0' },
+              { value: 25, label: '25' },
+              { value: 50, label: '50' },
+              { value: 75, label: '75' },
+              { value: 100, label: '100' },
+            ]}
+            label={(v) => `${v}%`}
+          />
+        </div>
+      )}
 
       <div>
         <Group gap={8} mb={4}>

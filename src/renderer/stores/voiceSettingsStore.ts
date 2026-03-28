@@ -13,6 +13,7 @@ interface VoiceSettingsData {
   autoGainControl: boolean;
   vad: boolean;
   aiNoiseSuppression: boolean;
+  inputSensitivity: number;
   joinSoundEnabled: boolean;
   leaveSoundEnabled: boolean;
   joinSoundUrl: string | null;
@@ -29,6 +30,7 @@ interface VoiceSettingsState extends VoiceSettingsData {
   setAutoGainControl: (enabled: boolean) => void;
   setVad: (enabled: boolean) => void;
   setAiNoiseSuppression: (enabled: boolean) => void;
+  setInputSensitivity: (value: number) => void;
   setJoinSoundEnabled: (enabled: boolean) => void;
   setLeaveSoundEnabled: (enabled: boolean) => void;
   setJoinSoundUrl: (url: string | null) => void;
@@ -52,6 +54,7 @@ const DEFAULTS: VoiceSettingsData = {
   autoGainControl: true,
   vad: true,
   aiNoiseSuppression: false,
+  inputSensitivity: 50,
   joinSoundEnabled: true,
   leaveSoundEnabled: true,
   joinSoundUrl: null,
@@ -85,6 +88,7 @@ const SYNCABLE_KEYS: Partial<Record<keyof VoiceSettingsData, keyof RemoteSetting
   autoGainControl: 'auto_gain_control',
   vad: 'vad',
   aiNoiseSuppression: 'ai_noise_suppression',
+  inputSensitivity: 'input_sensitivity',
   inputVolume: 'input_volume',
   outputVolume: 'output_volume',
   joinSoundEnabled: 'join_sound_enabled',
@@ -115,6 +119,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set) => ({
   setAutoGainControl: (enabled) => set(autoPersist('autoGainControl')(enabled)),
   setVad: (enabled) => set(autoPersist('vad')(enabled)),
   setAiNoiseSuppression: (enabled) => set(autoPersist('aiNoiseSuppression')(enabled)),
+  setInputSensitivity: (value) => set(autoPersist('inputSensitivity')(value)),
   setJoinSoundEnabled: (enabled) => set(autoPersist('joinSoundEnabled')(enabled)),
   setLeaveSoundEnabled: (enabled) => set(autoPersist('leaveSoundEnabled')(enabled)),
   setJoinSoundUrl: (url) => set(autoPersist('joinSoundUrl')(url)),
@@ -143,6 +148,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set) => ({
     if (remote.auto_gain_control !== undefined) updates.autoGainControl = remote.auto_gain_control;
     if (remote.vad !== undefined) updates.vad = remote.vad;
     if (remote.ai_noise_suppression !== undefined) updates.aiNoiseSuppression = remote.ai_noise_suppression;
+    if (remote.input_sensitivity !== undefined) updates.inputSensitivity = remote.input_sensitivity;
     if (remote.input_volume !== undefined) updates.inputVolume = remote.input_volume;
     if (remote.output_volume !== undefined) updates.outputVolume = remote.output_volume;
     if (remote.join_sound_enabled !== undefined) updates.joinSoundEnabled = remote.join_sound_enabled;

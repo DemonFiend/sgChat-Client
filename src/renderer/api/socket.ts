@@ -20,6 +20,8 @@ import {
   clearSession as clearCryptoSession, getSessionId,
 } from '../lib/crypto';
 
+import { activateSSE, deactivateSSE, isSSEActive } from '../lib/sseGateway';
+
 const electronAPI = (window as any).electronAPI;
 
 let socket: Socket | null = null;
@@ -27,6 +29,29 @@ let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 let gatewaySessionId: string | null = null;
 let lastSequences: Record<string, number> = {};
 let unsubCryptoRefresh: (() => void) | null = null;
+
+/** Monotonic timestamp of the last received event (ms since epoch). Used for resync. */
+let lastEventTimestamp = 0;
+
+/** Number of consecutive Socket.IO connection failures. */
+let consecutiveSocketFailures = 0;
+
+/** Threshold of Socket.IO failures before activating SSE fallback. */
+const SSE_FALLBACK_THRESHOLD = 3;
+
+// ── Timestamp tracking for resync ────────────────────────────────
+
+/** Get the timestamp of the last successfully received event. */
+export function getLastEventTimestamp(): number {
+  return lastEventTimestamp;
+}
+
+/** Update the last event timestamp (called by SSE gateway too). */
+export function setLastEventTimestamp(ts: number): void {
+  if (ts > lastEventTimestamp) {
+    lastEventTimestamp = ts;
+  }
+}
 
 export function getSocket(): Socket | null {
   return socket;
@@ -66,6 +91,13 @@ export async function connectSocket(): Promise<void> {
       ? await cryptoDecrypt(rawData) : rawData;
 
     gatewaySessionId = data.session_id || null;
+
+    // Socket.IO connected successfully — reset failure counter & deactivate SSE
+    consecutiveSocketFailures = 0;
+    if (isSSEActive()) {
+      console.info('[socket] Socket.IO reconnected — deactivating SSE fallback');
+      deactivateSSE();
+    }
 
     // Start heartbeat
     if (heartbeatInterval) clearInterval(heartbeatInterval);
@@ -126,10 +158,18 @@ export async function connectSocket(): Promise<void> {
     payload: any;
     sequence: number;
     resource_id?: string;
+    timestamp?: number;
   }) => {
     // Track per-resource sequences
     if (envelope.resource_id) {
       lastSequences[envelope.resource_id] = envelope.sequence;
+    }
+
+    // Track event timestamp for resync
+    if (envelope.timestamp) {
+      setLastEventTimestamp(envelope.timestamp);
+    } else {
+      setLastEventTimestamp(Date.now());
     }
 
     // Decrypt payload if encrypted
@@ -154,6 +194,16 @@ export async function connectSocket(): Promise<void> {
   });
 
   socket.on('connect_error', async (err: Error) => {
+    consecutiveSocketFailures++;
+
+    // Activate SSE fallback after repeated failures
+    if (consecutiveSocketFailures >= SSE_FALLBACK_THRESHOLD && !isSSEActive()) {
+      console.warn(
+        `[socket] ${consecutiveSocketFailures} consecutive failures — activating SSE fallback`,
+      );
+      activateSSE();
+    }
+
     if (err.message === 'jwt expired' || err.message?.includes('jwt')) {
       const result = await electronAPI.auth.refreshToken();
       if (result.success) {
@@ -179,6 +229,9 @@ export async function connectSocket(): Promise<void> {
           session_id: gatewaySessionId,
           last_sequences: lastSequences,
         });
+
+        // Resync missed events via REST if we have a timestamp reference
+        resyncMissedEvents();
       });
     }
   });
@@ -195,6 +248,38 @@ export async function connectSocket(): Promise<void> {
   );
 }
 
+/**
+ * Fetch events missed during disconnection via REST endpoint.
+ * Requires server endpoint: GET /api/events/since?timestamp={ms}
+ * Falls back silently if the endpoint does not exist.
+ */
+async function resyncMissedEvents(): Promise<void> {
+  if (lastEventTimestamp <= 0) return;
+
+  try {
+    const res = await electronAPI.api.request(
+      'GET',
+      `/api/events/since?timestamp=${lastEventTimestamp}`,
+    );
+
+    if (!res.ok || !Array.isArray(res.data)) return;
+
+    for (const envelope of res.data as Array<{
+      type: string;
+      payload: unknown;
+      timestamp?: number;
+    }>) {
+      if (envelope.timestamp) {
+        setLastEventTimestamp(envelope.timestamp);
+      }
+      handleEvent(envelope.type, envelope.payload);
+    }
+  } catch {
+    // Endpoint may not exist yet — fail silently
+    console.debug('[socket] Event resync endpoint not available');
+  }
+}
+
 export function disconnectSocket(): void {
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval);
@@ -204,12 +289,17 @@ export function disconnectSocket(): void {
     unsubCryptoRefresh();
     unsubCryptoRefresh = null;
   }
+  // Shut down SSE fallback if active
+  deactivateSSE();
+  consecutiveSocketFailures = 0;
+
   if (socket) {
     socket.disconnect();
     socket = null;
   }
   gatewaySessionId = null;
   lastSequences = {};
+  lastEventTimestamp = 0;
   clearCryptoSession();
 }
 
@@ -223,7 +313,9 @@ function isAfkChannel(channelId: string): boolean {
   return false;
 }
 
-function handleEvent(type: string, data: any): void {
+/** Route a realtime event to the appropriate store/cache handler.
+ *  Exported so the SSE fallback gateway can dispatch events through the same path. */
+export function handleEvent(type: string, data: any): void {
   switch (type) {
     // Messages — invalidate query cache + track unreads
     case 'message.new': {

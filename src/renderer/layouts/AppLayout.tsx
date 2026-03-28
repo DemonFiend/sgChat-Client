@@ -16,6 +16,7 @@ import { ServerAdminView } from '../pages/ServerAdminView';
 import { CommandPalette } from '../components/ui/CommandPalette';
 import { DMCallStatusBar } from '../components/ui/DMCallStatusBar';
 import { GlobalIncomingCall } from '../components/ui/GlobalIncomingCall';
+import { SSEFallbackBadge } from '../components/ui/SSEFallbackBadge';
 
 export function AppLayout() {
   const view = useUIStore((s) => s.view);
@@ -68,6 +69,7 @@ export function AppLayout() {
       </div>
       <CommandPalette />
       <GlobalIncomingCall />
+      <SSEFallbackBadge />
     </div>
   );
 }
