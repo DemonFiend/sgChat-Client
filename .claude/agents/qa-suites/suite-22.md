@@ -363,6 +363,103 @@ ASSERT:
   3. Event text describes the action (e.g. "joined the channel", "created the channel")
 ```
 
+### Slash Command Autocomplete Parity
+
+#### 22.24 — Type `/` in message input → slash command autocomplete appears
+```
+PARITY CHECK: Server web UI has SlashCommandAutocomplete. Client must match.
+
+ACTION:
+  1. Navigate to a text channel
+  2. window.locator('textarea[placeholder*="Message"]').click()
+  3. window.locator('textarea[placeholder*="Message"]').fill('/')
+  4. Wait 1 second
+  5. window.screenshot({ path: 'qa-screenshots/s22-24-slash-autocomplete.png' })
+
+ASSERT:
+  1. Autocomplete popup appears above or below the input
+  2. At least one slash command visible (e.g. /shrug, /tableflip, /tts, or server-defined)
+  3. Each command shows: name and description
+  4. Popup styled consistently (same border, background as other autocompletes)
+
+CLEANUP:
+  1. Press Escape to close autocomplete
+  2. Clear the input
+```
+
+#### 22.25 — Select slash command from autocomplete → replaces text
+```
+ACTION:
+  1. window.locator('textarea[placeholder*="Message"]').fill('/')
+  2. Wait for autocomplete popup
+  3. Click the first command in the list (or press Enter/Tab)
+  4. Wait 1 second
+  5. window.screenshot({ path: 'qa-screenshots/s22-25-slash-selected.png' })
+
+ASSERT:
+  1. Input text updated with the selected command (e.g. "/shrug" or command output)
+  2. Autocomplete popup closed after selection
+  3. Cursor at end of inserted text
+
+CLEANUP:
+  1. Clear the input (Ctrl+A, Backspace)
+```
+
+#### 22.26 — Slash command with no match → empty state or filtered list
+```
+ACTION:
+  1. window.locator('textarea[placeholder*="Message"]').fill('/zzzznonexistent')
+  2. Wait 1 second
+  3. window.screenshot({ path: 'qa-screenshots/s22-26-slash-no-match.png' })
+
+ASSERT:
+  1. Either: autocomplete shows "No commands found" / empty state
+  2. Or: autocomplete popup does not appear (filtered to zero results)
+  3. No error or crash
+
+CLEANUP:
+  1. Clear input
+```
+
+### Sticker Picker Parity
+
+#### 22.27 — Sticker picker accessible from message input toolbar
+```
+PARITY CHECK: Server web UI has StickerPicker. Client must have matching UI.
+
+ACTION:
+  1. Look for sticker button near message input (icon: sticker/square-face)
+  2. Click the sticker button
+  3. Wait 2 seconds
+  4. window.screenshot({ path: 'qa-screenshots/s22-27-sticker-picker.png' })
+
+ASSERT:
+  1. Sticker picker panel opens
+  2. Panel shows sticker categories or packs (if any exist on server)
+  3. If no stickers: empty state with message like "No stickers available"
+  4. Picker has search functionality or category navigation
+  5. Close button or click-outside dismisses picker
+
+CLEANUP:
+  1. Close the sticker picker
+```
+
+#### 22.28 — Select sticker → sends as message
+```
+PRECONDITION: Sticker picker open, at least one sticker available
+
+ACTION:
+  1. Click a sticker in the picker
+  2. Wait 3 seconds for message to send
+  3. window.screenshot({ path: 'qa-screenshots/s22-28-sticker-sent.png' })
+
+ASSERT:
+  1. Sticker picker closes after selection
+  2. Message sent containing the sticker (image URL or sticker content)
+  3. Sticker renders in chat as an image, not raw text
+  4. No error toast
+```
+
 ### Final Cleanup
 ```
 Ensure we're logged in as qa_admin on server view.

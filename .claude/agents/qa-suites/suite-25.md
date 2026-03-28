@@ -396,10 +396,147 @@ ASSERT:
   4. No error toast
 ```
 
+### Soundboard Config Parity
+
+#### 25.26 — Soundboard settings tab accessible in Server Settings
+```
+PARITY CHECK: Server web UI has soundboard configuration. Client must match.
+
+ACTION:
+  1. Open Server Settings modal (Admin dropdown → Server Settings)
+  2. Look for a Soundboard tab or section
+  3. Click it
+  4. Wait 2 seconds
+  5. window.screenshot({ path: 'qa-screenshots/s25-26-soundboard-config.png' })
+
+ASSERT:
+  1. Soundboard config section visible
+  2. Toggle: Enable/disable soundboard for server
+  3. Setting: max sounds per user (number input)
+  4. Setting: max sound duration in seconds (number input)
+  5. Setting: max sound file size (number input or display)
+  6. Save button present
+```
+
+#### 25.27 — Soundboard settings save and persist
+```
+ACTION:
+  1. Note current soundboard enabled state
+  2. Toggle the enabled switch
+  3. Click Save
+  4. Wait 2 seconds
+  5. Close Server Settings
+  6. Reopen Server Settings → Soundboard tab
+  7. window.screenshot({ path: 'qa-screenshots/s25-27-soundboard-persisted.png' })
+
+ASSERT:
+  1. Toggle state persisted (matches what we set)
+  2. No error toast on save
+
+CLEANUP:
+  1. Restore original soundboard enabled state
+  2. Save
+```
+
+### Moderation Workflow Parity
+
+#### 25.28 — Timeout modal accessible from member context menu
+```
+PARITY CHECK: Server web UI has TimeoutModal with preset durations. Client must match.
+
+ACTION:
+  1. Navigate to member list on server view
+  2. Right-click qa_user in the member list
+  3. Look for "Timeout" option in context menu
+  4. Click "Timeout"
+  5. Wait 2 seconds
+  6. window.screenshot({ path: 'qa-screenshots/s25-28-timeout-modal.png' })
+
+ASSERT:
+  1. Timeout modal opens
+  2. Target user name shown in modal header
+  3. Preset duration buttons visible: 60s, 5m, 10m, 1h, 1d, 1w
+  4. Custom duration input with unit selector
+  5. Reason textarea
+  6. Timeout and Cancel buttons
+
+CLEANUP:
+  1. Click Cancel to close without timing out
+```
+
+#### 25.29 — Warning history modal shows action timeline
+```
+PARITY CHECK: Server web UI has WarningsModal with color-coded timeline. Client must match.
+
+ACTION:
+  1. Right-click qa_user in member list
+  2. Look for "View Warnings" or "Moderation History" option
+  3. Click it
+  4. Wait 2 seconds
+  5. window.screenshot({ path: 'qa-screenshots/s25-29-warnings-modal.png' })
+
+ASSERT:
+  1. Warnings/history modal opens
+  2. Shows timeline of moderation actions (or empty state "No actions on record")
+  3. If entries exist: each shows type icon (warn=yellow, timeout=amber, kick=pink, ban=red)
+  4. Each entry shows: reason, moderator name, timestamp
+  5. Close button works
+
+CLEANUP:
+  1. Close the warnings modal
+```
+
+### Channel Settings Modal Parity
+
+#### 25.30 — Channel settings modal matches server feature set
+```
+PARITY CHECK: Server web UI has ChannelSettingsModal with name, topic, bitrate, permissions. Client must match.
+
+ACTION:
+  1. Navigate to a voice channel in the sidebar
+  2. Hover the channel → click the gear/settings icon
+  3. Wait 2 seconds
+  4. window.screenshot({ path: 'qa-screenshots/s25-30-channel-settings.png' })
+
+ASSERT:
+  1. Channel settings modal opens with General and Permissions tabs
+  2. General tab shows: channel name input, topic/description
+  3. For voice channels: bitrate slider, user limit, relay policy selector
+  4. Permissions tab accessible
+  5. Save and Cancel buttons present
+  6. Modal matches server web UI layout (same fields in same order)
+
+CLEANUP:
+  1. Cancel to close without changes
+```
+
+### Webhook Management Parity
+
+#### 25.31 — Webhooks section accessible in Server Settings
+```
+PARITY CHECK: Server web UI allows creating/managing webhooks. Client must match.
+
+ACTION:
+  1. Open Server Settings modal
+  2. Navigate to Webhooks tab/section
+  3. Wait 2 seconds
+  4. window.screenshot({ path: 'qa-screenshots/s25-31-webhooks.png' })
+
+ASSERT:
+  1. Webhooks section visible
+  2. "Create Webhook" button present
+  3. If webhooks exist: list shows name, channel, avatar, URL (partially hidden)
+  4. Each webhook has edit/delete actions
+
+NOTE: If Webhooks tab doesn't exist in client yet, file a bead:
+  bd create --title="Webhooks management missing from client Server Settings" --type=bug --priority=3
+```
+
 ### Final Cleanup
 ```
 Ensure impersonation is stopped.
 Ensure we're logged in as qa_admin on server view.
 Delete any test roles or events created during this suite.
 Restore channel order if changed.
+Restore soundboard settings to original state.
 ```

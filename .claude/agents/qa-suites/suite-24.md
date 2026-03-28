@@ -216,9 +216,95 @@ ASSERT:
   4. Focus returns to the main app
 ```
 
+### Notification Panel Parity
+
+#### 24.14 — Bell icon in TitleBar opens notification panel
+```
+PARITY CHECK: Server web UI has NotificationPanel with unread/read sections. Client must match.
+
+ACTION:
+  1. Locate the bell icon in the TitleBar (right side, near window controls)
+  2. Check for unread count badge on the bell
+  3. window.screenshot({ path: 'qa-screenshots/s24-14-bell-before.png' })
+  4. Click the bell icon
+  5. Wait 2 seconds
+  6. window.screenshot({ path: 'qa-screenshots/s24-14-notification-panel.png' })
+
+ASSERT:
+  1. Notification panel opens (fixed position, slides in or appears)
+  2. Panel has a header with title ("Notifications" or similar)
+  3. Panel shows either notifications or an empty state
+  4. Close button (X) visible in panel header
+```
+
+#### 24.15 — Notification panel shows unread and read sections
+```
+ACTION:
+  1. With notification panel open, examine the content
+  2. window.screenshot({ path: 'qa-screenshots/s24-15-notif-sections.png' })
+
+ASSERT:
+  1. If notifications exist: unread notifications appear at top, read below
+  2. Each notification shows: content text, timestamp, source (channel/user)
+  3. "Mark All Read" button visible if unread notifications exist
+  4. Individual notification has mark-as-read (checkmark) and delete (trash) icons
+  5. If no notifications: empty state text like "No notifications" or "All caught up"
+```
+
+#### 24.16 — Mark all read clears unread section
+```
+PRECONDITION: At least one unread notification exists
+
+ACTION:
+  1. Click "Mark All Read" button
+  2. Wait 1 second
+  3. window.screenshot({ path: 'qa-screenshots/s24-16-marked-read.png' })
+
+ASSERT:
+  1. Unread section is now empty (all moved to read section)
+  2. Unread count badge on bell icon updated (removed or shows 0)
+  3. No error toast
+```
+
+#### 24.17 — Close notification panel
+```
+ACTION:
+  1. Click the X button on the notification panel
+  2. Wait 1 second
+  3. window.screenshot({ path: 'qa-screenshots/s24-17-panel-closed.png' })
+
+ASSERT:
+  1. Notification panel is no longer visible
+  2. Main app content visible behind
+  3. Bell icon still visible in TitleBar
+```
+
+### Toast System Parity
+
+#### 24.18 — Toast notifications appear and auto-dismiss
+```
+PARITY CHECK: Server web UI uses NotificationToast with Framer Motion. Client must match.
+
+ACTION:
+  1. Trigger a toast by performing an action that creates one (e.g. copy message text,
+     pin a message, or send a message that triggers a success toast)
+  2. Wait 1 second
+  3. window.screenshot({ path: 'qa-screenshots/s24-18-toast.png' })
+  4. Wait 5 seconds for auto-dismiss
+  5. window.screenshot({ path: 'qa-screenshots/s24-18-toast-dismissed.png' })
+
+ASSERT:
+  1. Toast appears in a consistent position (top-right or bottom-right)
+  2. Toast shows: icon, title/message text
+  3. Toast has appropriate color for type (success=green, warning=yellow, error=red)
+  4. Toast auto-dismisses after timeout (~5 seconds)
+  5. Second screenshot shows toast is gone
+```
+
 ### Final Cleanup
 ```
 Ensure command palette is closed.
+Ensure notification panel is closed.
 Ensure we're logged in as qa_admin on server view.
 Clear any unread badges by visiting affected channels.
 ```

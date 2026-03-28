@@ -362,10 +362,132 @@ CLEANUP:
   2. Return to normal DM view
 ```
 
+### Screen Share Parity
+
+#### 26.19 — Screen share button visible when in voice channel
+```
+PARITY CHECK: Server web UI has screen share. Client must match with Electron-enhanced picker.
+REQUIRES LIVEKIT
+
+ACTION:
+  1. Join a voice channel
+  2. Wait for connected state
+  3. Look for screen share button in voice controls (VoiceConnectedBar or VoiceControls)
+  4. window.screenshot({ path: 'qa-screenshots/s26-19-screenshare-btn.png' })
+
+ASSERT:
+  1. Screen share button visible (monitor/screen icon)
+  2. Button has tooltip ("Share Screen" or similar)
+  3. Button is clickable (not disabled)
+  4. Button styling matches server web UI's screen share button placement
+```
+
+#### 26.20 — Screen share picker opens with source selection
+```
+REQUIRES LIVEKIT
+
+ACTION:
+  1. Click the screen share button
+  2. Wait 3 seconds for source enumeration
+  3. window.screenshot({ path: 'qa-screenshots/s26-20-screenshare-picker.png' })
+
+ASSERT:
+  1. Screen share picker modal opens
+  2. Sources displayed with thumbnails (screens and/or windows)
+  3. Server web UI has basic getDisplayMedia picker; client has enhanced picker with:
+     - Screens and Apps tabs (Electron enhancement)
+     - Audio mode selector (Electron-only: App Audio option)
+     - Minimized window support (Windows only)
+  4. Share and Cancel buttons present
+
+CLEANUP:
+  1. Click Cancel to close picker without sharing
+```
+
+#### 26.21 — Screen share audio mode options (Electron-only enhancement)
+```
+REQUIRES LIVEKIT
+
+ACTION:
+  1. Click screen share button → picker opens
+  2. Select a window source (not a screen)
+  3. Look for audio mode selector
+  4. window.screenshot({ path: 'qa-screenshots/s26-21-audio-modes.png' })
+
+ASSERT:
+  1. Audio mode selector visible with options:
+     - "No Audio" (always available)
+     - "App Audio" (Windows only — if on Windows, should be available for window sources)
+     - "System Audio" (captures all system sound)
+  2. For window sources on Windows: "App Audio" auto-selected
+  3. Server web UI only has "No Audio" and "System Audio" — "App Audio" is Electron-only enhancement
+  4. Helper text explains each mode
+
+CLEANUP:
+  1. Cancel screen share picker
+```
+
+### Noise Suppression Parity
+
+#### 26.22 — Noise suppression toggle exists in Voice settings
+```
+PARITY CHECK: Server web UI has DTLN noise suppression toggle. Client has RNNoise toggle. Both should be in same settings location.
+
+ACTION:
+  1. Navigate to Settings → Voice & Video tab
+  2. Scroll to find noise suppression controls
+  3. window.screenshot({ path: 'qa-screenshots/s26-22-noise-suppression.png' })
+
+ASSERT:
+  1. "AI Noise Suppression" toggle visible (or similar label)
+  2. Toggle is interactive (can be clicked to change state)
+  3. Description text explains what it does
+  4. Toggle position in settings matches server web UI placement (same tab, similar section)
+  5. Browser-level noise suppression toggle also present as separate option
+```
+
+#### 26.23 — Noise suppression toggle persists across settings close/reopen
+```
+ACTION:
+  1. Note current AI noise suppression state
+  2. Toggle it (click the switch)
+  3. window.screenshot({ path: 'qa-screenshots/s26-23-ns-toggled.png' })
+  4. Navigate away from Settings (click Server tab)
+  5. Navigate back to Settings → Voice & Video
+  6. window.screenshot({ path: 'qa-screenshots/s26-23-ns-persisted.png' })
+
+ASSERT:
+  1. Toggle state matches what we set (persisted)
+  2. Setting synced to server (matches server web UI if checked)
+
+CLEANUP:
+  1. Restore original noise suppression state
+  2. Navigate back to server view
+```
+
+#### 26.24 — Noise suppression implementation note (RNNoise vs DTLN)
+```
+PARITY NOTE: This is a documentation/awareness test, not a functional test.
+
+The server web UI uses DTLN (Deep Temporal-Lightweight Network) for noise suppression.
+The Electron client uses RNNoise (Recurrent Neural Network Noise Suppression via WASM).
+
+Both implementations serve the same purpose but are different under the hood.
+The user-facing toggle should behave identically:
+  - Toggle ON → mic audio processed through NS before publishing
+  - Toggle OFF → raw mic audio published
+  - Setting persists across sessions
+  - Only applies on next voice join (not live-switched)
+
+If behavior differs between server web UI and client, file a bead:
+  bd create --title="Noise suppression behavior differs between web and Electron client" --type=bug --priority=2
+```
+
 ### Final Cleanup
 ```
 Disconnect from any voice channels.
 Ensure we're logged in as qa_admin on server view.
 Restore all sound/notification settings to defaults.
 Remove any server mutes/deafens applied to qa_user.
+Restore noise suppression toggle to original state.
 ```
