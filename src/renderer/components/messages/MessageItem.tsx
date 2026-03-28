@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ActionIcon, Button, Group, Image, Modal, Text, Textarea, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconArrowBackUp, IconEdit, IconExternalLink, IconMessage2, IconMoodSmile, IconPin, IconPinnedOff, IconTrash } from '@tabler/icons-react';
+import { IconArrowBackUp, IconCopy, IconEdit, IconExternalLink, IconLink, IconMessage2, IconMoodSmile, IconPin, IconPinnedOff, IconTrash } from '@tabler/icons-react';
 import { useEditMessage, useDeleteMessage, useAddReaction, useRemoveReaction, usePinMessage, useUnpinMessage, type Message } from '../../hooks/useMessages';
 import { useCreateThread } from '../../hooks/useThreads';
 import { useMessagePreview } from '../../hooks/useServerInfo';
@@ -92,6 +93,39 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
     return matches.some((url) => !isImageUrl(url));
   }, [message.content]);
 
+  // ── Context menu ──────────────────────────────────────────────────────
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (isSystemMessage || editing) return;
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, [isSystemMessage, editing]);
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  const handleCopyText = useCallback(() => {
+    navigator.clipboard.writeText(message.content);
+    setContextMenu(null);
+  }, [message.content]);
+
+  const handleCopyMessageLink = useCallback(() => {
+    navigator.clipboard.writeText(`sgchat://message/${channelId}/${message.id}`);
+    setContextMenu(null);
+  }, [channelId, message.id]);
+
+  // Close context menu on scroll or outside click
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('mousedown', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('mousedown', close);
+    };
+  }, [contextMenu]);
+
   const handleReactionToggle = (emoji: string, hasReacted: boolean, type?: 'unicode' | 'custom', emojiId?: string) => {
     if (hasReacted) {
       removeReaction.mutate({ messageId: message.id, emoji, type, emojiId });
@@ -101,7 +135,44 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
   };
 
   return (
-    <div style={{ marginTop: 2, position: 'relative' }}>
+    <div style={{ marginTop: 2, position: 'relative' }} onContextMenu={handleContextMenu}>
+      {/* Right-click context menu */}
+      {contextMenu && createPortal(
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            left: contextMenu.x,
+            top: contextMenu.y,
+            zIndex: 9999,
+            minWidth: 180,
+            background: 'var(--bg-tertiary)',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            padding: '4px 0',
+            boxShadow: '0 4px 12px rgba(0,0,0,.3)',
+          }}
+        >
+          <ContextMenuItem icon={<IconCopy size={14} />} label="Copy Text" onClick={handleCopyText} />
+          <ContextMenuItem icon={<IconLink size={14} />} label="Copy Message Link" onClick={handleCopyMessageLink} />
+          <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+          <ContextMenuItem icon={<IconArrowBackUp size={14} />} label="Reply" onClick={() => { handleReply(); closeContextMenu(); }} />
+          <ContextMenuItem
+            icon={message.pinned ? <IconPinnedOff size={14} /> : <IconPin size={14} />}
+            label={message.pinned ? 'Unpin Message' : 'Pin Message'}
+            onClick={() => { (message.pinned ? unpinMessage : pinMessage).mutate(message.id); closeContextMenu(); }}
+          />
+          {isOwn && (
+            <>
+              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+              <ContextMenuItem icon={<IconEdit size={14} />} label="Edit Message" onClick={() => { handleStartEdit(); closeContextMenu(); }} />
+              <ContextMenuItem icon={<IconTrash size={14} />} label="Delete Message" danger onClick={() => { setDeleteModalOpen(true); closeContextMenu(); }} />
+            </>
+          )}
+        </div>,
+        document.body,
+      )}
+
       {/* Reply reference */}
       {message.reply_to && (
         <Group gap={6} mb={2} style={{ paddingLeft: 2 }}>
@@ -290,6 +361,28 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
           </Button>
         </Group>
       </Modal>
+    </div>
+  );
+}
+
+function ContextMenuItem({ icon, label, onClick, danger }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '6px 12px',
+        cursor: 'pointer',
+        color: danger ? 'var(--mantine-color-red-5)' : 'var(--text-primary)',
+        fontSize: '0.8125rem',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = danger ? 'var(--mantine-color-red-9)' : 'var(--bg-hover)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      {icon}
+      {label}
     </div>
   );
 }

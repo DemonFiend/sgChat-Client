@@ -239,6 +239,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     clipboard.writeText(text);
   });
 
+  ipcMain.handle('clipboard:readText', () => {
+    return clipboard.readText();
+  });
+
   // ── Window events ──────────────────────────────────────────────────────
   mainWindow.on('maximize', () => {
     mainWindow.webContents.send('window:maximized', true);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActionIcon, Badge, Group, Menu, Text, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog, IconBell, IconCalendarEvent, IconHash, IconLink, IconPlus, IconShield, IconDatabase, IconHistory, IconMoodSmile, IconHeartHandshake } from '@tabler/icons-react';
+import { IconMinus, IconSquare, IconX, IconServer2, IconMessageCircle, IconUsers, IconSettings, IconServerCog, IconBell, IconCalendarEvent, IconHash, IconLink, IconPlus, IconShield, IconDatabase, IconHistory, IconMoodSmile, IconHeartHandshake, IconZzz, IconBug, IconEye } from '@tabler/icons-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useNotificationStore } from '../../stores/notificationStore';
@@ -236,6 +236,16 @@ export function TitleBar() {
                 </Menu.Item>
                 <Menu.Item leftSection={<IconServer2 size={14} />} onClick={() => useUIStore.getState().openAdminView('relay-servers')}>
                   Relay Servers
+                </Menu.Item>
+                <Menu.Item leftSection={<IconZzz size={14} />} onClick={() => useUIStore.getState().openAdminView('afk-settings')}>
+                  AFK Settings
+                </Menu.Item>
+                <Menu.Item leftSection={<IconBug size={14} />} onClick={() => useUIStore.getState().openAdminView('crash-reports')}>
+                  Crash Reports
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item leftSection={<IconEye size={14} />} onClick={() => useUIStore.getState().openAdminView('impersonation')}>
+                  Impersonate User
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>
