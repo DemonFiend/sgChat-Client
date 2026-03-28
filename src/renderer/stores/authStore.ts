@@ -27,16 +27,24 @@ export interface User {
 
 export type AuthErrorReason = 'session_expired' | 'server_unreachable' | 'token_invalid';
 
+export interface LoginResult {
+  success: boolean;
+  error?: string;
+  error_code?: string;
+  retry_after?: string;
+  pending_approval?: boolean;
+}
+
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isPendingApproval: boolean;
   serverUrl: string;
   authError: AuthErrorReason | null;
-  isPendingApproval: boolean;
   serverSignupsDisabled: boolean;
 
-  login: (serverUrl: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (serverUrl: string, email: string, password: string) => Promise<LoginResult>;
   register: (serverUrl: string, username: string, email: string, password: string, inviteCode?: string) => Promise<{ success: boolean; error?: string; pending_approval?: boolean }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -57,15 +65,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
+  isPendingApproval: false,
   serverUrl: '',
   authError: null,
-  isPendingApproval: false,
   serverSignupsDisabled: false,
 
   login: async (serverUrl, email, password) => {
     const result = await electronAPI.auth.login(serverUrl, email, password);
     if (result.success) {
       set({ user: result.user, isAuthenticated: true, serverUrl, isPendingApproval: false });
+    } else if (result.pending_approval) {
+      set({ isPendingApproval: true, serverUrl });
     }
     return result;
   },

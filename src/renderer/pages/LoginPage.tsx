@@ -1,12 +1,36 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Anchor, Alert, Button, Center, Checkbox, Group, Paper, PasswordInput,
+  Stack, Text, TextInput, Title,
+} from '@mantine/core';
+import { IconAlertCircle } from '@tabler/icons-react';
 import { useAuthStore } from '../stores/authStore';
 
-const electronAPI = (window as any).electronAPI;
+const electronAPI = (window as unknown as { electronAPI: ElectronAPI }).electronAPI;
+
+interface ElectronAPI {
+  config: {
+    getRememberedEmail: () => Promise<string>;
+    setRememberedEmail: (email: string) => void;
+  };
+  servers: {
+    saveCurrentSession: () => void;
+  };
+}
 
 interface LoginPageProps {
   onSwitchToRegister: () => void;
   onForgotPassword: () => void;
   onBack: () => void;
+}
+
+/**
+ * Compute seconds remaining until an ISO timestamp.
+ * Returns 0 when the deadline has passed.
+ */
+function secondsUntil(isoString: string): number {
+  const ms = new Date(isoString).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / 1000));
 }
 
 export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: LoginPageProps) {
@@ -15,6 +39,11 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: Logi
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Rate limit state
+  const [retryAfter, setRetryAfter] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(0);
+
   const login = useAuthStore((s) => s.login);
   const serverUrl = useAuthStore((s) => s.serverUrl);
 
@@ -28,8 +57,32 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: Logi
     });
   }, []);
 
-  const handleLogin = async () => {
+  // Rate limit countdown timer
+  useEffect(() => {
+    if (!retryAfter) {
+      setCountdown(0);
+      return;
+    }
+
+    const tick = () => {
+      const remaining = secondsUntil(retryAfter);
+      setCountdown(remaining);
+      if (remaining <= 0) {
+        setRetryAfter(null);
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [retryAfter]);
+
+  const isRateLimited = countdown > 0;
+
+  const handleLogin = useCallback(async () => {
     setError('');
+    if (isRateLimited) return;
+
     if (!email || !password) {
       setError('Please fill in all fields.');
       return;
@@ -44,194 +97,150 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: Logi
           electronAPI.servers.saveCurrentSession();
         }
       } else {
-        setError(result.error || 'Login failed');
+        // Handle specific error codes
+        switch (result.error_code) {
+          case 'RATE_LIMITED':
+            if (result.retry_after) {
+              setRetryAfter(result.retry_after);
+            }
+            setError(result.error || 'Too many login attempts. Please wait and try again.');
+            break;
+
+          case 'APPLICATION_DENIED':
+            setError(result.error || 'Your application has been denied.');
+            break;
+
+          case 'PENDING_APPROVAL':
+            // The authStore handles setting isPendingApproval,
+            // which triggers the redirect via App.tsx AuthRouter.
+            // Set error as fallback in case redirect is delayed.
+            setError(result.error || 'Your account is pending approval.');
+            break;
+
+          default:
+            setError(result.error || 'Login failed');
+            break;
+        }
       }
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Login failed';
+      setError(message);
     } finally {
       setLoading(false);
     }
+  }, [email, password, rememberMe, isRateLimited, login, serverUrl]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') handleLogin();
+    },
+    [handleLogin],
+  );
+
+  const formatCountdown = (seconds: number): string => {
+    if (seconds >= 60) {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+    return `${seconds}s`;
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.dragRegion} />
-      <div style={styles.card}>
-        <h1 style={styles.logo}>sgChat</h1>
-        <h2 style={styles.title}>Welcome back!</h2>
-        <p style={styles.subtitle}>We're so excited to see you again!</p>
+    <Center h="100vh" style={{ background: 'var(--bg-tertiary)' }}>
+      <div
+        className="drag-region"
+        style={
+          { position: 'absolute', top: 0, left: 0, right: 0, height: 32, WebkitAppRegion: 'drag' } as React.CSSProperties
+        }
+      />
+      <Paper w={420} p="xl" radius="lg" withBorder>
+        <Stack gap="sm">
+          <Title order={1} ta="center" c="brand" fz="2.5rem" fw={700} style={{ letterSpacing: '-0.5px' }}>
+            sgChat
+          </Title>
+          <Title order={2} ta="center" fz="1.5rem" fw={700}>
+            Welcome back!
+          </Title>
+          <Text ta="center" c="dimmed" size="sm" mb="md">
+            We're so excited to see you again!
+          </Text>
 
-        <label style={styles.label}>Email</label>
-        <input
-          type="email"
-          name="email"
-          autoComplete="email"
-          style={styles.input}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-          autoFocus
-        />
-
-        <label style={{ ...styles.label, marginTop: '1rem' }}>Password</label>
-        <input
-          type="password"
-          name="password"
-          autoComplete="current-password"
-          style={styles.input}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-        />
-
-        <label style={styles.checkboxRow}>
-          <input
-            type="checkbox"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(e.target.checked)}
-            style={styles.checkbox}
+          <TextInput
+            label="Email"
+            type="email"
+            name="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.currentTarget.value)}
+            onKeyDown={handleKeyDown}
+            autoFocus
           />
-          <span style={styles.checkboxLabel}>Remember me</span>
-        </label>
 
-        {error && <p style={styles.error}>{error}</p>}
+          <PasswordInput
+            label="Password"
+            name="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.currentTarget.value)}
+            onKeyDown={handleKeyDown}
+          />
 
-        <button
-          style={{ ...styles.btn, ...(loading ? styles.btnDisabled : {}) }}
-          onClick={handleLogin}
-          disabled={loading}
-        >
-          {loading ? 'Logging in...' : 'Log In'}
-        </button>
+          <Checkbox
+            label="Remember me"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.currentTarget.checked)}
+            size="sm"
+          />
 
-        <p style={styles.switchText}>
-          <span style={styles.link} onClick={onForgotPassword}>Forgot your password?</span>
-        </p>
-        <p style={styles.switchText}>
-          Need an account?{' '}
-          <span style={styles.link} onClick={onSwitchToRegister}>Register</span>
-        </p>
-        <p style={styles.switchText}>
-          <span style={styles.link} onClick={onBack}>Change server</span>
-        </p>
-      </div>
-    </div>
+          {error && (
+            <Alert
+              color="red"
+              variant="light"
+              icon={<IconAlertCircle size={18} />}
+              title={isRateLimited ? 'Rate Limited' : undefined}
+            >
+              {error}
+              {isRateLimited && (
+                <Text size="sm" fw={600} mt={4}>
+                  Try again in {formatCountdown(countdown)}
+                </Text>
+              )}
+            </Alert>
+          )}
+
+          <Button
+            fullWidth
+            loading={loading}
+            disabled={isRateLimited}
+            onClick={handleLogin}
+            mt="xs"
+          >
+            {isRateLimited
+              ? `Wait ${formatCountdown(countdown)}`
+              : 'Log In'}
+          </Button>
+
+          <Group justify="center" mt="xs">
+            <Anchor size="sm" component="button" type="button" onClick={onForgotPassword}>
+              Forgot your password?
+            </Anchor>
+          </Group>
+
+          <Text ta="center" size="sm" c="dimmed">
+            Need an account?{' '}
+            <Anchor component="button" type="button" onClick={onSwitchToRegister}>
+              Register
+            </Anchor>
+          </Text>
+
+          <Text ta="center" size="sm" c="dimmed">
+            <Anchor component="button" type="button" onClick={onBack}>
+              Change server
+            </Anchor>
+          </Text>
+        </Stack>
+      </Paper>
+    </Center>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    height: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'var(--bg-tertiary)',
-    color: 'var(--text-primary)',
-    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    userSelect: 'none',
-  },
-  dragRegion: {
-    position: 'absolute' as const,
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 32,
-    WebkitAppRegion: 'drag' as any,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    padding: '0 2rem',
-    textAlign: 'center' as const,
-  },
-  logo: {
-    color: 'var(--accent)',
-    fontSize: '2.5rem',
-    fontWeight: 700,
-    letterSpacing: '-0.5px',
-    marginBottom: '0.5rem',
-  },
-  title: {
-    color: 'var(--text-primary)',
-    fontSize: '1.5rem',
-    fontWeight: 700,
-    marginBottom: '0.25rem',
-  },
-  subtitle: {
-    color: 'var(--text-muted)',
-    fontSize: '0.95rem',
-    marginBottom: '1.5rem',
-  },
-  label: {
-    display: 'block',
-    textAlign: 'left' as const,
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.5px',
-    color: 'var(--text-secondary)',
-    marginBottom: '0.5rem',
-  },
-  input: {
-    width: '100%',
-    padding: '12px 16px',
-    border: 'none',
-    borderRadius: 8,
-    background: 'var(--bg-input)',
-    color: 'var(--text-primary)',
-    fontSize: '1rem',
-    outline: 'none',
-    boxSizing: 'border-box' as const,
-  },
-  checkboxRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    marginTop: '1rem',
-    cursor: 'pointer',
-    textAlign: 'left' as const,
-  },
-  checkbox: {
-    width: 16,
-    height: 16,
-    accentColor: 'var(--accent)',
-    cursor: 'pointer',
-  },
-  checkboxLabel: {
-    fontSize: '0.85rem',
-    color: 'var(--text-secondary)',
-  },
-  error: {
-    color: 'var(--danger)',
-    fontSize: '0.85rem',
-    marginTop: '0.75rem',
-    textAlign: 'left' as const,
-  },
-  btn: {
-    width: '100%',
-    padding: '12px',
-    border: 'none',
-    borderRadius: 8,
-    background: 'var(--accent)',
-    color: 'var(--accent-text)',
-    fontSize: '1rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-    marginTop: '1.25rem',
-  },
-  btnDisabled: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-  },
-  switchText: {
-    color: 'var(--text-muted)',
-    fontSize: '0.85rem',
-    marginTop: '0.75rem',
-  },
-  link: {
-    color: 'var(--accent)',
-    cursor: 'pointer',
-    fontWeight: 500,
-  },
-};
