@@ -33,12 +33,16 @@ interface AuthState {
   isLoading: boolean;
   serverUrl: string;
   authError: AuthErrorReason | null;
+  isPendingApproval: boolean;
+  serverSignupsDisabled: boolean;
 
   login: (serverUrl: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (serverUrl: string, username: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (serverUrl: string, username: string, email: string, password: string, inviteCode?: string) => Promise<{ success: boolean; error?: string; pending_approval?: boolean }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   setServerUrl: (url: string) => void;
+  setIsPendingApproval: (pending: boolean) => void;
+  setServerSignupsDisabled: (disabled: boolean) => void;
   triggerAuthError: (reason: AuthErrorReason) => void;
   clearAuthError: () => void;
   updateStatus: (status: User['status']) => void;
@@ -55,19 +59,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
   serverUrl: '',
   authError: null,
+  isPendingApproval: false,
+  serverSignupsDisabled: false,
 
   login: async (serverUrl, email, password) => {
     const result = await electronAPI.auth.login(serverUrl, email, password);
     if (result.success) {
-      set({ user: result.user, isAuthenticated: true, serverUrl });
+      set({ user: result.user, isAuthenticated: true, serverUrl, isPendingApproval: false });
     }
     return result;
   },
 
-  register: async (serverUrl, username, email, password) => {
-    const result = await electronAPI.auth.register(serverUrl, username, email, password);
+  register: async (serverUrl, username, email, password, inviteCode?) => {
+    const result = await electronAPI.auth.register(serverUrl, username, email, password, inviteCode);
     if (result.success) {
-      set({ user: result.user, isAuthenticated: true, serverUrl });
+      if (result.pending_approval) {
+        set({ isPendingApproval: true, serverUrl });
+      } else {
+        set({ user: result.user, isAuthenticated: true, serverUrl, isPendingApproval: false });
+      }
     }
     return result;
   },
@@ -111,6 +121,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     electronAPI.config.setServerUrl(url);
     set({ serverUrl: url });
   },
+
+  setIsPendingApproval: (pending) => set({ isPendingApproval: pending }),
+
+  setServerSignupsDisabled: (disabled) => set({ serverSignupsDisabled: disabled }),
 
   triggerAuthError: (reason) => {
     if (get().authError === null) set({ authError: reason });

@@ -137,9 +137,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return login(serverUrl, email, password);
   });
 
-  ipcMain.handle('auth:register', async (_event, serverUrl: string, username: string, email: string, password: string) => {
+  ipcMain.handle('auth:register', async (_event, serverUrl: string, username: string, email: string, password: string, inviteCode?: string) => {
     setServerUrl(serverUrl);
-    return register(serverUrl, username, email, password);
+    return register(serverUrl, username, email, password, inviteCode);
   });
 
   ipcMain.handle('auth:logout', () => {

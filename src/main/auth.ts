@@ -97,13 +97,23 @@ export async function register(
   serverUrl: string,
   username: string,
   email: string,
-  password: string
-): Promise<{ success: boolean; user?: AuthResponse['user']; error?: string }> {
+  password: string,
+  inviteCode?: string
+): Promise<{ success: boolean; user?: AuthResponse['user']; error?: string; pending_approval?: boolean }> {
   try {
+    const body: Record<string, string> = {
+      username,
+      email,
+      password: hashPasswordForTransit(password),
+    };
+    if (inviteCode) {
+      body.invite_code = inviteCode;
+    }
+
     const res = await net.fetch(`${serverUrl}/api/auth/register`, {
       method: 'POST',
       headers: authHeaders(),
-      body: serializeBody({ username, email, password: hashPasswordForTransit(password) }),
+      body: serializeBody(body),
     });
 
     if (!res.ok) {
@@ -111,9 +121,16 @@ export async function register(
       return { success: false, error: data.message || `Registration failed (${res.status})` };
     }
 
-    const data: AuthResponse = await parseResponse(res);
-    setTokens(data.access_token, data.refresh_token, data.user.id);
-    return { success: true, user: data.user };
+    const data = await parseResponse(res);
+
+    // Server may return pending_approval instead of tokens
+    if (data.pending_approval) {
+      return { success: true, pending_approval: true };
+    }
+
+    const authData = data as AuthResponse;
+    setTokens(authData.access_token, authData.refresh_token, authData.user.id);
+    return { success: true, user: authData.user };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error' };
   }
