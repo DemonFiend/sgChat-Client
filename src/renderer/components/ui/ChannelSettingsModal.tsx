@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ActionIcon, Badge, Button, Divider, Group, Loader, Modal, NumberInput, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text,
+  ActionIcon, Badge, Button, Divider, Group, Loader, Modal, NumberInput, Progress, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text,
   TextInput, Textarea, Tooltip,
 } from '@mantine/core';
-import { IconDownload, IconPlus, IconTrash, IconChevronDown, IconChevronUp, IconNetwork } from '@tabler/icons-react';
+import { IconDatabase, IconDownload, IconPlus, IconTrash, IconChevronDown, IconChevronUp, IconNetwork } from '@tabler/icons-react';
 import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { useUIStore } from '../../stores/uiStore';
@@ -95,7 +95,7 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
     enabled: opened && isVoiceChannel,
   });
 
-  const [activeTab, setActiveTab] = useState<'general' | 'permissions' | 'segments' | 'retention' | 'export'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'permissions' | 'segments' | 'retention' | 'export' | 'storage'>('general');
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
   const [bitrate, setBitrate] = useState(64);
@@ -262,6 +262,20 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
         >
           Export
         </Button>
+        {!isVoiceChannel && (
+          <Button
+            variant="subtle"
+            color={activeTab === 'storage' ? 'violet' : 'gray'}
+            size="sm"
+            onClick={() => setActiveTab('storage')}
+            style={{
+              borderBottom: activeTab === 'storage' ? '2px solid var(--mantine-color-violet-5)' : '2px solid transparent',
+              borderRadius: 0,
+            }}
+          >
+            Storage
+          </Button>
+        )}
       </Group>
 
       {activeTab === 'general' && (
@@ -513,7 +527,106 @@ export function ChannelSettingsModal({ opened, onClose, channelId, serverId }: C
       {activeTab === 'export' && (
         <ChannelExportTab channelId={channelId} />
       )}
+
+      {activeTab === 'storage' && !isVoiceChannel && (
+        <ChannelStorageTab channelId={channelId} />
+      )}
     </Modal>
+  );
+}
+
+/* ─── Channel Storage Stats Tab ─── */
+
+interface StorageStats {
+  message_count: number;
+  total_size_bytes: number;
+  segment_count: number;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, i);
+  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function ChannelStorageTab({ channelId }: { channelId: string }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['channel-storage-stats', channelId],
+    queryFn: async (): Promise<StorageStats> => {
+      try {
+        return await api.get<StorageStats>(`/api/channels/${channelId}/storage-stats`);
+      } catch {
+        // Endpoint may not exist — return zeroed stats
+        return { message_count: 0, total_size_bytes: 0, segment_count: 0 };
+      }
+    },
+    enabled: !!channelId,
+  });
+
+  if (isLoading) return <Loader size="sm" />;
+
+  const stats = data ?? { message_count: 0, total_size_bytes: 0, segment_count: 0 };
+  // Cap progress at a reasonable reference size (100 MB)
+  const SIZE_CAP = 100 * 1024 * 1024;
+  const sizePercent = Math.min((stats.total_size_bytes / SIZE_CAP) * 100, 100);
+
+  return (
+    <Stack gap={16}>
+      <Group gap={8}>
+        <IconDatabase size={18} style={{ color: 'var(--mantine-color-violet-5)' }} />
+        <Text size="lg" fw={600}>Storage Statistics</Text>
+      </Group>
+
+      {isError || (stats.message_count === 0 && stats.total_size_bytes === 0 && stats.segment_count === 0) ? (
+        <Text size="sm" c="dimmed" style={{ fontStyle: 'italic' }}>
+          Storage statistics are not available for this channel. The server may not support this endpoint yet.
+        </Text>
+      ) : null}
+
+      <div style={{
+        padding: 16,
+        borderRadius: 8,
+        background: 'var(--bg-secondary)',
+        border: '1px solid var(--border)',
+      }}>
+        <Stack gap={16}>
+          {/* Message Count */}
+          <div>
+            <Group justify="space-between" mb={4}>
+              <Text size="sm" fw={500}>Messages</Text>
+              <Text size="sm" c="dimmed">{stats.message_count.toLocaleString()}</Text>
+            </Group>
+          </div>
+
+          {/* Total Size */}
+          <div>
+            <Group justify="space-between" mb={4}>
+              <Text size="sm" fw={500}>Total Size</Text>
+              <Text size="sm" c="dimmed">{formatBytes(stats.total_size_bytes)}</Text>
+            </Group>
+            <Progress
+              value={sizePercent}
+              size="sm"
+              radius="xl"
+              color={sizePercent > 80 ? 'red' : sizePercent > 50 ? 'yellow' : 'violet'}
+            />
+            <Text size="xs" c="dimmed" mt={2}>
+              {sizePercent.toFixed(1)}% of 100 MB reference cap
+            </Text>
+          </div>
+
+          {/* Segment Count */}
+          <div>
+            <Group justify="space-between">
+              <Text size="sm" fw={500}>Segments</Text>
+              <Text size="sm" c="dimmed">{stats.segment_count.toLocaleString()}</Text>
+            </Group>
+          </div>
+        </Stack>
+      </div>
+    </Stack>
   );
 }
 

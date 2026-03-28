@@ -2,10 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Accordion, Badge, Button, ColorInput, Divider,
-  Group, SegmentedControl, Stack, Switch, Text, TextInput, Tooltip,
+  Group, Menu, SegmentedControl, Stack, Switch, Text, TextInput, Tooltip,
 } from '@mantine/core';
 import {
-  IconAlertTriangle, IconGripVertical, IconPlus, IconSearch, IconTrash,
+  IconAlertTriangle, IconGripVertical, IconPlus, IconSearch, IconTemplate, IconTrash,
 } from '@tabler/icons-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
@@ -150,6 +150,74 @@ function PermissionTriState({
   );
 }
 
+// ── Role Templates ──────────────────────────────────────────────
+
+function bitsFromList(bits: number[]): number {
+  let mask = 0;
+  for (const b of bits) mask |= (1 << b);
+  return mask;
+}
+
+interface RoleTemplate {
+  name: string;
+  label: string;
+  description: string;
+  color: string;
+  serverPerms: number;
+  textPerms: number;
+  voicePerms: number;
+}
+
+const ROLE_TEMPLATES: RoleTemplate[] = [
+  {
+    name: 'Admin',
+    label: 'Admin',
+    description: 'All permissions enabled',
+    color: '#ef4444',
+    // All 25 server bits (0-24)
+    serverPerms: bitsFromList(Array.from({ length: 25 }, (_, i) => i)),
+    // All 21 text bits (0-20)
+    textPerms: bitsFromList(Array.from({ length: 21 }, (_, i) => i)),
+    // All 17 voice bits (0-16)
+    voicePerms: bitsFromList(Array.from({ length: 17 }, (_, i) => i)),
+  },
+  {
+    name: 'Moderator',
+    label: 'Moderator',
+    description: 'Ban, kick, mute, manage messages',
+    color: '#f59e0b',
+    // KICK_MEMBERS(5), BAN_MEMBERS(6), TIMEOUT_MEMBERS(7), MANAGE_NICKNAMES(8), VIEW_AUDIT_LOG(12), VIEW_SERVER_MEMBERS(23), MODERATE_MEMBERS(24)
+    serverPerms: bitsFromList([5, 6, 7, 8, 12, 23, 24]),
+    // VIEW_CHANNEL(0), SEND_MESSAGES(1), READ_MESSAGE_HISTORY(3), ADD_REACTIONS(8), MANAGE_MESSAGES(11), DELETE_OWN_MESSAGES(12), EDIT_OWN_MESSAGES(13), BYPASS_SLOWMODE(20)
+    textPerms: bitsFromList([0, 1, 3, 8, 11, 12, 13, 20]),
+    // CONNECT(0), VIEW_VOICE_CHANNEL(1), SPEAK(2), MUTE_MEMBERS(9), DEAFEN_MEMBERS(10), MOVE_MEMBERS(11), DISCONNECT_MEMBERS(12)
+    voicePerms: bitsFromList([0, 1, 2, 9, 10, 11, 12]),
+  },
+  {
+    name: 'Member',
+    label: 'Member',
+    description: 'Read, send, react, voice',
+    color: '#4ade80',
+    // CREATE_INVITES(9), CHANGE_NICKNAME(11), VIEW_SERVER_MEMBERS(23)
+    serverPerms: bitsFromList([9, 11, 23]),
+    // VIEW_CHANNEL(0), SEND_MESSAGES(1), READ_MESSAGE_HISTORY(3), EMBED_LINKS(4), ATTACH_FILES(5), USE_EXTERNAL_EMOJIS(6), ADD_REACTIONS(8), DELETE_OWN_MESSAGES(12), EDIT_OWN_MESSAGES(13)
+    textPerms: bitsFromList([0, 1, 3, 4, 5, 6, 8, 12, 13]),
+    // CONNECT(0), VIEW_VOICE_CHANNEL(1), SPEAK(2), VIDEO(3), STREAM(4), USE_VOICE_ACTIVITY(5), USE_SOUNDBOARD(7)
+    voicePerms: bitsFromList([0, 1, 2, 3, 4, 5, 7]),
+  },
+  {
+    name: 'Muted',
+    label: 'Muted',
+    description: 'Read only, no send',
+    color: '#6b7280',
+    serverPerms: bitsFromList([23]), // VIEW_SERVER_MEMBERS
+    // VIEW_CHANNEL(0), READ_MESSAGE_HISTORY(3)
+    textPerms: bitsFromList([0, 3]),
+    // VIEW_VOICE_CHANNEL(1)
+    voicePerms: bitsFromList([1]),
+  },
+];
+
 // ── Main RolesPanel ──────────────────────────────────────────────
 export function RolesPanel({ serverId }: { serverId: string }) {
   const { data: roles } = useQuery({
@@ -213,6 +281,30 @@ export function RolesPanel({ serverId }: { serverId: string }) {
       });
       queryClient.invalidateQueries({ queryKey: ['roles', serverId] });
       setNewRoleName('');
+    } catch {
+      // silently fail
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleCreateFromTemplate = async (template: RoleTemplate) => {
+    setCreating(true);
+    try {
+      // Step 1: Create the role
+      const created = await api.post<{ id: string }>(`/api/servers/${serverId}/roles`, {
+        name: template.name,
+        color: template.color,
+      });
+      // Step 2: Apply template permissions
+      if (created?.id) {
+        await api.patch(`/api/servers/${serverId}/roles/${created.id}`, {
+          server_permissions: template.serverPerms,
+          text_permissions: template.textPerms,
+          voice_permissions: template.voicePerms,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['roles', serverId] });
     } catch {
       // silently fail
     } finally {
@@ -335,6 +427,33 @@ export function RolesPanel({ serverId }: { serverId: string }) {
         <Button leftSection={<IconPlus size={14} />} onClick={handleCreate} loading={creating} disabled={!newRoleName.trim()}>
           Create
         </Button>
+        <Menu shadow="md" width={220} position="bottom-end" withinPortal>
+          <Menu.Target>
+            <Button variant="light" leftSection={<IconTemplate size={14} />} loading={creating}>
+              From Template
+            </Button>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Label>Role Templates</Menu.Label>
+            {ROLE_TEMPLATES.map((tpl) => (
+              <Menu.Item
+                key={tpl.name}
+                onClick={() => handleCreateFromTemplate(tpl)}
+                leftSection={
+                  <div style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: tpl.color, flexShrink: 0,
+                  }} />
+                }
+              >
+                <div>
+                  <Text size="sm" fw={500}>{tpl.label}</Text>
+                  <Text size="xs" c="dimmed">{tpl.description}</Text>
+                </div>
+              </Menu.Item>
+            ))}
+          </Menu.Dropdown>
+        </Menu>
       </Group>
 
       {/* Role search */}
