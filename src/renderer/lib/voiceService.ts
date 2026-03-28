@@ -13,6 +13,7 @@ import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
 import { soundService } from './soundService';
 import { createAppAudioTrack, destroyAppAudioTrack } from './appAudioBridge';
 import { noiseSuppressionService } from './noiseSuppressionService';
+import { networkStore, type RelayServer } from '../stores/networkStore';
 
 let currentRoom: Room | null = null;
 
@@ -26,6 +27,7 @@ export interface VoiceParticipant {
   isServerDeafened?: boolean;
   isStreaming?: boolean;
   avatarUrl?: string;
+  voiceStatus?: string;
 }
 
 // ── Screen share types & constants ──────────────────────────────────────────
@@ -60,6 +62,34 @@ electronAPI?.screenShare?.onAudioModeSelected?.((mode: 'none' | 'app' | 'system'
     audioModeResolve = null;
   }
 });
+
+// ── Server mute/deafen enforcement state ──────────────────────────────────
+
+let isServerMuted = false;
+let isServerDeafened = false;
+
+export function setServerMuted(muted: boolean): void {
+  isServerMuted = muted;
+  if (muted && currentRoom) {
+    currentRoom.localParticipant.setMicrophoneEnabled(false);
+    emit('participant-update', getParticipants(currentRoom));
+  }
+}
+
+export function setServerDeafened(deafened: boolean): void {
+  isServerDeafened = deafened;
+  if (deafened) {
+    toggleDeafen(true);
+  }
+}
+
+export function getIsServerMuted(): boolean {
+  return isServerMuted;
+}
+
+export function getIsServerDeafened(): boolean {
+  return isServerDeafened;
+}
 
 // ── AFK activity tracking state ────────────────────────────────────────────
 
@@ -135,6 +165,7 @@ export function toggleLocalMute(userId: string): boolean {
   } else {
     locallyMutedUsers.add(userId);
   }
+  persistLocallyMutedUsers();
 
   if (currentRoom) {
     const participant = currentRoom.remoteParticipants.get(userId);
@@ -195,6 +226,7 @@ export function clearServerVoiceStates(): void {
 
 export function setUserVolume(userId: string, volume: number) {
   userVolumes.set(userId, Math.max(0, Math.min(200, volume)));
+  persistUserVolumes();
   if (!currentRoom) return;
 
   const participant = currentRoom.remoteParticipants.get(userId);
@@ -214,29 +246,216 @@ export function getUserVolume(userId: string): number {
   return userVolumes.get(userId) ?? 100;
 }
 
+// ── Per-user volume & local mute persistence ─────────────────────────────
+
+const USER_VOLUMES_KEY = 'sgchat-user-volumes';
+const LOCALLY_MUTED_KEY = 'sgchat-locally-muted';
+
+function loadUserVolumes(): void {
+  try {
+    const raw = localStorage.getItem(USER_VOLUMES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, number>;
+      for (const [k, v] of Object.entries(parsed)) {
+        userVolumes.set(k, v);
+      }
+    }
+  } catch { /* ignore corrupt data */ }
+}
+
+function persistUserVolumes(): void {
+  try {
+    const obj: Record<string, number> = {};
+    userVolumes.forEach((v, k) => { obj[k] = v; });
+    localStorage.setItem(USER_VOLUMES_KEY, JSON.stringify(obj));
+  } catch { /* ignore write failures */ }
+}
+
+function loadLocallyMutedUsers(): void {
+  try {
+    const raw = localStorage.getItem(LOCALLY_MUTED_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw) as string[];
+      for (const id of arr) locallyMutedUsers.add(id);
+    }
+  } catch { /* ignore corrupt data */ }
+}
+
+function persistLocallyMutedUsers(): void {
+  try {
+    localStorage.setItem(LOCALLY_MUTED_KEY, JSON.stringify([...locallyMutedUsers]));
+  } catch { /* ignore write failures */ }
+}
+
+// ── Relay auth fallback ─────────────────────────────────────────────────
+
+/**
+ * Fetch and cache relay list from the server.
+ * Called opportunistically so that fallback has data to work with.
+ */
+export async function fetchAndCacheRelays(): Promise<void> {
+  try {
+    const relays = await api.getArray<RelayServer>('/api/relays');
+    networkStore.setRelays(relays);
+  } catch {
+    // Non-critical — relay list may not be available
+  }
+}
+
+/**
+ * When the master server is unreachable, iterate cached relays sorted by
+ * latency and POST to their /voice-authorize endpoint to get a LiveKit token.
+ */
+async function tryRelayDirectAuthorize(channelId: string): Promise<{
+  livekit_token: string;
+  livekit_url: string;
+  permissions: { canSpeak: boolean; canVideo: boolean; canStream: boolean };
+} | null> {
+  const relays = networkStore.relays();
+  const pings = networkStore.pings();
+  if (relays.length === 0) return null;
+
+  // Sort relays by latency (lowest first), unknown latency goes to end
+  const sorted = [...relays]
+    .filter((r) => r.status !== 'offline' && r.livekit_url)
+    .sort((a, b) => {
+      const pa = pings[a.id] ?? Infinity;
+      const pb = pings[b.id] ?? Infinity;
+      return pa - pb;
+    });
+
+  const token = useAuthStore.getState().token;
+  if (!token) return null;
+
+  for (const relay of sorted) {
+    try {
+      const baseUrl = relay.health_url?.replace(/\/health$/, '') || relay.livekit_url;
+      if (!baseUrl) continue;
+
+      const res = await fetch(`${baseUrl}/voice-authorize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ channel_id: channelId }),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!res.ok) continue;
+
+      const data = await res.json();
+      if (data.livekit_token && data.livekit_url) {
+        return {
+          livekit_token: data.livekit_token,
+          livekit_url: data.livekit_url,
+          permissions: {
+            canSpeak: data.permissions?.can_speak ?? data.permissions?.canSpeak ?? false,
+            canVideo: data.permissions?.can_video ?? data.permissions?.canVideo ?? false,
+            canStream: data.permissions?.can_stream ?? data.permissions?.canStream ?? false,
+          },
+        };
+      }
+    } catch {
+      // Try next relay
+      continue;
+    }
+  }
+
+  return null;
+}
+
+// ── Relay switch handler ────────────────────────────────────────────────
+
+let savedMuteState = false;
+let savedDeafenState = false;
+
+/**
+ * Handle voice.relay_switch socket event.
+ * Saves mute/deafen, disconnects locally, rejoins with new relay.
+ */
+export async function handleRelaySwitch(toChannelId: string): Promise<void> {
+  // Save current mute/deafen state
+  if (currentRoom) {
+    savedMuteState = !currentRoom.localParticipant.isMicrophoneEnabled;
+    savedDeafenState = isServerDeafened;
+  }
+
+  // Disconnect without emitting 'disconnected'
+  teardownActivityTracking();
+  if (currentRoom) {
+    if (appAudioTrackPublication) {
+      appAudioTrackPublication = null;
+      destroyAppAudioTrack();
+    }
+    cleanupLocalScreenSharePreview();
+    screenShareAudioElements.forEach((audio) => { audio.pause(); audio.srcObject = null; audio.remove(); });
+    screenShareAudioElements.clear();
+    screenShareAudioTracks.clear();
+    screenShareVideoElements.forEach((video) => { video.pause(); video.srcObject = null; video.remove(); });
+    screenShareVideoElements.clear();
+    await noiseSuppressionService.destroy();
+    currentRoom.disconnect();
+    currentRoom = null;
+  }
+
+  // Rejoin
+  const result = await joinVoiceChannel(toChannelId);
+  if (result.success && currentRoom) {
+    // Restore mute/deafen
+    if (savedMuteState) {
+      await currentRoom.localParticipant.setMicrophoneEnabled(false);
+    }
+    if (savedDeafenState) {
+      await toggleDeafen(true);
+    }
+    emit('connected', { channelId: toChannelId });
+    emit('participant-update', getParticipants(currentRoom));
+  }
+}
+
 export async function joinVoiceChannel(channelId: string): Promise<{
   success: boolean;
   error?: string;
   permissions?: { canSpeak: boolean; canVideo: boolean; canStream: boolean };
 }> {
   try {
-    const response = await api.post<{
-      livekit_token?: string;
-      livekit_url?: string;
-      token?: string;
-      url?: string;
-      permissions: {
-        can_speak?: boolean; can_video?: boolean; can_stream?: boolean;
-        canSpeak?: boolean; canVideo?: boolean; canStream?: boolean;
-      };
-    }>(`/api/voice/join/${channelId}`);
+    let livekitToken: string | undefined;
+    let livekitUrl: string | undefined;
+    let canSpeak = false;
+    let canVideo = false;
+    let canStream = false;
 
-    // Server returns different keys for temp_voice_generator vs regular channels
-    const livekitToken = response.livekit_token || response.token;
-    const livekitUrl = response.livekit_url || response.url;
-    const canSpeak = response.permissions.can_speak ?? response.permissions.canSpeak ?? false;
-    const canVideo = response.permissions.can_video ?? response.permissions.canVideo ?? false;
-    const canStream = response.permissions.can_stream ?? response.permissions.canStream ?? false;
+    try {
+      const response = await api.post<{
+        livekit_token?: string;
+        livekit_url?: string;
+        token?: string;
+        url?: string;
+        permissions: {
+          can_speak?: boolean; can_video?: boolean; can_stream?: boolean;
+          canSpeak?: boolean; canVideo?: boolean; canStream?: boolean;
+        };
+      }>(`/api/voice/join/${channelId}`);
+
+      // Server returns different keys for temp_voice_generator vs regular channels
+      livekitToken = response.livekit_token || response.token;
+      livekitUrl = response.livekit_url || response.url;
+      canSpeak = response.permissions.can_speak ?? response.permissions.canSpeak ?? false;
+      canVideo = response.permissions.can_video ?? response.permissions.canVideo ?? false;
+      canStream = response.permissions.can_stream ?? response.permissions.canStream ?? false;
+    } catch (masterErr) {
+      // Master server unreachable — try relay direct authorization
+      console.warn('[VoiceService] Master server unreachable, trying relay fallback:', masterErr);
+      const relayResult = await tryRelayDirectAuthorize(channelId);
+      if (relayResult) {
+        livekitToken = relayResult.livekit_token;
+        livekitUrl = relayResult.livekit_url;
+        canSpeak = relayResult.permissions.canSpeak;
+        canVideo = relayResult.permissions.canVideo;
+        canStream = relayResult.permissions.canStream;
+      }
+    }
 
     if (!livekitToken || !livekitUrl) {
       return { success: false, error: 'Server returned incomplete voice connection data' };
@@ -403,6 +622,11 @@ export async function joinVoiceChannel(channelId: string): Promise<{
     }
 
     currentRoom = room;
+    // Restore persisted per-user volumes and local mutes
+    loadUserVolumes();
+    loadLocallyMutedUsers();
+    // Opportunistically cache relay list for fallback
+    fetchAndCacheRelays();
     // Join sound is played via the socket voice.join event handler (supports custom sounds + AFK check)
     setupActivityTracking();
     emit('connected', { channelId });
@@ -417,8 +641,42 @@ export async function joinVoiceChannel(channelId: string): Promise<{
   }
 }
 
+/**
+ * Handle a force-move: clean disconnect (no leave sound, no 'disconnected' event),
+ * then immediately join the target channel.
+ */
+export async function handleForceMove(toChannelId: string, toChannelName?: string): Promise<void> {
+  teardownActivityTracking();
+  isServerMuted = false;
+  isServerDeafened = false;
+  if (currentRoom) {
+    // Clean up per-app audio capture
+    if (appAudioTrackPublication) {
+      appAudioTrackPublication = null;
+      destroyAppAudioTrack();
+    }
+    cleanupLocalScreenSharePreview();
+    screenShareAudioElements.forEach((audio) => { audio.pause(); audio.srcObject = null; audio.remove(); });
+    screenShareAudioElements.clear();
+    screenShareAudioTracks.clear();
+    screenShareVideoElements.forEach((video) => { video.pause(); video.srcObject = null; video.remove(); });
+    screenShareVideoElements.clear();
+    await noiseSuppressionService.destroy();
+    currentRoom.disconnect();
+    currentRoom = null;
+    clearParticipantInfoCache();
+    clearServerVoiceStates();
+    // Deliberately NOT emitting 'disconnected' — this is a seamless move
+  }
+  // Join the target channel
+  await joinVoiceChannel(toChannelId);
+  emit('connected', { channelId: toChannelId });
+}
+
 export async function leaveVoiceChannel(): Promise<void> {
   teardownActivityTracking();
+  isServerMuted = false;
+  isServerDeafened = false;
   if (currentRoom) {
     // Leave sound is NOT played for the leaving user — only remaining users hear it via socket event
 
@@ -446,6 +704,8 @@ export async function leaveVoiceChannel(): Promise<void> {
 export async function toggleMute(): Promise<boolean> {
   if (!currentRoom) return false;
   const enabled = currentRoom.localParticipant.isMicrophoneEnabled;
+  // Block unmute if server muted
+  if (!enabled && isServerMuted) return false;
   await currentRoom.localParticipant.setMicrophoneEnabled(!enabled);
   emit('participant-update', getParticipants(currentRoom));
   return !enabled;
@@ -647,6 +907,8 @@ export function detachScreenShareAudio(streamerId: string): void {
 
 export async function toggleDeafen(shouldDeafen: boolean): Promise<boolean> {
   if (!currentRoom) return false;
+  // Block undeafen if server deafened
+  if (!shouldDeafen && isServerDeafened) return true;
 
   // Mute/unmute all remote audio elements
   for (const participant of currentRoom.remoteParticipants.values()) {
@@ -708,6 +970,7 @@ function getParticipants(room: Room): VoiceParticipant[] {
     isServerMuted: localServerState?.isServerMuted,
     isServerDeafened: localServerState?.isServerDeafened,
     avatarUrl: currentUser?.avatar_url || undefined,
+    voiceStatus: participantStatuses.get(local.identity),
   });
 
   room.remoteParticipants.forEach((participant) => {
@@ -724,6 +987,7 @@ function getParticipants(room: Room): VoiceParticipant[] {
       isServerMuted: serverState?.isServerMuted,
       isServerDeafened: serverState?.isServerDeafened,
       avatarUrl: cached?.avatarUrl,
+      voiceStatus: participantStatuses.get(participant.identity),
     });
   });
 
@@ -762,6 +1026,90 @@ export function setGlobalOutputVolume(volume: number): void {
  * Apply updated audio processing settings to the active room's local microphone track.
  * Call this when noise suppression, echo cancellation, AGC, or VAD toggles change.
  */
+// ── Moderator controls ─────────────────────────────────────────────────────
+
+export async function moveMember(userId: string, fromChannelId: string, toChannelId: string): Promise<void> {
+  await api.post('/api/voice/move-member', { user_id: userId, from_channel_id: fromChannelId, to_channel_id: toChannelId });
+}
+
+export async function serverDeafenMember(userId: string, channelId: string, deafened: boolean): Promise<void> {
+  await api.post('/api/voice/server-deafen', { user_id: userId, channel_id: channelId, deafened });
+}
+
+// ── Auto-rejoin (persistent voice channel) ─────────────────────────────────
+
+const STORED_VOICE_KEY = 'sgchat-voice-channel';
+const STORED_VOICE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+
+interface StoredVoiceChannel {
+  channelId: string;
+  channelName: string;
+  timestamp: number;
+}
+
+export function saveVoiceChannel(channelId: string, channelName: string): void {
+  const entry: StoredVoiceChannel = { channelId, channelName, timestamp: Date.now() };
+  localStorage.setItem(STORED_VOICE_KEY, JSON.stringify(entry));
+}
+
+export function clearStoredVoiceChannel(): void {
+  localStorage.removeItem(STORED_VOICE_KEY);
+}
+
+export async function attemptAutoRejoin(): Promise<boolean> {
+  // First check if server reports us still in voice
+  try {
+    const voiceMe = await api.get<{ channel_id?: string; channel_name?: string }>('/api/voice/me');
+    if (voiceMe?.channel_id) {
+      const result = await joinVoiceChannel(voiceMe.channel_id);
+      if (result.success) {
+        emit('connected', { channelId: voiceMe.channel_id });
+        return true;
+      }
+    }
+  } catch {
+    // Server doesn't know about us — try localStorage
+  }
+
+  const raw = localStorage.getItem(STORED_VOICE_KEY);
+  if (!raw) return false;
+  try {
+    const stored: StoredVoiceChannel = JSON.parse(raw);
+    if (Date.now() - stored.timestamp > STORED_VOICE_EXPIRY_MS) {
+      clearStoredVoiceChannel();
+      return false;
+    }
+    const result = await joinVoiceChannel(stored.channelId);
+    if (result.success) {
+      emit('connected', { channelId: stored.channelId });
+      return true;
+    }
+  } catch {
+    // Invalid stored data
+  }
+  clearStoredVoiceChannel();
+  return false;
+}
+
+// ── Voice status ───────────────────────────────────────────────────────────
+
+export interface VoiceParticipantStatus {
+  voiceStatus?: string;
+}
+
+const participantStatuses = new Map<string, string>();
+
+export function updateParticipantStatus(userId: string, status: string): void {
+  participantStatuses.set(userId, status);
+  if (currentRoom) {
+    emit('participant-update', getParticipants(currentRoom));
+  }
+}
+
+export function getParticipantStatus(userId: string): string | undefined {
+  return participantStatuses.get(userId);
+}
+
 export async function applyAudioProcessingSettings(): Promise<void> {
   if (!currentRoom) return;
   const { noiseSuppression, echoCancellation, autoGainControl, inputDevice, aiNoiseSuppression } =

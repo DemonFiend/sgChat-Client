@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Center, Paper, Title, Text, TextInput, Button, Alert, Stack } from '@mantine/core';
+import { IconAlertCircle, IconCheck, IconMail } from '@tabler/icons-react';
 import { api } from '../lib/api';
 
 interface ForgotPasswordPageProps {
@@ -22,8 +24,8 @@ export function ForgotPasswordPage({ onBack }: ForgotPasswordPageProps) {
     try {
       await api.post('/api/auth/forgot-password', { email: email.trim() });
       setSuccess(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to send reset email. Please try again.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to send reset email. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -31,157 +33,67 @@ export function ForgotPasswordPage({ onBack }: ForgotPasswordPageProps) {
 
   if (success) {
     return (
-      <div style={styles.container}>
-        <div style={styles.dragRegion} />
-        <div style={styles.card}>
-          <h1 style={styles.logo}>sgChat</h1>
-          <h2 style={styles.title}>Check your email</h2>
-          <p style={styles.subtitle}>
-            If an account with that email exists, we've sent a password reset link.
-            Check your inbox and follow the instructions.
-          </p>
-          <button style={styles.btn} onClick={onBack}>
-            Back to Login
-          </button>
-        </div>
-      </div>
+      <Center h="100vh" style={{ background: 'var(--bg-tertiary)' }}>
+        <div
+          className="drag-region"
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 32, WebkitAppRegion: 'drag' } as React.CSSProperties}
+        />
+        <Paper w={420} p="xl" radius="lg" withBorder>
+          <Stack align="center" gap="lg">
+            <Title order={2} ta="center" c="brand">sgChat</Title>
+            <Alert icon={<IconCheck size={20} />} color="green" variant="light" w="100%">
+              If an account with that email exists, we have sent a password reset link.
+              Check your inbox and follow the instructions.
+            </Alert>
+            <Button onClick={onBack} fullWidth>
+              Back to Login
+            </Button>
+          </Stack>
+        </Paper>
+      </Center>
     );
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.dragRegion} />
-      <div style={styles.card}>
-        <h1 style={styles.logo}>sgChat</h1>
-        <h2 style={styles.title}>Forgot your password?</h2>
-        <p style={styles.subtitle}>
-          Enter the email associated with your account and we'll send you a reset link.
-        </p>
+    <Center h="100vh" style={{ background: 'var(--bg-tertiary)' }}>
+      <div
+        className="drag-region"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 32, WebkitAppRegion: 'drag' } as React.CSSProperties}
+      />
+      <Paper w={420} p="xl" radius="lg" withBorder>
+        <Stack gap="md">
+          <Title order={2} ta="center" c="brand">sgChat</Title>
+          <Title order={3} ta="center">Forgot your password?</Title>
+          <Text c="dimmed" ta="center" size="sm">
+            Enter the email associated with your account and we will send you a reset link.
+          </Text>
 
-        <label style={styles.label}>Email</label>
-        <input
-          type="email"
-          style={styles.input}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-          autoFocus
-        />
+          {error && (
+            <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light">
+              {error}
+            </Alert>
+          )}
 
-        {error && <p style={styles.error}>{error}</p>}
+          <TextInput
+            label="Email"
+            type="email"
+            placeholder="you@example.com"
+            leftSection={<IconMail size={16} />}
+            value={email}
+            onChange={(e) => setEmail(e.currentTarget.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+            autoFocus
+          />
 
-        <button
-          style={{ ...styles.btn, ...(loading ? styles.btnDisabled : {}) }}
-          onClick={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? 'Sending...' : 'Send Reset Link'}
-        </button>
+          <Button onClick={handleSubmit} loading={loading} fullWidth mt="sm">
+            Send Reset Link
+          </Button>
 
-        <p style={styles.switchText}>
-          <span style={styles.link} onClick={onBack}>Back to Login</span>
-        </p>
-      </div>
-    </div>
+          <Button variant="subtle" onClick={onBack} fullWidth>
+            Back to Login
+          </Button>
+        </Stack>
+      </Paper>
+    </Center>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    height: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'var(--bg-tertiary)',
-    color: 'var(--text-primary)',
-    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    userSelect: 'none',
-  },
-  dragRegion: {
-    position: 'absolute' as const,
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 32,
-    WebkitAppRegion: 'drag' as any,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    padding: '0 2rem',
-    textAlign: 'center' as const,
-  },
-  logo: {
-    color: 'var(--accent)',
-    fontSize: '2.5rem',
-    fontWeight: 700,
-    letterSpacing: '-0.5px',
-    marginBottom: '0.5rem',
-  },
-  title: {
-    color: 'var(--text-primary)',
-    fontSize: '1.5rem',
-    fontWeight: 700,
-    marginBottom: '0.25rem',
-  },
-  subtitle: {
-    color: 'var(--text-muted)',
-    fontSize: '0.95rem',
-    marginBottom: '1.5rem',
-    lineHeight: 1.5,
-  },
-  label: {
-    display: 'block',
-    textAlign: 'left' as const,
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.5px',
-    color: 'var(--text-secondary)',
-    marginBottom: '0.5rem',
-  },
-  input: {
-    width: '100%',
-    padding: '12px 16px',
-    border: 'none',
-    borderRadius: 8,
-    background: 'var(--bg-input)',
-    color: 'var(--text-primary)',
-    fontSize: '1rem',
-    outline: 'none',
-    boxSizing: 'border-box' as const,
-  },
-  error: {
-    color: 'var(--danger)',
-    fontSize: '0.85rem',
-    marginTop: '0.75rem',
-    textAlign: 'left' as const,
-  },
-  btn: {
-    width: '100%',
-    padding: '12px',
-    border: 'none',
-    borderRadius: 8,
-    background: 'var(--accent)',
-    color: 'var(--accent-text)',
-    fontSize: '1rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-    marginTop: '1.25rem',
-  },
-  btnDisabled: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-  },
-  switchText: {
-    color: 'var(--text-muted)',
-    fontSize: '0.85rem',
-    marginTop: '0.75rem',
-  },
-  link: {
-    color: 'var(--accent)',
-    cursor: 'pointer',
-    fontWeight: 500,
-  },
-};

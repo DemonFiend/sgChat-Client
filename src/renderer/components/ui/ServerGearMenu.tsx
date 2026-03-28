@@ -5,6 +5,7 @@ import {
   IconFolder,
   IconUserPlus,
   IconDoorExit,
+  IconServer2,
 } from '@tabler/icons-react';
 import { useUIStore } from '../../stores/uiStore';
 import { api } from '../../lib/api';
@@ -40,6 +41,11 @@ export function ServerGearMenu({ opened, onClose, serverId, isAdmin, children }:
 
   const handleInvitePeople = () => {
     openAdminView('invites');
+    onClose();
+  };
+
+  const handleRelayServers = () => {
+    openAdminView('relay-servers');
     onClose();
   };
 
@@ -114,6 +120,15 @@ export function ServerGearMenu({ opened, onClose, serverId, isAdmin, children }:
         >
           Invite People
         </Menu.Item>
+
+        {isAdmin && (
+          <Menu.Item
+            leftSection={<IconServer2 size={16} />}
+            onClick={handleRelayServers}
+          >
+            Relay Servers
+          </Menu.Item>
+        )}
 
         <Menu.Divider />
 

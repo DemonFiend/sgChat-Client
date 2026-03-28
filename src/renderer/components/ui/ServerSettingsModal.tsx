@@ -11,6 +11,7 @@ import {
   IconArrowUp, IconArrowDown, IconVolume,
   IconUpload, IconWebhook, IconSticker, IconChartBar,
   IconMessageCircle, IconPhoto, IconGripVertical,
+  IconAlertTriangle,
 } from '@tabler/icons-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
@@ -31,6 +32,8 @@ import { useWebhooks, useCreateWebhook, useUpdateWebhook, useDeleteWebhook } fro
 import { useStickers, useUploadSticker, useDeleteSticker } from '../../hooks/useStickers';
 import { useChannels } from '../../hooks/useChannels';
 import { type Channel, type Invite, type Ban, type SoundboardSound } from './server-settings/types';
+import { TransferOwnershipModal } from './TransferOwnershipModal';
+import { useAuthStore } from '../../stores/authStore';
 
 interface ServerSettingsModalProps {
   opened: boolean;
@@ -97,6 +100,15 @@ function GeneralTab({ serverId }: { serverId: string }) {
     queryKey: ['channels', serverId],
     queryFn: () => api.getArray<Channel>(`/api/servers/${serverId}/channels`),
   });
+
+  const { data: membersData } = useQuery({
+    queryKey: ['members', serverId],
+    queryFn: () => api.getArray<{ id: string; user_id?: string; username: string; display_name?: string; avatar_url?: string }>(`/api/servers/${serverId}/members`),
+  });
+
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const isOwner = server?.owner_id === currentUserId;
+  const [transferOpen, setTransferOpen] = useState(false);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -425,6 +437,41 @@ function GeneralTab({ serverId }: { serverId: string }) {
           Save Changes
         </Button>
       </Group>
+
+      {/* Danger Zone — owner only */}
+      {isOwner && (
+        <>
+          <Divider label="Danger Zone" labelPosition="left" color="red" mt={24} />
+          <Stack gap={8} p={12} style={{ borderRadius: 8, border: '1px solid var(--mantine-color-red-5)', background: 'rgba(239, 68, 68, 0.06)' }}>
+            <Text size="sm" fw={600} c="red">Transfer Ownership</Text>
+            <Text size="xs" c="dimmed">
+              Transfer this server to another member. You will lose all owner privileges.
+            </Text>
+            <Button
+              variant="outline"
+              color="red"
+              size="xs"
+              leftSection={<IconAlertTriangle size={14} />}
+              onClick={() => setTransferOpen(true)}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              Transfer Ownership
+            </Button>
+          </Stack>
+          <TransferOwnershipModal
+            opened={transferOpen}
+            onClose={() => setTransferOpen(false)}
+            serverId={serverId}
+            currentOwnerId={currentUserId!}
+            members={(membersData || []).map((m) => ({
+              id: m.user_id || m.id,
+              username: m.username,
+              display_name: m.display_name,
+              avatar_url: m.avatar_url,
+            }))}
+          />
+        </>
+      )}
     </Stack>
   );
 }

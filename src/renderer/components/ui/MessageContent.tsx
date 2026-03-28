@@ -1,12 +1,12 @@
-import { useState, useMemo } from 'react';
-import { Image, Paper, Text, ThemeIcon, Tooltip } from '@mantine/core';
-import { IconMusic, IconVideo, IconFileZip, IconCode, IconFileText, IconDownload } from '@tabler/icons-react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { Badge, Image, Paper, Skeleton, Text, ThemeIcon, Tooltip } from '@mantine/core';
+import { IconMusic, IconVideo, IconFileZip, IconCode, IconFileText, IconDownload, IconPlayerPlay, IconPhoto } from '@tabler/icons-react';
 import { isImageUrl, getImageType, extractImageUrls } from '../../lib/imageUtils';
 import { parseMentions, type ParsedMention } from '../../lib/mentionUtils';
 import { renderMarkdown } from '../../lib/markdownParser';
 import { useEmojiStore } from '../../stores/emojiStore';
 import { resolveAssetUrl } from '../../lib/api';
-import { UserMentionBadge, ChannelMentionBadge, RoleMentionBadge, BroadcastMentionBadge } from './MentionBadges';
+import { UserMentionBadge, ChannelMentionBadge, RoleMentionBadge, BroadcastMentionBadge, TimeMentionBadge } from './MentionBadges';
 import { UrlEmbed } from './UrlEmbed';
 
 export interface MessageContentProps {
@@ -72,9 +72,11 @@ function formatFileSize(bytes: number): string {
 }
 
 interface ParsedSegment {
-  type: 'text' | 'image' | 'spoilerImage' | 'mention' | 'file';
+  type: 'text' | 'image' | 'spoilerImage' | 'mention' | 'file' | 'messageLink';
   value: string;
   mention?: ParsedMention;
+  /** For messageLink segments: the extracted channel & message IDs */
+  messageLinkData?: { channelId: string; messageId: string };
 }
 
 function parseContentSegments(content: string): ParsedSegment[] {
@@ -134,8 +136,10 @@ function parseContentSegments(content: string): ParsedSegment[] {
     if (trimmed) rawSegments.push({ type: 'text', value: trimmed });
   }
 
-  // Parse mentions from text segments
+  // Parse mentions and message links from text segments
   const segments: ParsedSegment[] = [];
+  const messageLinkRegex = /sgchat:\/\/message\/([\w-]+)\/([\w-]+)/g;
+
   for (const seg of rawSegments) {
     if (seg.type === 'image') {
       segments.push({ type: 'image', value: seg.value });
@@ -146,22 +150,53 @@ function parseContentSegments(content: string): ParsedSegment[] {
       continue;
     }
 
-    const mentions = parseMentions(seg.value);
-    if (mentions.length === 0) {
-      segments.push({ type: 'text', value: seg.value });
-      continue;
+    // First extract message links
+    const textWithLinks: { type: 'text' | 'messageLink'; value: string; data?: { channelId: string; messageId: string } }[] = [];
+    let linkCursor = 0;
+    let linkMatch;
+    messageLinkRegex.lastIndex = 0;
+    while ((linkMatch = messageLinkRegex.exec(seg.value)) !== null) {
+      if (linkMatch.index > linkCursor) {
+        textWithLinks.push({ type: 'text', value: seg.value.slice(linkCursor, linkMatch.index) });
+      }
+      textWithLinks.push({
+        type: 'messageLink',
+        value: linkMatch[0],
+        data: { channelId: linkMatch[1], messageId: linkMatch[2] },
+      });
+      linkCursor = linkMatch.index + linkMatch[0].length;
+    }
+    if (linkCursor < seg.value.length) {
+      textWithLinks.push({ type: 'text', value: seg.value.slice(linkCursor) });
+    }
+    if (textWithLinks.length === 0) {
+      textWithLinks.push({ type: 'text', value: seg.value });
     }
 
-    let cursor = 0;
-    for (const mention of mentions) {
-      if (mention.start > cursor) {
-        segments.push({ type: 'text', value: seg.value.slice(cursor, mention.start) });
+    // Then parse mentions from the text parts
+    for (const part of textWithLinks) {
+      if (part.type === 'messageLink') {
+        segments.push({ type: 'messageLink', value: part.value, messageLinkData: part.data });
+        continue;
       }
-      segments.push({ type: 'mention', value: mention.raw, mention });
-      cursor = mention.end;
-    }
-    if (cursor < seg.value.length) {
-      segments.push({ type: 'text', value: seg.value.slice(cursor) });
+
+      const mentions = parseMentions(part.value);
+      if (mentions.length === 0) {
+        segments.push({ type: 'text', value: part.value });
+        continue;
+      }
+
+      let cursor = 0;
+      for (const mention of mentions) {
+        if (mention.start > cursor) {
+          segments.push({ type: 'text', value: part.value.slice(cursor, mention.start) });
+        }
+        segments.push({ type: 'mention', value: mention.raw, mention });
+        cursor = mention.end;
+      }
+      if (cursor < part.value.length) {
+        segments.push({ type: 'text', value: part.value.slice(cursor) });
+      }
     }
   }
 
@@ -173,6 +208,7 @@ function MentionRenderer({ mention }: { mention: ParsedMention }) {
     case 'user': return <UserMentionBadge mention={mention} />;
     case 'channel': return <ChannelMentionBadge mention={mention} />;
     case 'role': return <RoleMentionBadge mention={mention} />;
+    case 'time': return <TimeMentionBadge mention={mention} />;
     case 'here':
     case 'everyone': return <BroadcastMentionBadge type={mention.type} />;
     default: return <span>{mention.raw}</span>;
@@ -180,11 +216,55 @@ function MentionRenderer({ mention }: { mention: ParsedMention }) {
 }
 
 function ImageRenderer({ src, compact }: { src: string; compact?: boolean }) {
+  const isGif = getImageType(src) === 'gif';
   const maxW = compact ? 200 : 400;
   const maxH = compact ? 150 : 300;
+  const [loaded, setLoaded] = useState(false);
+  const [errored, setErrored] = useState(false);
+
+  // Use GifRenderer for GIF images
+  if (isGif) {
+    return <GifRenderer src={src} compact={compact} />;
+  }
+
+  if (errored) {
+    return (
+      <div style={{ margin: '4px 0', maxWidth: maxW }}>
+        <Paper
+          component="a"
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer"
+          p="sm"
+          radius="md"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: 'var(--bg-tertiary)',
+            border: '1px solid var(--border)',
+            textDecoration: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          <IconPhoto size={20} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+          <Text size="xs" c="dimmed" truncate style={{ flex: 1, minWidth: 0 }}>
+            Failed to load image
+          </Text>
+        </Paper>
+      </div>
+    );
+  }
 
   return (
     <div style={{ margin: '4px 0', position: 'relative', display: 'inline-block' }}>
+      {!loaded && (
+        <Skeleton
+          width={compact ? 200 : 300}
+          height={compact ? 150 : 200}
+          radius="md"
+        />
+      )}
       <Image
         src={src}
         alt="Shared image"
@@ -192,13 +272,193 @@ function ImageRenderer({ src, compact }: { src: string; compact?: boolean }) {
         maw={maxW}
         mah={maxH}
         radius="md"
-        style={{ background: 'var(--bg-tertiary)' }}
+        style={{
+          background: 'var(--bg-tertiary)',
+          display: loaded ? 'block' : 'none',
+        }}
+        onLoad={() => setLoaded(true)}
+        onError={() => setErrored(true)}
         fallbackSrc=""
       />
-      {getImageType(src) === 'gif' && (
-        <Text size="xs" fw={700} c="dimmed" style={{ position: 'absolute', bottom: 8, left: 8 }}>
+    </div>
+  );
+}
+
+/**
+ * GIF renderer with 6-second autoplay, canvas frame capture for static preview,
+ * and click-to-replay functionality.
+ */
+function GifRenderer({ src, compact }: { src: string; compact?: boolean }) {
+  const maxW = compact ? 200 : 400;
+  const maxH = compact ? 150 : 300;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [playing, setPlaying] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [errored, setErrored] = useState(false);
+
+  const captureFrame = useCallback(() => {
+    const img = imgRef.current;
+    const canvas = canvasRef.current;
+    if (!img || !canvas || !img.naturalWidth) return;
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(img, 0, 0);
+    }
+  }, []);
+
+  const handleLoad = useCallback(() => {
+    setLoaded(true);
+    // Start the 6-second autoplay timer
+    timerRef.current = setTimeout(() => {
+      captureFrame();
+      setPlaying(false);
+    }, 6000);
+  }, [captureFrame]);
+
+  const handleClick = useCallback(() => {
+    if (playing) return;
+    // Restart playback by toggling the src to force GIF restart
+    setPlaying(true);
+    const img = imgRef.current;
+    if (img) {
+      const currentSrc = img.src;
+      img.src = '';
+      img.src = currentSrc;
+    }
+    // Set another 6s timer
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      captureFrame();
+      setPlaying(false);
+    }, 6000);
+  }, [playing, captureFrame]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  if (errored) {
+    return (
+      <div style={{ margin: '4px 0', maxWidth: maxW }}>
+        <Paper
+          component="a"
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer"
+          p="sm"
+          radius="md"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: 'var(--bg-tertiary)',
+            border: '1px solid var(--border)',
+            textDecoration: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          <IconPhoto size={20} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+          <Text size="xs" c="dimmed" truncate style={{ flex: 1, minWidth: 0 }}>
+            Failed to load GIF
+          </Text>
+        </Paper>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        margin: '4px 0',
+        position: 'relative',
+        display: 'inline-block',
+        cursor: playing ? 'default' : 'pointer',
+      }}
+      onClick={handleClick}
+    >
+      {!loaded && (
+        <Skeleton width={compact ? 200 : 300} height={compact ? 150 : 200} radius="md" />
+      )}
+      {/* Hidden canvas for static frame capture */}
+      <canvas
+        ref={canvasRef}
+        style={{
+          display: !playing && loaded ? 'block' : 'none',
+          maxWidth: maxW,
+          maxHeight: maxH,
+          borderRadius: 'var(--mantine-radius-md)',
+          background: 'var(--bg-tertiary)',
+          width: '100%',
+          height: 'auto',
+        }}
+      />
+      {/* The actual GIF image */}
+      <img
+        ref={imgRef}
+        src={src}
+        alt="Shared GIF"
+        onLoad={handleLoad}
+        onError={() => setErrored(true)}
+        style={{
+          display: playing && loaded ? 'block' : 'none',
+          maxWidth: maxW,
+          maxHeight: maxH,
+          borderRadius: 'var(--mantine-radius-md)',
+          background: 'var(--bg-tertiary)',
+          objectFit: 'contain',
+        }}
+      />
+      {/* GIF label */}
+      {loaded && (
+        <Text
+          size="xs"
+          fw={700}
+          style={{
+            position: 'absolute',
+            bottom: 8,
+            left: 8,
+            color: '#fff',
+            background: 'rgba(0,0,0,0.6)',
+            padding: '1px 6px',
+            borderRadius: 4,
+            fontSize: 11,
+          }}
+        >
           GIF
         </Text>
+      )}
+      {/* Play button overlay when paused */}
+      {!playing && loaded && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              background: 'rgba(0,0,0,0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <IconPlayerPlay size={24} style={{ color: '#fff', marginLeft: 2 }} />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -350,6 +610,76 @@ export function AttachmentCard({ attachment }: { attachment: { url: string; file
   );
 }
 
+/** Embed for sgchat://message/ links — fetches the referenced message and shows it in a card. */
+function MessageLinkEmbed({ channelId, messageId }: { channelId: string; messageId: string }) {
+  const [msg, setMsg] = useState<{ content: string; author: { username: string }; created_at: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [errored, setErrored] = useState(false);
+  const fetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
+    import('../../lib/api').then(({ api: apiClient }) => {
+      apiClient.get<{ content: string; author: { username: string }; created_at: string }>(
+        `/api/channels/${channelId}/messages/${messageId}`
+      ).then((data) => {
+        setMsg(data);
+        setLoading(false);
+      }).catch(() => {
+        setErrored(true);
+        setLoading(false);
+      });
+    });
+  }, [channelId, messageId]);
+
+  if (errored) return null;
+
+  if (loading) {
+    return (
+      <Paper
+        radius="md"
+        p="sm"
+        style={{
+          marginTop: 4,
+          maxWidth: 400,
+          background: 'var(--bg-secondary)',
+          border: '1px solid var(--border)',
+          borderLeft: '3px solid var(--accent)',
+        }}
+      >
+        <Skeleton height={10} width="60%" radius="xs" mb={6} />
+        <Skeleton height={12} width="90%" radius="xs" />
+      </Paper>
+    );
+  }
+
+  if (!msg) return null;
+
+  return (
+    <Paper
+      radius="md"
+      p="sm"
+      style={{
+        marginTop: 4,
+        maxWidth: 400,
+        background: 'var(--bg-secondary)',
+        border: '1px solid var(--border)',
+        borderLeft: '3px solid var(--accent)',
+      }}
+    >
+      <Text size="xs" fw={600} mb={2}>{msg.author.username}</Text>
+      <Text size="sm" lineClamp={3} style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
+        {msg.content}
+      </Text>
+      <Text size="xs" c="dimmed" mt={4}>
+        {new Date(msg.created_at).toLocaleString()}
+      </Text>
+    </Paper>
+  );
+}
+
 /** Extract non-image URLs from content for embed previews */
 function extractEmbedUrls(content: string): string[] {
   const urlRegex = /https?:\/\/[^\s<]+[^\s<.,;:!?)}\]]/g;
@@ -364,6 +694,51 @@ function extractEmbedUrls(content: string): string[] {
     }
   }
   return result;
+}
+
+/**
+ * Render text that may contain `<motd>...</motd>` inline tags as Mantine Badges.
+ * Falls through to renderMarkdown for non-MOTD text segments.
+ */
+function renderMotdBadges(text: string, hasEmojis: boolean): React.ReactNode {
+  const motdRegex = /<motd>([\s\S]*?)<\/motd>/gi;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let keyIdx = 0;
+
+  while ((match = motdRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(
+        <span key={`motd-t-${keyIdx++}`}>{renderMarkdown(text.slice(lastIndex, match.index), hasEmojis)}</span>,
+      );
+    }
+    parts.push(
+      <Badge
+        key={`motd-b-${keyIdx++}`}
+        variant="light"
+        color="yellow"
+        size="sm"
+        radius="sm"
+        style={{ verticalAlign: 'middle', margin: '0 2px' }}
+      >
+        {match[1]}
+      </Badge>,
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (parts.length === 0) {
+    return renderMarkdown(text, hasEmojis);
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(
+      <span key={`motd-t-${keyIdx}`}>{renderMarkdown(text.slice(lastIndex), hasEmojis)}</span>,
+    );
+  }
+
+  return <>{parts}</>;
 }
 
 export function MessageContent({ content, isOwnMessage, compact }: MessageContentProps) {
@@ -384,9 +759,17 @@ export function MessageContent({ content, isOwnMessage, compact }: MessageConten
             return <FileCard key={i} url={segment.value} />;
           case 'mention':
             return <MentionRenderer key={i} mention={segment.mention!} />;
+          case 'messageLink':
+            return segment.messageLinkData ? (
+              <MessageLinkEmbed
+                key={i}
+                channelId={segment.messageLinkData.channelId}
+                messageId={segment.messageLinkData.messageId}
+              />
+            ) : null;
           case 'text':
           default:
-            return <span key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderMarkdown(segment.value, hasEmojis)}</span>;
+            return <span key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderMotdBadges(segment.value, hasEmojis)}</span>;
         }
       })}
       {embedUrls.map((url) => (

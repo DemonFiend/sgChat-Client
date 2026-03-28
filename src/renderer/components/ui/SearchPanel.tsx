@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ActionIcon, Group, Modal, ScrollArea, SegmentedControl, Stack, Text, TextInput } from '@mantine/core';
+import { useState, useCallback } from 'react';
+import { ActionIcon, Button, Checkbox, Group, Modal, ScrollArea, SegmentedControl, Stack, Text, TextInput } from '@mantine/core';
 import { IconSearch, IconX } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
@@ -8,6 +8,7 @@ import { useUIStore } from '../../stores/uiStore';
 interface SearchResult {
   id: string;
   content: string;
+  highlighted_content?: string;
   author: { id: string; username: string };
   channel_id: string;
   channel_name?: string;
@@ -20,24 +21,84 @@ interface SearchPanelProps {
   channelId: string;
 }
 
+const PAGE_SIZE = 25;
+
+/** Render highlighted_content with <mark> tag support. */
+function HighlightedContent({ content, highlighted }: { content: string; highlighted?: string }) {
+  if (!highlighted) {
+    return (
+      <Text size="sm" lineClamp={2} style={{ color: 'var(--text-primary)' }}>
+        {content}
+      </Text>
+    );
+  }
+
+  // Server returns highlighted_content with <mark>...</mark> tags
+  const parts = highlighted.split(/(<mark>.*?<\/mark>)/g);
+  return (
+    <Text size="sm" lineClamp={2} style={{ color: 'var(--text-primary)' }}>
+      {parts.map((part, i) => {
+        const markMatch = part.match(/^<mark>(.*?)<\/mark>$/);
+        if (markMatch) {
+          return (
+            <mark
+              key={i}
+              style={{
+                background: 'var(--accent)',
+                color: '#fff',
+                borderRadius: 2,
+                padding: '0 2px',
+              }}
+            >
+              {markMatch[1]}
+            </mark>
+          );
+        }
+        return part;
+      })}
+    </Text>
+  );
+}
+
 export function SearchPanel({ opened, onClose, channelId }: SearchPanelProps) {
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState<'channel' | 'server' | 'dms'>('channel');
+  const [page, setPage] = useState(0);
+  const [hasFiles, setHasFiles] = useState(false);
   const setActiveChannel = useUIStore((s) => s.setActiveChannel);
   const activeDMId = useUIStore((s) => s.activeDMId);
 
+  // Reset page when query, scope, or filter changes
+  const handleQueryChange = useCallback((val: string) => {
+    setQuery(val);
+    setPage(0);
+  }, []);
+
+  const handleScopeChange = useCallback((val: string) => {
+    setScope(val as 'channel' | 'server' | 'dms');
+    setPage(0);
+  }, []);
+
+  const handleHasFilesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setHasFiles(e.currentTarget.checked);
+    setPage(0);
+  }, []);
+
+  const offset = page * PAGE_SIZE;
+
   const { data: results, isFetching } = useQuery({
-    queryKey: ['search', scope, scope === 'channel' ? channelId : scope === 'dms' ? activeDMId : 'global', query],
+    queryKey: ['search', scope, scope === 'channel' ? channelId : scope === 'dms' ? activeDMId : 'global', query, offset, hasFiles],
     queryFn: () => {
       const q = encodeURIComponent(query);
+      const fileParam = hasFiles ? '&has_files=true' : '';
       if (scope === 'server') {
-        return api.get<SearchResult[]>(`/api/search/messages?q=${q}&limit=25`);
+        return api.get<SearchResult[]>(`/api/search/messages?q=${q}&limit=${PAGE_SIZE}&offset=${offset}${fileParam}`);
       }
       if (scope === 'dms' && activeDMId) {
-        return api.get<SearchResult[]>(`/api/dms/${activeDMId}/messages/search?q=${q}&limit=25`);
+        return api.get<SearchResult[]>(`/api/dms/${activeDMId}/messages/search?q=${q}&limit=${PAGE_SIZE}&offset=${offset}${fileParam}`);
       }
       return api.get<SearchResult[]>(
-        `/api/channels/${channelId}/messages?search=${q}&limit=25`
+        `/api/channels/${channelId}/messages?search=${q}&limit=${PAGE_SIZE}&offset=${offset}${fileParam}`
       );
     },
     enabled: opened && query.length >= 2,
@@ -47,6 +108,8 @@ export function SearchPanel({ opened, onClose, channelId }: SearchPanelProps) {
     if (result.channel_id) setActiveChannel(result.channel_id);
     onClose();
   };
+
+  const hasMore = results && results.length === PAGE_SIZE;
 
   return (
     <Modal
@@ -59,7 +122,7 @@ export function SearchPanel({ opened, onClose, channelId }: SearchPanelProps) {
       <Stack gap={12}>
         <SegmentedControl
           value={scope}
-          onChange={(v) => setScope(v as 'channel' | 'server' | 'dms')}
+          onChange={handleScopeChange}
           data={[
             { label: 'This Channel', value: 'channel' },
             { label: 'All Channels', value: 'server' },
@@ -71,15 +134,25 @@ export function SearchPanel({ opened, onClose, channelId }: SearchPanelProps) {
           placeholder="Search messages..."
           leftSection={<IconSearch size={16} />}
           value={query}
-          onChange={(e) => setQuery(e.currentTarget.value)}
+          onChange={(e) => handleQueryChange(e.currentTarget.value)}
           autoFocus
           rightSection={
             query ? (
-              <ActionIcon variant="subtle" color="gray" size={20} onClick={() => setQuery('')}>
+              <ActionIcon variant="subtle" color="gray" size={20} onClick={() => handleQueryChange('')}>
                 <IconX size={14} />
               </ActionIcon>
             ) : null
           }
+        />
+
+        <Checkbox
+          label="Has files"
+          size="xs"
+          checked={hasFiles}
+          onChange={handleHasFilesChange}
+          styles={{
+            label: { color: 'var(--text-secondary)', fontSize: 12 },
+          }}
         />
 
         <ScrollArea style={{ maxHeight: 400 }}>
@@ -119,12 +192,40 @@ export function SearchPanel({ opened, onClose, channelId }: SearchPanelProps) {
                     {new Date(result.created_at).toLocaleString()}
                   </Text>
                 </Group>
-                <Text size="sm" lineClamp={2} style={{ color: 'var(--text-primary)' }}>
-                  {result.content}
-                </Text>
+                <HighlightedContent
+                  content={result.content}
+                  highlighted={result.highlighted_content}
+                />
               </div>
             ))}
           </Stack>
+
+          {/* Pagination controls */}
+          {query.length >= 2 && !isFetching && (results?.length ?? 0) > 0 && (
+            <Group justify="center" mt={12} gap={8}>
+              {page > 0 && (
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  Previous
+                </Button>
+              )}
+              <Text size="xs" c="dimmed">
+                Page {page + 1}
+              </Text>
+              {hasMore && (
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Load more
+                </Button>
+              )}
+            </Group>
+          )}
         </ScrollArea>
       </Stack>
     </Modal>

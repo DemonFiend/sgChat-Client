@@ -3,9 +3,10 @@ import { ActionIcon, Group, Tooltip } from '@mantine/core';
 import {
   IconMicrophone, IconMicrophoneOff,
   IconHeadphones, IconHeadphonesOff,
-  IconPhoneOff, IconMusic,
+  IconPhoneOff, IconMusic, IconLock,
 } from '@tabler/icons-react';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useAuthStore } from '../../stores/authStore';
 import { ScreenShareButton } from './ScreenShareButton';
 import { PingIndicator } from './PingIndicator';
 import { SoundboardPanel } from './SoundboardPanel';
@@ -20,30 +21,38 @@ export function VoiceControls({ size = 28 }: VoiceControlsProps) {
   const toggleMute = useVoiceStore((s) => s.toggleMute);
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const leave = useVoiceStore((s) => s.leave);
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const participants = useVoiceStore((s) => s.participants);
   const [soundboardOpen, setSoundboardOpen] = useState(false);
+
+  const localParticipant = participants.find((p) => p.id === currentUserId);
+  const isServerMutedLocal = !!localParticipant?.isServerMuted;
+  const isServerDeafenedLocal = !!localParticipant?.isServerDeafened;
 
   return (
     <div style={{ position: 'relative' }}>
       <Group gap={4}>
-        <Tooltip label={muted ? 'Unmute' : 'Mute'} position="top" withArrow>
+        <Tooltip label={isServerMutedLocal ? 'Server Muted' : muted ? 'Unmute' : 'Mute'} position="top" withArrow>
           <ActionIcon
             variant={muted ? 'filled' : 'subtle'}
             color={muted ? 'red' : 'gray'}
             size={size}
             onClick={toggleMute}
+            style={isServerMutedLocal ? { cursor: 'not-allowed', opacity: 0.7 } : undefined}
           >
-            {muted ? <IconMicrophoneOff size={size * 0.57} /> : <IconMicrophone size={size * 0.57} />}
+            {isServerMutedLocal ? <IconLock size={size * 0.57} /> : muted ? <IconMicrophoneOff size={size * 0.57} /> : <IconMicrophone size={size * 0.57} />}
           </ActionIcon>
         </Tooltip>
 
-        <Tooltip label={deafened ? 'Undeafen' : 'Deafen'} position="top" withArrow>
+        <Tooltip label={isServerDeafenedLocal ? 'Server Deafened' : deafened ? 'Undeafen' : 'Deafen'} position="top" withArrow>
           <ActionIcon
             variant={deafened ? 'filled' : 'subtle'}
             color={deafened ? 'red' : 'gray'}
             size={size}
             onClick={toggleDeafen}
+            style={isServerDeafenedLocal ? { cursor: 'not-allowed', opacity: 0.7 } : undefined}
           >
-            {deafened ? <IconHeadphonesOff size={size * 0.57} /> : <IconHeadphones size={size * 0.57} />}
+            {isServerDeafenedLocal ? <IconLock size={size * 0.57} /> : deafened ? <IconHeadphonesOff size={size * 0.57} /> : <IconHeadphones size={size * 0.57} />}
           </ActionIcon>
         </Tooltip>
 

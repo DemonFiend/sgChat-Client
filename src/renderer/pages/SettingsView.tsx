@@ -16,6 +16,7 @@ import { VoiceBar } from '../components/voice/VoiceBar';
 import { AvatarPicker } from '../components/ui/AvatarPicker';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { TIMEZONES } from '../lib/timezones';
 
 type SettingsTab = 'account' | 'profile' | 'appearance' | 'notifications' | 'keybinds' | 'voice';
 
@@ -185,6 +186,16 @@ function AccountSettings({ user }: { user: any }) {
   const [showOnline, setShowOnline] = useState(user?.privacy_show_online !== false);
   const [showActivity, setShowActivity] = useState(user?.privacy_show_activity !== false);
   const [privacySaving, setPrivacySaving] = useState(false);
+
+  // Timezone privacy — persisted via /api/users/me/settings
+  // NOTE: Desktop already has friend/DM privacy controls above.
+  // Timezone privacy is the bidirectional complement — server team should
+  // ensure GET/PATCH /api/users/me/settings includes timezone_*, and that
+  // user profile responses respect privacy_show_timezone.
+  const [timezone, setTimezone] = useState<string>(user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const [showTimezonePublicly, setShowTimezonePublicly] = useState(user?.privacy_show_timezone !== false);
+  const [observeDst, setObserveDst] = useState(user?.observe_dst !== false);
+  const [timezoneSaving, setTimezoneSaving] = useState(false);
 
   // 2FA
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(user?.two_factor_enabled || false);
@@ -406,6 +417,57 @@ function AccountSettings({ user }: { user: any }) {
         />
         <Button size="sm" variant="light" onClick={handleSavePrivacy} loading={privacySaving} style={{ alignSelf: 'flex-start' }}>
           Save Privacy Settings
+        </Button>
+      </Stack>
+
+      <Divider style={{ borderColor: 'var(--border)' }} />
+
+      {/* Timezone Privacy */}
+      <Stack gap={12}>
+        <Text size="lg" fw={600}>Timezone</Text>
+        <Select
+          label="Your timezone"
+          description="Used for scheduling and displayed on your profile if public"
+          value={timezone}
+          onChange={(v) => v && setTimezone(v)}
+          data={TIMEZONES}
+          searchable
+          nothingFoundMessage="No matching timezone"
+        />
+        <Switch
+          label="Show Timezone Publicly"
+          description="Allow other users to see your timezone on your profile"
+          checked={showTimezonePublicly}
+          onChange={(e) => setShowTimezonePublicly(e.currentTarget.checked)}
+        />
+        <Switch
+          label="Observe Daylight Saving Time"
+          description="Automatically adjust for DST changes in your timezone"
+          checked={observeDst}
+          onChange={(e) => setObserveDst(e.currentTarget.checked)}
+        />
+        <Button
+          size="sm"
+          variant="light"
+          onClick={async () => {
+            setTimezoneSaving(true);
+            try {
+              await api.patch('/api/users/me/settings', {
+                timezone,
+                privacy_show_timezone: showTimezonePublicly,
+                observe_dst: observeDst,
+              });
+              updateUser({ timezone, privacy_show_timezone: showTimezonePublicly, observe_dst: observeDst } as Partial<typeof user>);
+              addToast({ type: 'system', title: 'Timezone Updated', message: 'Your timezone settings have been saved.' });
+            } catch {
+              addToast({ type: 'warning', title: 'Save Failed', message: 'Could not save timezone settings.' });
+            }
+            setTimezoneSaving(false);
+          }}
+          loading={timezoneSaving}
+          style={{ alignSelf: 'flex-start' }}
+        >
+          Save Timezone Settings
         </Button>
       </Stack>
 

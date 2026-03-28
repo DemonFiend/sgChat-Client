@@ -1,11 +1,12 @@
 import { Avatar, Badge, Group, Menu, Stack, Text, Tooltip } from '@mantine/core';
 import { IconMicrophoneOff, IconHeadphonesOff, IconMessage, IconVolume, IconUserOff, IconArrowRight } from '@tabler/icons-react';
 import type { VoiceParticipant } from '../../lib/voiceService';
-import { getVideoElementForStreamer } from '../../lib/voiceService';
+import { getVideoElementForStreamer, moveMember, serverDeafenMember } from '../../lib/voiceService';
 import { streamViewerStore } from '../../stores/streamViewer';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useChannels } from '../../hooks/useChannels';
 import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 
@@ -18,6 +19,8 @@ export function VoiceParticipantsList({ participants, compact }: VoiceParticipan
   const channelId = useVoiceStore((s) => s.channelId);
   const permissions = useVoiceStore((s) => s.permissions);
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const activeServerId = useUIStore((s) => s.activeServerId);
+  const { data: channels } = useChannels(activeServerId);
 
   if (participants.length === 0) return null;
 
@@ -56,6 +59,24 @@ export function VoiceParticipantsList({ participants, compact }: VoiceParticipan
     }
   };
 
+  const handleServerDeafen = async (userId: string, deafened: boolean) => {
+    if (!channelId) return;
+    try {
+      await serverDeafenMember(userId, channelId, deafened);
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleMoveMember = async (userId: string, toChannelId: string) => {
+    if (!channelId) return;
+    try {
+      await moveMember(userId, channelId, toChannelId);
+    } catch {
+      // Ignore
+    }
+  };
+
   const handleDisconnect = async (userId: string) => {
     if (!channelId) return;
     try {
@@ -64,6 +85,11 @@ export function VoiceParticipantsList({ participants, compact }: VoiceParticipan
       // Ignore
     }
   };
+
+  // Voice channels available for move-to (exclude current channel)
+  const voiceChannels = (channels || []).filter(
+    (ch) => (ch.type === 'voice' || ch.type === 'stage' || ch.type === 'temp_voice') && ch.id !== channelId,
+  );
 
   return (
     <Stack gap={2}>
@@ -103,9 +129,16 @@ export function VoiceParticipantsList({ participants, compact }: VoiceParticipan
                 >
                   {p.username.charAt(0).toUpperCase()}
                 </Avatar>
-                <Text size="xs" truncate style={{ flex: 1, minWidth: 0 }}>
-                  {p.username}
-                </Text>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text size="xs" truncate>
+                    {p.username}
+                  </Text>
+                  {p.voiceStatus && (
+                    <Text size="xs" c="dimmed" truncate style={{ fontSize: '0.6rem', lineHeight: 1.2 }}>
+                      {p.voiceStatus}
+                    </Text>
+                  )}
+                </div>
                 {p.isMuted && (
                   <Tooltip label={muteLabel} position="right" withArrow>
                     <IconMicrophoneOff
@@ -163,6 +196,13 @@ export function VoiceParticipantsList({ participants, compact }: VoiceParticipan
                   >
                     {p.isServerMuted ? 'Unmute Member' : 'Server Mute'}
                   </Menu.Item>
+                  <Menu.Item
+                    leftSection={<IconHeadphonesOff size={14} />}
+                    color={p.isServerDeafened ? undefined : 'red'}
+                    onClick={() => handleServerDeafen(p.id, !p.isServerDeafened)}
+                  >
+                    {p.isServerDeafened ? 'Undeafen Member' : 'Server Deafen'}
+                  </Menu.Item>
                 </>
               )}
               {!isMe && permissions?.canDisconnectMembers && (
@@ -174,13 +214,20 @@ export function VoiceParticipantsList({ participants, compact }: VoiceParticipan
                   Disconnect
                 </Menu.Item>
               )}
-              {!isMe && permissions?.canMoveMembers && (
-                <Menu.Item
-                  leftSection={<IconArrowRight size={14} />}
-                  disabled
-                >
-                  Move to Channel
-                </Menu.Item>
+              {!isMe && permissions?.canMoveMembers && voiceChannels.length > 0 && (
+                <>
+                  <Menu.Divider />
+                  <Menu.Label>Move to Channel</Menu.Label>
+                  {voiceChannels.map((ch) => (
+                    <Menu.Item
+                      key={ch.id}
+                      leftSection={<IconArrowRight size={14} />}
+                      onClick={() => handleMoveMember(p.id, ch.id)}
+                    >
+                      {ch.name}
+                    </Menu.Item>
+                  ))}
+                </>
               )}
             </Menu.Dropdown>
           </Menu>

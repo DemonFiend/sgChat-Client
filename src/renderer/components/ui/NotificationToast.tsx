@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
-import { Paper, Group, Stack, Text, Avatar, CloseButton, Transition } from '@mantine/core';
+import { Paper, Group, Stack, Text, Avatar, CloseButton } from '@mantine/core';
 import { IconMessage, IconAt, IconInfoCircle, IconAlertTriangle } from '@tabler/icons-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useToastStore, type ToastNotification } from '../../stores/toastNotifications';
 
 const TOAST_ICONS = {
@@ -32,7 +33,6 @@ function ToastItem({ toast }: { toast: ToastNotification }) {
           ? '2px solid var(--mantine-color-yellow-5)'
           : '1px solid var(--bg-tertiary)',
         transition: 'background 150ms ease',
-        animation: 'slideInRight 300ms ease-out',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = 'var(--bg-tertiary)';
@@ -75,6 +75,12 @@ function ToastItem({ toast }: { toast: ToastNotification }) {
   );
 }
 
+const toastVariants = {
+  initial: { opacity: 0, x: 80, scale: 0.95 },
+  animate: { opacity: 1, x: 0, scale: 1, transition: { type: 'spring', stiffness: 400, damping: 30 } },
+  exit: { opacity: 0, x: 80, scale: 0.95, transition: { duration: 0.2, ease: 'easeIn' } },
+};
+
 export function NotificationToast() {
   const toasts = useToastStore((s) => s.toasts);
 
@@ -92,11 +98,21 @@ export function NotificationToast() {
         pointerEvents: 'none',
       }}
     >
-      {toasts.map((toast) => (
-        <div key={toast.id} style={{ pointerEvents: 'auto' }}>
-          <ToastItem toast={toast} />
-        </div>
-      ))}
+      <AnimatePresence mode="popLayout">
+        {toasts.map((toast) => (
+          <motion.div
+            key={toast.id}
+            layout
+            variants={toastVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            style={{ pointerEvents: 'auto' }}
+          >
+            <ToastItem toast={toast} />
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>,
     document.body
   );

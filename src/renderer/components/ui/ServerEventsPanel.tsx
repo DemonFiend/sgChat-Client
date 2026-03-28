@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
-import { ActionIcon, Badge, Button, Group, Modal, ScrollArea, SegmentedControl, Stack, Text, Textarea, TextInput, Tooltip } from '@mantine/core';
+import { ActionIcon, Badge, Button, Group, Modal, MultiSelect, ScrollArea, SegmentedControl, Select, Stack, Switch, Text, Textarea, TextInput, Tooltip } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { IconCalendar, IconCalendarPlus, IconCheck, IconChevronLeft, IconChevronRight, IconClock, IconEdit, IconHistory, IconMapPin, IconQuestionMark, IconTrash, IconX } from '@tabler/icons-react';
+import { IconCalendar, IconCalendarPlus, IconCheck, IconChevronLeft, IconChevronRight, IconClock, IconEdit, IconHistory, IconMapPin, IconQuestionMark, IconTrash, IconUser, IconX } from '@tabler/icons-react';
 import { useServerEvents, useEventHistory, useCreateEvent, useUpdateEvent, useRsvpEvent, useCancelEvent, useDeleteEvent, type ServerEvent } from '../../hooks/useEvents';
 import { canCreateEvents, canManageEvents, canEditEvent } from '../../stores/permissions';
 
@@ -23,9 +23,13 @@ function shiftMonth(month: string, delta: number): string {
 
 interface ServerEventsPanelProps {
   serverId: string;
+  /** Available text channels for announcement selection */
+  channels?: Array<{ id: string; name: string; type: string }>;
+  /** Available roles for private visibility */
+  roles?: Array<{ id: string; name: string; color?: string }>;
 }
 
-export function ServerEventsPanel({ serverId }: ServerEventsPanelProps) {
+export function ServerEventsPanel({ serverId, channels, roles }: ServerEventsPanelProps) {
   const [currentMonth, setCurrentMonth] = useState(getCurrentMonth);
   const [showHistory, setShowHistory] = useState(false);
   const { data: events, isLoading } = useServerEvents(serverId, currentMonth);
@@ -34,6 +38,7 @@ export function ServerEventsPanel({ serverId }: ServerEventsPanelProps) {
   const [selectedEvent, setSelectedEvent] = useState<ServerEvent | null>(null);
   const [editEvent, setEditEvent] = useState<ServerEvent | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const canManage = canCreateEvents();
 
   const displayEvents = showHistory ? historyEvents : events;
@@ -41,11 +46,43 @@ export function ServerEventsPanel({ serverId }: ServerEventsPanelProps) {
 
   const sortedEvents = useMemo(() => {
     if (!displayEvents) return [];
-    return [...displayEvents].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-  }, [displayEvents]);
+    const sorted = [...displayEvents].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
-  const prevMonth = useCallback(() => setCurrentMonth((m) => shiftMonth(m, -1)), []);
-  const nextMonth = useCallback(() => setCurrentMonth((m) => shiftMonth(m, 1)), []);
+    // Filter by selected day if set
+    if (selectedDay !== null) {
+      const [y, mo] = currentMonth.split('-').map(Number);
+      return sorted.filter((e) => {
+        const d = new Date(e.start_time);
+        return d.getDate() === selectedDay && d.getMonth() === mo - 1 && d.getFullYear() === y;
+      });
+    }
+    return sorted;
+  }, [displayEvents, selectedDay, currentMonth]);
+
+  const prevMonth = useCallback(() => {
+    setCurrentMonth((m) => shiftMonth(m, -1));
+    setSelectedDay(null);
+  }, []);
+  const nextMonth = useCallback(() => {
+    setCurrentMonth((m) => shiftMonth(m, 1));
+    setSelectedDay(null);
+  }, []);
+
+  const handleDayClick = useCallback((day: number | null) => {
+    setSelectedDay((prev) => (prev === day ? null : day));
+  }, []);
+
+  const textChannels = useMemo(() => {
+    if (!channels) return [];
+    return channels
+      .filter((c) => c.type === 'text')
+      .map((c) => ({ value: c.id, label: `#${c.name}` }));
+  }, [channels]);
+
+  const roleOptions = useMemo(() => {
+    if (!roles) return [];
+    return roles.map((r) => ({ value: r.id, label: r.name }));
+  }, [roles]);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
@@ -108,11 +145,32 @@ export function ServerEventsPanel({ serverId }: ServerEventsPanelProps) {
         <ActionIcon variant="subtle" size={24} onClick={nextMonth}><IconChevronRight size={14} /></ActionIcon>
       </div>
 
+      {/* Day filter indicator */}
+      {selectedDay !== null && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          padding: '6px 16px',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--bg-secondary)',
+          flexShrink: 0,
+        }}>
+          <Text size="xs" c="dimmed">
+            Showing events for {formatMonthLabel(currentMonth).split(' ')[0]} {selectedDay}
+          </Text>
+          <ActionIcon variant="subtle" size={16} onClick={() => setSelectedDay(null)}>
+            <IconX size={10} />
+          </ActionIcon>
+        </div>
+      )}
+
       {/* Content */}
       {viewMode === 'calendar' ? (
         <div style={{ flex: 1, padding: 16, minHeight: 0 }}>
           {loading && <Text size="sm" c="dimmed" ta="center" py={32}>Loading events...</Text>}
-          {!loading && sortedEvents.length === 0 && (
+          {!loading && (displayEvents || []).length === 0 && (
             <Stack align="center" py={40} gap={8}>
               <IconCalendar size={40} style={{ color: 'var(--text-muted)', opacity: 0.5 }} />
               <Text size="sm" c="dimmed">{showHistory ? 'No past events this month' : 'No upcoming events'}</Text>
@@ -123,8 +181,14 @@ export function ServerEventsPanel({ serverId }: ServerEventsPanelProps) {
               )}
             </Stack>
           )}
-          {!loading && sortedEvents.length > 0 && (
-            <CalendarGrid events={sortedEvents} currentMonth={currentMonth} onEventClick={setSelectedEvent} />
+          {!loading && (displayEvents || []).length > 0 && (
+            <CalendarGrid
+              events={displayEvents || []}
+              currentMonth={currentMonth}
+              onEventClick={setSelectedEvent}
+              selectedDay={selectedDay}
+              onDayClick={handleDayClick}
+            />
           )}
         </div>
       ) : (
@@ -134,7 +198,7 @@ export function ServerEventsPanel({ serverId }: ServerEventsPanelProps) {
             {!loading && sortedEvents.length === 0 && (
               <Stack align="center" py={40} gap={8}>
                 <IconCalendar size={40} style={{ color: 'var(--text-muted)', opacity: 0.5 }} />
-                <Text size="sm" c="dimmed">{showHistory ? 'No past events this month' : 'No upcoming events'}</Text>
+                <Text size="sm" c="dimmed">{showHistory ? 'No past events this month' : selectedDay !== null ? 'No events on this day' : 'No upcoming events'}</Text>
                 {canManage && !showHistory && (
                   <Button size="xs" variant="light" leftSection={<IconCalendarPlus size={14} />} onClick={() => setCreateOpen(true)}>
                     Create Event
@@ -157,6 +221,8 @@ export function ServerEventsPanel({ serverId }: ServerEventsPanelProps) {
         opened={createOpen || !!editEvent}
         onClose={() => { setCreateOpen(false); setEditEvent(null); }}
         editEvent={editEvent}
+        textChannels={textChannels}
+        roleOptions={roleOptions}
       />
 
       {/* Event Details Modal */}
@@ -210,6 +276,14 @@ function EventCard({ event, serverId, onSelect }: { event: ServerEvent; serverId
         )}
       </Group>
 
+      {/* Creator display */}
+      {event.creator_username && (
+        <Group gap={4} mb={6}>
+          <IconUser size={12} style={{ color: 'var(--text-muted)' }} />
+          <Text size="xs" c="dimmed">Created by {event.creator_username}</Text>
+        </Group>
+      )}
+
       {/* RSVP buttons */}
       <Group gap={4}>
         <Button
@@ -244,7 +318,13 @@ function EventCard({ event, serverId, onSelect }: { event: ServerEvent; serverId
   );
 }
 
-function CalendarGrid({ events, currentMonth, onEventClick }: { events: ServerEvent[]; currentMonth: string; onEventClick: (e: ServerEvent) => void }) {
+function CalendarGrid({ events, currentMonth, onEventClick, selectedDay, onDayClick }: {
+  events: ServerEvent[];
+  currentMonth: string;
+  onEventClick: (e: ServerEvent) => void;
+  selectedDay: number | null;
+  onDayClick: (day: number | null) => void;
+}) {
   const [y, mo] = currentMonth.split('-').map(Number);
 
   const daysInMonth = useMemo(() => {
@@ -276,15 +356,19 @@ function CalendarGrid({ events, currentMonth, onEventClick }: { events: ServerEv
           const isToday = day.date === today.getDate() &&
             (mo - 1) === today.getMonth() &&
             y === today.getFullYear();
+          const isSelected = day.date === selectedDay;
 
           return (
             <div
               key={i}
+              onClick={() => day.date && onDayClick(day.date)}
               style={{
                 padding: 2,
                 borderRadius: 4,
-                background: isToday ? 'var(--bg-active)' : day.date ? 'var(--bg-secondary)' : 'transparent',
-                border: isToday ? '1px solid var(--accent)' : '1px solid transparent',
+                background: isSelected ? 'var(--bg-active)' : isToday ? 'var(--bg-active)' : day.date ? 'var(--bg-secondary)' : 'transparent',
+                border: isSelected ? '2px solid var(--accent)' : isToday ? '1px solid var(--accent)' : '1px solid transparent',
+                cursor: day.date ? 'pointer' : 'default',
+                transition: 'border-color 0.15s, background 0.15s',
               }}
             >
               {day.date && (
@@ -292,26 +376,31 @@ function CalendarGrid({ events, currentMonth, onEventClick }: { events: ServerEv
                   <Text size="xs" c={isToday ? 'var(--accent)' : 'dimmed'} ta="right" px={2}>
                     {day.date}
                   </Text>
-                  {day.events.map((evt) => (
-                    <div
-                      key={evt.id}
-                      onClick={() => onEventClick(evt)}
-                      style={{
-                        fontSize: '0.6rem',
-                        padding: '1px 3px',
-                        borderRadius: 2,
-                        background: evt.color || 'var(--accent)',
-                        color: '#fff',
-                        cursor: 'pointer',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        marginTop: 1,
-                      }}
-                    >
-                      {evt.title}
+                  {/* Show colored dots for events instead of full labels to save space */}
+                  {day.events.length > 0 && (
+                    <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap', padding: '1px 2px' }}>
+                      {day.events.slice(0, 4).map((evt) => (
+                        <Tooltip key={evt.id} label={evt.title} position="top" withArrow openDelay={200}>
+                          <div
+                            onClick={(e) => { e.stopPropagation(); onEventClick(evt); }}
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: '50%',
+                              background: evt.color || 'var(--accent)',
+                              cursor: 'pointer',
+                              flexShrink: 0,
+                            }}
+                          />
+                        </Tooltip>
+                      ))}
+                      {day.events.length > 4 && (
+                        <Text size="xs" c="dimmed" style={{ fontSize: '0.5rem', lineHeight: 1 }}>
+                          +{day.events.length - 4}
+                        </Text>
+                      )}
                     </div>
-                  ))}
+                  )}
                 </>
               )}
             </div>
@@ -329,11 +418,25 @@ function toLocalDateTimeValue(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function CreateEventModal({ serverId, opened, onClose, editEvent }: {
+/** Split a datetime-local value into separate date and time parts. */
+function splitDateTime(datetimeLocal: string): { date: string; time: string } {
+  const [date, time] = datetimeLocal.split('T');
+  return { date: date || '', time: time || '' };
+}
+
+/** Combine separate date and time strings into a datetime-local value. */
+function combineDateTime(date: string, time: string): string {
+  if (!date) return '';
+  return `${date}T${time || '00:00'}`;
+}
+
+function CreateEventModal({ serverId, opened, onClose, editEvent, textChannels, roleOptions }: {
   serverId: string;
   opened: boolean;
   onClose: () => void;
   editEvent?: ServerEvent | null;
+  textChannels: Array<{ value: string; label: string }>;
+  roleOptions: Array<{ value: string; label: string }>;
 }) {
   const createEvent = useCreateEvent(serverId);
   const updateEvent = useUpdateEvent(serverId);
@@ -341,19 +444,40 @@ function CreateEventModal({ serverId, opened, onClose, editEvent }: {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [startDate, setStartDate] = useState('');
   const [startTime, setStartTime] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [endTime, setEndTime] = useState('');
   const [location, setLocation] = useState('');
   const [error, setError] = useState('');
+
+  // Announcement
+  const [announceAtStart, setAnnounceAtStart] = useState(false);
+  const [announceChannel, setAnnounceChannel] = useState<string | null>(null);
+
+  // Visibility
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+  const [visibilityRoleIds, setVisibilityRoleIds] = useState<string[]>([]);
 
   // Pre-fill when editing
   const [lastEditId, setLastEditId] = useState<string | null>(null);
   if (editEvent && editEvent.id !== lastEditId) {
     setTitle(editEvent.title);
     setDescription(editEvent.description || '');
-    setStartTime(toLocalDateTimeValue(editEvent.start_time));
-    setEndTime(editEvent.end_time ? toLocalDateTimeValue(editEvent.end_time) : '');
+    const startParts = splitDateTime(toLocalDateTimeValue(editEvent.start_time));
+    setStartDate(startParts.date);
+    setStartTime(startParts.time);
+    if (editEvent.end_time) {
+      const endParts = splitDateTime(toLocalDateTimeValue(editEvent.end_time));
+      setEndDate(endParts.date);
+      setEndTime(endParts.time);
+    } else {
+      setEndDate('');
+      setEndTime('');
+    }
     setLocation(editEvent.location || '');
+    setVisibility(editEvent.visibility === 'role' ? 'private' : editEvent.visibility === 'public' ? 'public' : 'public');
+    setVisibilityRoleIds(editEvent.visibility_role_id ? [editEvent.visibility_role_id] : []);
     setError('');
     setLastEditId(editEvent.id);
   }
@@ -361,11 +485,17 @@ function CreateEventModal({ serverId, opened, onClose, editEvent }: {
   const resetForm = () => {
     setTitle('');
     setDescription('');
+    setStartDate('');
     setStartTime('');
+    setEndDate('');
     setEndTime('');
     setLocation('');
     setError('');
     setLastEditId(null);
+    setAnnounceAtStart(false);
+    setAnnounceChannel(null);
+    setVisibility('public');
+    setVisibilityRoleIds([]);
   };
 
   const handleClose = () => {
@@ -375,29 +505,38 @@ function CreateEventModal({ serverId, opened, onClose, editEvent }: {
 
   const handleSubmit = () => {
     if (!title.trim()) { setError('Title is required'); return; }
-    if (!startTime) { setError('Start time is required'); return; }
+    if (!startDate) { setError('Start date is required'); return; }
     setError('');
+
+    const startTimeValue = combineDateTime(startDate, startTime);
+    const endTimeValue = endDate ? combineDateTime(endDate, endTime) : undefined;
+
+    const payload: Record<string, unknown> = {
+      title: title.trim(),
+      description: description.trim() || undefined,
+      start_time: new Date(startTimeValue).toISOString(),
+      end_time: endTimeValue ? new Date(endTimeValue).toISOString() : undefined,
+      location: location.trim() || undefined,
+      visibility: visibility === 'private' ? 'role' : 'public',
+      visibility_role_ids: visibility === 'private' ? visibilityRoleIds : undefined,
+      announce_at_start: announceAtStart || undefined,
+      announce_channel_id: announceAtStart && announceChannel ? announceChannel : undefined,
+    };
 
     if (isEditing) {
       updateEvent.mutate({
         eventId: editEvent.id,
-        title: title.trim(),
-        description: description.trim() || undefined,
-        start_time: new Date(startTime).toISOString(),
-        end_time: endTime ? new Date(endTime).toISOString() : undefined,
-        location: location.trim() || undefined,
+        title: payload.title as string,
+        description: payload.description as string | undefined,
+        start_time: payload.start_time as string,
+        end_time: payload.end_time as string | undefined,
+        location: payload.location as string | undefined,
       }, {
         onSuccess: () => handleClose(),
         onError: (err) => setError(err instanceof Error ? err.message : 'Failed to update event'),
       });
     } else {
-      createEvent.mutate({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        start_time: new Date(startTime).toISOString(),
-        end_time: endTime ? new Date(endTime).toISOString() : undefined,
-        location: location.trim() || undefined,
-      }, {
+      createEvent.mutate(payload as Parameters<typeof createEvent.mutate>[0], {
         onSuccess: () => handleClose(),
         onError: (err) => setError(err instanceof Error ? err.message : 'Failed to create event'),
       });
@@ -405,14 +544,95 @@ function CreateEventModal({ serverId, opened, onClose, editEvent }: {
   };
 
   return (
-    <Modal opened={opened} onClose={handleClose} title={isEditing ? 'Edit Event' : 'Create Event'} centered>
+    <Modal opened={opened} onClose={handleClose} title={isEditing ? 'Edit Event' : 'Create Event'} centered size="md">
       <Stack gap={12}>
         {error && <Text size="sm" c="red">{error}</Text>}
         <TextInput label="Title" required value={title} onChange={(e) => setTitle(e.currentTarget.value)} maxLength={100} />
         <Textarea label="Description" value={description} onChange={(e) => setDescription(e.currentTarget.value)} autosize minRows={2} maxRows={4} />
-        <TextInput label="Start Time" type="datetime-local" required value={startTime} onChange={(e) => setStartTime(e.currentTarget.value)} />
-        <TextInput label="End Time" type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.currentTarget.value)} />
+
+        {/* Date / Time pickers — separate inputs for better UX */}
+        <Group grow>
+          <TextInput
+            label="Start Date"
+            type="date"
+            required
+            value={startDate}
+            onChange={(e) => setStartDate(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Start Time"
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.currentTarget.value)}
+          />
+        </Group>
+        <Group grow>
+          <TextInput
+            label="End Date"
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.currentTarget.value)}
+          />
+          <TextInput
+            label="End Time"
+            type="time"
+            value={endTime}
+            onChange={(e) => setEndTime(e.currentTarget.value)}
+          />
+        </Group>
+
         <TextInput label="Location" placeholder="Optional" value={location} onChange={(e) => setLocation(e.currentTarget.value)} />
+
+        {/* Visibility */}
+        <div>
+          <Text size="sm" fw={500} mb={4}>Visibility</Text>
+          <SegmentedControl
+            size="xs"
+            value={visibility}
+            onChange={(v) => setVisibility(v as 'public' | 'private')}
+            data={[
+              { label: 'Public', value: 'public' },
+              { label: 'Private', value: 'private' },
+            ]}
+            fullWidth
+          />
+        </div>
+
+        {visibility === 'private' && roleOptions.length > 0 && (
+          <MultiSelect
+            label="Visible to Roles"
+            placeholder="Select roles..."
+            data={roleOptions}
+            value={visibilityRoleIds}
+            onChange={setVisibilityRoleIds}
+            size="sm"
+            searchable
+          />
+        )}
+
+        {/* Announcement */}
+        {!isEditing && (
+          <>
+            <Switch
+              label="Announce at start"
+              checked={announceAtStart}
+              onChange={(e) => setAnnounceAtStart(e.currentTarget.checked)}
+              size="sm"
+            />
+            {announceAtStart && textChannels.length > 0 && (
+              <Select
+                label="Announcement Channel"
+                placeholder="Select a text channel..."
+                data={textChannels}
+                value={announceChannel}
+                onChange={setAnnounceChannel}
+                size="sm"
+                searchable
+              />
+            )}
+          </>
+        )}
+
         <Group justify="flex-end" mt={8}>
           <Button variant="subtle" onClick={handleClose}>Cancel</Button>
           <Button onClick={handleSubmit} loading={isEditing ? updateEvent.isPending : createEvent.isPending}>
@@ -478,8 +698,12 @@ function EventDetailsModal({ event, serverId, opened, onClose, onEdit }: {
           </Group>
         )}
 
+        {/* Creator display (2f) */}
         {event.creator_username && (
-          <Text size="xs" c="dimmed">Created by {event.creator_username}</Text>
+          <Group gap={8}>
+            <IconUser size={16} style={{ color: 'var(--text-muted)' }} />
+            <Text size="sm" c="dimmed">Created by {event.creator_username}</Text>
+          </Group>
         )}
 
         {event.description && (

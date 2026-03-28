@@ -1,13 +1,44 @@
+import { useState, useEffect } from 'react';
 import { Button, Center, Modal, Stack, Text } from '@mantine/core';
-import { IconX } from '@tabler/icons-react';
 import { useServerPopupStore } from '../../stores/serverPopup';
 import type { ServerPopupConfig } from '../../stores/serverConfig';
+import { renderMarkdown } from '../../lib/markdownParser';
 
 interface ServerWelcomePopupProps {
   serverId: string;
   serverName: string;
   popupConfig?: ServerPopupConfig;
   username?: string;
+}
+
+function LiveClock({ timezone }: { timezone: string }) {
+  const [time, setTime] = useState('');
+
+  useEffect(() => {
+    const update = () => {
+      try {
+        setTime(
+          new Date().toLocaleTimeString([], {
+            timeZone: timezone,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          }),
+        );
+      } catch {
+        setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      }
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [timezone]);
+
+  return (
+    <Text size="xs" c="dimmed" ta="center">
+      Server time: {time}
+    </Text>
+  );
 }
 
 export function ServerWelcomePopup({ serverId, serverName, popupConfig, username }: ServerWelcomePopupProps) {
@@ -17,10 +48,23 @@ export function ServerWelcomePopup({ serverId, serverName, popupConfig, username
   if (!popupConfig?.enabled || visibleServerId !== serverId) return null;
 
   // Template variable substitution
-  const replaceVars = (text: string) =>
-    text
+  const replaceVars = (text: string) => {
+    const now = new Date();
+    let serverTimeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (popupConfig.timezone) {
+      try {
+        serverTimeStr = now.toLocaleTimeString([], {
+          timeZone: popupConfig.timezone,
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      } catch { /* fallback to local time */ }
+    }
+    return text
       .replace(/\{username\}/g, username || 'User')
-      .replace(/\{servername\}/g, serverName);
+      .replace(/\{servername\}/g, serverName)
+      .replace(/\{servertime\}/g, serverTimeStr);
+  };
 
   const title = popupConfig.title ? replaceVars(popupConfig.title) : `Welcome to ${serverName}!`;
   const body = popupConfig.body ? replaceVars(popupConfig.body) : '';
@@ -53,9 +97,13 @@ export function ServerWelcomePopup({ serverId, serverName, popupConfig, username
         )}
 
         {body && (
-          <Text size="sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-            {body}
-          </Text>
+          <div style={{ lineHeight: 1.6, fontSize: 14 }}>
+            {renderMarkdown(body, true)}
+          </div>
+        )}
+
+        {popupConfig.show_clock && popupConfig.timezone && (
+          <LiveClock timezone={popupConfig.timezone} />
         )}
 
         <Button onClick={dismiss} fullWidth>

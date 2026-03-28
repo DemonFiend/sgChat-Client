@@ -153,13 +153,54 @@ function parseInlineMarkdown(text: string): MarkdownNode[] {
 
 // --- React rendering ---
 
+const URL_REGEX = /(https?:\/\/[^\s<>]+)/g;
+
+/**
+ * Split leaf text by URLs and render matched URLs as clickable <a> tags.
+ * Non-URL segments pass through emoji rendering when enabled.
+ */
 function renderLeafText(content: string, withEmojis: boolean): React.ReactNode {
-  if (withEmojis) {
-    const parts = renderCustomEmojis(content);
-    if (parts.length === 1 && typeof parts[0] === 'string') return parts[0];
-    return <>{parts}</>;
+  const parts = content.split(URL_REGEX);
+  if (parts.length === 1) {
+    // No URLs found — fast path
+    if (withEmojis) {
+      const emojiParts = renderCustomEmojis(content);
+      if (emojiParts.length === 1 && typeof emojiParts[0] === 'string') return emojiParts[0];
+      return <>{emojiParts}</>;
+    }
+    return content;
   }
-  return content;
+
+  const nodes: React.ReactNode[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!part) continue;
+    if (URL_REGEX.test(part)) {
+      // Reset lastIndex since .test() advances it
+      URL_REGEX.lastIndex = 0;
+      nodes.push(
+        <a
+          key={`link-${i}`}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'var(--text-link)', textDecoration: 'none' }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none'; }}
+        >
+          {part}
+        </a>,
+      );
+    } else if (withEmojis) {
+      const emojiParts = renderCustomEmojis(part);
+      nodes.push(<React.Fragment key={`text-${i}`}>{emojiParts}</React.Fragment>);
+    } else {
+      nodes.push(part);
+    }
+  }
+  // Reset lastIndex after the loop
+  URL_REGEX.lastIndex = 0;
+  return <>{nodes}</>;
 }
 
 function RenderNode({ node, withEmojis = false }: { node: MarkdownNode; withEmojis?: boolean }) {

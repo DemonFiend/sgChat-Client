@@ -1,8 +1,12 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Group, Stack, Text, Button, Avatar, Alert, Loader } from '@mantine/core';
 import { IconCamera, IconTrash, IconUpload } from '@tabler/icons-react';
+import { api } from '../../lib/api';
 
 const electronAPI = (window as any).electronAPI;
+
+/** Default avatar size limit in bytes (5 MB). Overridden by server config if available. */
+const DEFAULT_AVATAR_LIMIT = 5 * 1024 * 1024;
 
 interface AvatarPickerProps {
   currentAvatarUrl?: string | null;
@@ -17,7 +21,27 @@ export function AvatarPicker({ currentAvatarUrl, username, displayName, onAvatar
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [maxBytes, setMaxBytes] = useState(DEFAULT_AVATAR_LIMIT);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch dynamic upload limit from server config
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchLimits() {
+      try {
+        const config = await api.get<{ avatar_max_bytes?: number }>('/api/server/upload-limits');
+        if (!cancelled && config.avatar_max_bytes && config.avatar_max_bytes > 0) {
+          setMaxBytes(config.avatar_max_bytes);
+        }
+      } catch {
+        // Server may not expose this endpoint yet — keep default
+      }
+    }
+    fetchLimits();
+    return () => { cancelled = true; };
+  }, []);
+
+  const maxMB = (maxBytes / (1024 * 1024)).toFixed(0);
 
   const handleFileSelect = async (file: File) => {
     setError(null);
@@ -28,8 +52,8 @@ export function AvatarPicker({ currentAvatarUrl, username, displayName, onAvatar
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File too large. Maximum size: 5 MB');
+    if (file.size > maxBytes) {
+      setError(`File too large. Maximum size: ${maxMB} MB`);
       return;
     }
 
@@ -54,8 +78,8 @@ export function AvatarPicker({ currentAvatarUrl, username, displayName, onAvatar
         setError(res.data?.message || 'Failed to upload avatar');
         setPreviewUrl(null);
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to upload avatar');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to upload avatar');
       setPreviewUrl(null);
     } finally {
       setIsUploading(false);
@@ -86,8 +110,8 @@ export function AvatarPicker({ currentAvatarUrl, username, displayName, onAvatar
       } else {
         setError(res.data?.message || 'Failed to remove avatar');
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to remove avatar');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to remove avatar');
     } finally {
       setIsDeleting(false);
     }
@@ -156,7 +180,7 @@ export function AvatarPicker({ currentAvatarUrl, username, displayName, onAvatar
         <Stack gap="xs" style={{ flex: 1 }}>
           <div>
             <Text size="sm" fw={500}>Click or drag to upload</Text>
-            <Text size="xs" c="dimmed">JPEG, PNG, GIF, or WebP. Max 5 MB.</Text>
+            <Text size="xs" c="dimmed">JPEG, PNG, GIF, or WebP. Max {maxMB} MB.</Text>
           </div>
           <Group gap="xs">
             <Button

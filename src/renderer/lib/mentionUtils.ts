@@ -41,11 +41,15 @@ export function pruneMappings(
 }
 
 export interface ParsedMention {
-  type: 'user' | 'channel' | 'role' | 'everyone' | 'here';
+  type: 'user' | 'channel' | 'role' | 'everyone' | 'here' | 'time';
   id?: string;
   raw: string;
   start: number;
   end: number;
+  /** For time mentions: the unix timestamp (seconds). */
+  timestamp?: number;
+  /** For time mentions: the format flag (t, T, d, D, f, F, R). */
+  timeFormat?: string;
 }
 
 /**
@@ -60,13 +64,23 @@ export interface ParsedMention {
  */
 export function parseMentions(content: string): ParsedMention[] {
   const mentions: ParsedMention[] = [];
-  const regex = /<@!?([\w-]+)>|<#([\w-]+)>|<@&([\w-]+)>|(@everyone|@here)/g;
+  const regex = /<@!?([\w-]+)>|<#([\w-]+)>|<@&([\w-]+)>|(@everyone|@here)|<t:(\d+)(?::([tTdDfFR]))?\>/g;
   let match;
 
   while ((match = regex.exec(content)) !== null) {
     const start = match.index;
     const end = start + match[0].length;
-    if (match[1] && !match[0].startsWith('<@&')) {
+    if (match[5]) {
+      // Time mention: <t:timestamp:format> or <t:timestamp>
+      mentions.push({
+        type: 'time',
+        raw: match[0],
+        start,
+        end,
+        timestamp: parseInt(match[5], 10),
+        timeFormat: match[6] || 'f',
+      });
+    } else if (match[1] && !match[0].startsWith('<@&')) {
       // User mention: <@id> or <@!id>
       mentions.push({ type: 'user', id: match[1], raw: match[0], start, end });
     } else if (match[2]) {

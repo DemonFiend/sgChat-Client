@@ -5,8 +5,10 @@ import {
   IconHeadphones, IconHeadphonesOff,
   IconPhoneOff, IconWifi, IconWifiOff,
   IconMusic, IconAlertTriangle, IconPencil,
+  IconLock,
 } from '@tabler/icons-react';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useAuthStore } from '../../stores/authStore';
 import { getSocket } from '../../api/socket';
 import { ScreenShareButton } from '../ui/ScreenShareButton';
 import { SoundboardPanel } from '../ui/SoundboardPanel';
@@ -45,11 +47,18 @@ export function VoicePanel() {
   const isHandRaised = useVoiceStore((s) => s.isHandRaised);
   const raiseHand = useVoiceStore((s) => s.raiseHand);
   const lowerHand = useVoiceStore((s) => s.lowerHand);
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const participants = useVoiceStore((s) => s.participants);
   const [soundboardOpen, setSoundboardOpen] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState('');
   const [editingStatus, setEditingStatus] = useState(false);
   const [statusDraft, setStatusDraft] = useState('');
   const statusInputRef = useRef<HTMLInputElement>(null);
+
+  // Detect server-enforced mute/deafen on local user
+  const localParticipant = participants.find((p) => p.id === currentUserId);
+  const isServerMutedLocal = !!localParticipant?.isServerMuted;
+  const isServerDeafenedLocal = !!localParticipant?.isServerDeafened;
 
   // Initialize voice event listeners (quality polling, participant updates, reconnection)
   useEffect(() => {
@@ -229,27 +238,29 @@ export function VoicePanel() {
         position: 'relative',
       }}>
         <Group gap={4} justify="center">
-          <Tooltip label={muted ? 'Unmute' : 'Mute'} position="top" withArrow>
+          <Tooltip label={isServerMutedLocal ? 'Server Muted' : muted ? 'Unmute' : 'Mute'} position="top" withArrow>
             <ActionIcon
               variant={muted ? 'filled' : 'subtle'}
               color={muted ? 'red' : 'gray'}
               size={28}
               radius="xl"
               onClick={toggleMute}
+              style={isServerMutedLocal ? { cursor: 'not-allowed', opacity: 0.7 } : undefined}
             >
-              {muted ? <IconMicrophoneOff size={16} /> : <IconMicrophone size={16} />}
+              {isServerMutedLocal ? <IconLock size={16} /> : muted ? <IconMicrophoneOff size={16} /> : <IconMicrophone size={16} />}
             </ActionIcon>
           </Tooltip>
 
-          <Tooltip label={deafened ? 'Undeafen' : 'Deafen'} position="top" withArrow>
+          <Tooltip label={isServerDeafenedLocal ? 'Server Deafened' : deafened ? 'Undeafen' : 'Deafen'} position="top" withArrow>
             <ActionIcon
               variant={deafened ? 'filled' : 'subtle'}
               color={deafened ? 'red' : 'gray'}
               size={28}
               radius="xl"
               onClick={toggleDeafen}
+              style={isServerDeafenedLocal ? { cursor: 'not-allowed', opacity: 0.7 } : undefined}
             >
-              {deafened ? <IconHeadphonesOff size={16} /> : <IconHeadphones size={16} />}
+              {isServerDeafenedLocal ? <IconLock size={16} /> : deafened ? <IconHeadphonesOff size={16} /> : <IconHeadphones size={16} />}
             </ActionIcon>
           </Tooltip>
 

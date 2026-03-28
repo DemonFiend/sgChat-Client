@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActionIcon, Group, Skeleton, ScrollArea, Stack, Text, Tooltip } from '@mantine/core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActionIcon, Group, Skeleton, Stack, Text, Tooltip } from '@mantine/core';
 import { IconHash, IconPin, IconPinnedOff, IconUsers, IconSearch, IconCalendar, IconMessage2 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useMessages, usePinnedMessages, useUnpinMessage, type Message } from '../../hooks/useMessages';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -337,112 +338,207 @@ function MessageSkeleton() {
   );
 }
 
+/**
+ * Virtualised message list using @tanstack/react-virtual.
+ * Handles variable-height message groups, scroll-to-bottom on new messages,
+ * and loading older messages when scrolling up.
+ */
 function MessageList({ channelId, channelName, channelTopic }: { channelId: string; channelName?: string; channelTopic?: string }) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useMessages(channelId);
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
-  const prevLengthRef = useRef(0);
-  /** Number of messages that existed before the latest real-time addition */
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const prevGroupCountRef = useRef(0);
   const newMessageThresholdRef = useRef(0);
+  const isAtBottomRef = useRef(true);
+  const initialScrollDone = useRef(false);
 
   // Pages are fetched newest-first; reverse page order so oldest page comes first, then flatten
-  const messages = data?.pages ? [...data.pages].reverse().flatMap((page) => page) : [];
+  const messages = useMemo(
+    () => data?.pages ? [...data.pages].reverse().flatMap((page) => page) : [],
+    [data?.pages],
+  );
 
-  // Auto-scroll to bottom when new messages arrive
+  // Group consecutive messages from same author (memoised to keep stable references)
+  const groups = useMemo(() => {
+    const result: Message[][] = [];
+    for (const msg of messages) {
+      const lastGroup = result[result.length - 1];
+      if (lastGroup && msg.author?.id && !msg.system_event && !lastGroup[0].system_event
+          && lastGroup[0].author?.id && lastGroup[0].author.id === msg.author.id) {
+        const timeDiff = new Date(msg.created_at).getTime() - new Date(lastGroup[lastGroup.length - 1].created_at).getTime();
+        if (timeDiff < 5 * 60 * 1000) {
+          lastGroup.push(msg);
+          continue;
+        }
+      }
+      result.push([msg]);
+    }
+    return result;
+  }, [messages]);
+
+  // We prepend one virtual item for the header (welcome card or load-more button)
+  const HEADER_INDEX = 0;
+  const totalCount = groups.length + 1; // +1 for header
+
+  const virtualizer = useVirtualizer({
+    count: totalCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: useCallback((index: number) => {
+      if (index === HEADER_INDEX) return hasNextPage ? 40 : 180;
+      return 64; // Estimated height for a message group
+    }, [hasNextPage]),
+    overscan: 10,
+  });
+
+  // Scroll to bottom on initial load and when new messages arrive
   useEffect(() => {
-    const prev = prevLengthRef.current;
-    if (messages.length > prev) {
-      endRef.current?.scrollIntoView({ behavior: prev === 0 ? 'instant' : 'smooth' });
-      // Only mark messages as "new" (for fade-in animation) if this isn't the initial load
-      if (prev > 0) {
-        newMessageThresholdRef.current = prev;
+    const prevCount = prevGroupCountRef.current;
+    const newCount = groups.length;
+    prevGroupCountRef.current = newCount;
+
+    if (newCount === 0) {
+      initialScrollDone.current = false;
+      return;
+    }
+
+    if (!initialScrollDone.current) {
+      // Initial load — jump to bottom
+      virtualizer.scrollToIndex(totalCount - 1, { align: 'end' });
+      initialScrollDone.current = true;
+      return;
+    }
+
+    if (newCount > prevCount && prevCount > 0) {
+      // New messages arrived
+      newMessageThresholdRef.current = prevCount;
+      if (isAtBottomRef.current) {
+        // Only auto-scroll if user was at bottom
+        virtualizer.scrollToIndex(totalCount - 1, { align: 'end' });
       }
     }
-    prevLengthRef.current = messages.length;
-  }, [messages.length]);
+  }, [groups.length, totalCount, virtualizer]);
+
+  // Track whether user is scrolled to bottom
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const threshold = 80;
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+
+    // Load older messages when scrolled near the top
+    if (el.scrollTop < 200 && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   if (isLoading) return <MessageSkeleton />;
 
-  // Group consecutive messages from same author
-  const groups: Message[][] = [];
-  for (const msg of messages) {
-    const lastGroup = groups[groups.length - 1];
-    if (lastGroup && msg.author?.id && !msg.system_event && !lastGroup[0].system_event
-        && lastGroup[0].author?.id && lastGroup[0].author.id === msg.author.id) {
-      const timeDiff = new Date(msg.created_at).getTime() - new Date(lastGroup[lastGroup.length - 1].created_at).getTime();
-      if (timeDiff < 5 * 60 * 1000) { // 5 min grouping
-        lastGroup.push(msg);
-        continue;
-      }
-    }
-    groups.push([msg]);
-  }
-
   return (
-    <ScrollArea
-      style={{ flex: 1 }}
-      viewportRef={viewportRef}
-      scrollbarSize={6}
-      type="hover"
+    <div
+      ref={scrollContainerRef}
+      onScroll={handleScroll}
+      style={{
+        flex: 1,
+        overflow: 'auto',
+        contain: 'strict',
+      }}
     >
-      <Stack gap={0} p={16} pb={4}>
-        {hasNextPage && (
-          <Text
-            size="xs"
-            c="dimmed"
-            ta="center"
-            py={8}
-            style={{ cursor: 'pointer' }}
-            onClick={() => fetchNextPage()}
-          >
-            {isFetchingNextPage ? 'Loading...' : 'Load more messages'}
-          </Text>
-        )}
+      <div
+        style={{
+          height: virtualizer.getTotalSize(),
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualizer.getVirtualItems().map((virtualRow) => {
+          // Header item — welcome card or load-more
+          if (virtualRow.index === HEADER_INDEX) {
+            return (
+              <div
+                key="header"
+                data-index={virtualRow.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualRow.start}px)`,
+                  padding: '0 16px',
+                }}
+              >
+                {hasNextPage ? (
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    ta="center"
+                    py={8}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => fetchNextPage()}
+                  >
+                    {isFetchingNextPage ? 'Loading...' : 'Load more messages'}
+                  </Text>
+                ) : (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '32px 16px 24px',
+                    marginBottom: 8,
+                  }}>
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 68,
+                      height: 68,
+                      borderRadius: '50%',
+                      background: 'var(--bg-secondary)',
+                      marginBottom: 12,
+                    }}>
+                      <IconHash size={36} style={{ color: 'var(--text-muted)' }} />
+                    </div>
+                    <Text fw={700} size="xl" style={{ color: 'var(--text-primary)' }}>
+                      Welcome to #{channelName || 'channel'}
+                    </Text>
+                    {channelTopic && (
+                      <Text size="sm" c="dimmed" mt={4}>
+                        {channelTopic}
+                      </Text>
+                    )}
+                    <Text size="xs" c="dimmed" mt={8}>
+                      This is the beginning of #{channelName || 'channel'}.
+                    </Text>
+                  </div>
+                )}
+              </div>
+            );
+          }
 
-        {/* Welcome card — shown at the very beginning of channel history */}
-        {!hasNextPage && (
-          <div style={{
-            textAlign: 'center',
-            padding: '32px 16px 24px',
-            marginBottom: 8,
-          }}>
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 68,
-              height: 68,
-              borderRadius: '50%',
-              background: 'var(--bg-secondary)',
-              marginBottom: 12,
-            }}>
-              <IconHash size={36} style={{ color: 'var(--text-muted)' }} />
-            </div>
-            <Text fw={700} size="xl" style={{ color: 'var(--text-primary)' }}>
-              Welcome to #{channelName || 'channel'}
-            </Text>
-            {channelTopic && (
-              <Text size="sm" c="dimmed" mt={4}>
-                {channelTopic}
-              </Text>
-            )}
-            <Text size="xs" c="dimmed" mt={8}>
-              This is the beginning of #{channelName || 'channel'}.
-            </Text>
-          </div>
-        )}
+          // Message group items
+          const groupIndex = virtualRow.index - 1;
+          const group = groups[groupIndex];
+          if (!group) return null;
 
-        {/* TODO: Replace with @tanstack/react-virtual for message list virtualization (bead p9p8) */}
-        {groups.map((group, i) => {
-          // A group is "new" if its last message index exceeds the threshold (real-time arrival, not initial load)
           const groupEndIndex = messages.indexOf(group[group.length - 1]);
           const isNew = newMessageThresholdRef.current > 0 && groupEndIndex >= newMessageThresholdRef.current;
+
           return (
-            <MessageGroup key={group[0].id} messages={group} channelId={channelId} isNew={isNew} />
+            <div
+              key={group[0].id}
+              data-index={virtualRow.index}
+              ref={virtualizer.measureElement}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${virtualRow.start}px)`,
+                padding: '0 16px',
+              }}
+            >
+              <MessageGroup messages={group} channelId={channelId} isNew={isNew} />
+            </div>
           );
         })}
-        <div ref={endRef} />
-      </Stack>
-    </ScrollArea>
+      </div>
+    </div>
   );
 }

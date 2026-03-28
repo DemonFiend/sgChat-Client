@@ -1,5 +1,5 @@
-import { Badge } from '@mantine/core';
-import { IconHash, IconAt } from '@tabler/icons-react';
+import { Badge, Tooltip } from '@mantine/core';
+import { IconHash, IconAt, IconClock } from '@tabler/icons-react';
 import { useMentionContext } from '../../contexts/MentionContext';
 import type { ParsedMention } from '../../lib/mentionUtils';
 
@@ -90,5 +90,72 @@ export function BroadcastMentionBadge({ type }: { type: 'everyone' | 'here' }) {
     >
       @{type}
     </Badge>
+  );
+}
+
+/**
+ * Format a unix timestamp according to the Discord-style format flag.
+ * t = short time, T = long time, d = short date, D = long date,
+ * f = date+time (default), F = long date+time, R = relative
+ */
+function formatTimestamp(ts: number, format: string): string {
+  const date = new Date(ts * 1000);
+
+  switch (format) {
+    case 't': // Short time: 9:41 AM
+      return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: 'numeric' }).format(date);
+    case 'T': // Long time: 9:41:30 AM
+      return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: 'numeric', second: 'numeric' }).format(date);
+    case 'd': // Short date: 11/28/2018
+      return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'numeric', day: 'numeric' }).format(date);
+    case 'D': // Long date: November 28, 2018
+      return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
+    case 'F': // Long date+time: Wednesday, November 28, 2018 9:41 AM
+      return new Intl.DateTimeFormat(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: 'numeric' }).format(date);
+    case 'R': { // Relative: 3 hours ago
+      const now = Date.now();
+      const diffMs = now - date.getTime();
+      const absDiff = Math.abs(diffMs);
+      const past = diffMs >= 0;
+
+      if (absDiff < 60_000) return past ? 'just now' : 'in a moment';
+      if (absDiff < 3_600_000) {
+        const mins = Math.round(absDiff / 60_000);
+        return past ? `${mins} minute${mins !== 1 ? 's' : ''} ago` : `in ${mins} minute${mins !== 1 ? 's' : ''}`;
+      }
+      if (absDiff < 86_400_000) {
+        const hrs = Math.round(absDiff / 3_600_000);
+        return past ? `${hrs} hour${hrs !== 1 ? 's' : ''} ago` : `in ${hrs} hour${hrs !== 1 ? 's' : ''}`;
+      }
+      const days = Math.round(absDiff / 86_400_000);
+      return past ? `${days} day${days !== 1 ? 's' : ''} ago` : `in ${days} day${days !== 1 ? 's' : ''}`;
+    }
+    case 'f': // Date+time (default): November 28, 2018 9:41 AM
+    default:
+      return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: 'numeric' }).format(date);
+  }
+}
+
+export function TimeMentionBadge({ mention }: { mention: ParsedMention }) {
+  const ts = mention.timestamp ?? 0;
+  const fmt = mention.timeFormat ?? 'f';
+  const display = formatTimestamp(ts, fmt);
+  const fullDate = new Date(ts * 1000).toLocaleString(undefined, {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric',
+  });
+
+  return (
+    <Tooltip label={fullDate} position="top" withArrow openDelay={200}>
+      <Badge
+        size="sm"
+        variant="light"
+        color="gray"
+        style={{ verticalAlign: 'text-bottom', cursor: 'default' }}
+        leftSection={<IconClock size={10} />}
+      >
+        {display}
+      </Badge>
+    </Tooltip>
   );
 }

@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ActionIcon, Avatar, Badge, Button, Checkbox, Divider,
-  Group, Stack, Text, TextInput, Tooltip,
+  Group, NumberInput, Select, SimpleGrid, Stack, Text, TextInput, Textarea, Tooltip,
 } from '@mantine/core';
 import { IconBan, IconClock, IconUserMinus } from '@tabler/icons-react';
 import { api } from '../../../lib/api';
 import { queryClient } from '../../../lib/queryClient';
+import { toastStore } from '../../../stores/toastNotifications';
 import { TransferOwnershipModal } from '../TransferOwnershipModal';
 import { useAuthStore } from '../../../stores/authStore';
 import { type Role, type Member } from './types';
@@ -107,6 +108,138 @@ function MemberRolePanel({
   );
 }
 
+const TIMEOUT_PRESETS: Array<{ label: string; seconds: number }> = [
+  { label: '5m', seconds: 300 },
+  { label: '10m', seconds: 600 },
+  { label: '1h', seconds: 3600 },
+  { label: '1d', seconds: 86400 },
+  { label: '1w', seconds: 604800 },
+];
+
+const TIMEOUT_UNIT_OPTIONS = [
+  { value: '60', label: 'Min' },
+  { value: '3600', label: 'Hr' },
+  { value: '86400', label: 'Day' },
+];
+
+function InlineTimeoutPanel({
+  serverId,
+  memberId,
+  username,
+  onDone,
+}: {
+  serverId: string;
+  memberId: string;
+  username: string;
+  onDone: () => void;
+}) {
+  const [duration, setDuration] = useState(600);
+  const [customVal, setCustomVal] = useState<number | ''>(10);
+  const [customUnit, setCustomUnit] = useState('60');
+  const [useCustom, setUseCustom] = useState(false);
+  const [reason, setReason] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const effectiveDuration = useCustom
+    ? (typeof customVal === 'number' ? customVal * Number(customUnit) : 0)
+    : duration;
+
+  const handleSubmit = async () => {
+    if (effectiveDuration <= 0) return;
+    setLoading(true);
+    try {
+      await api.post(`/api/servers/${serverId}/members/${memberId}/timeout`, {
+        duration: effectiveDuration,
+        reason: reason.trim() || undefined,
+      });
+      toastStore.addToast({
+        type: 'system',
+        title: 'User Timed Out',
+        message: `${username} has been timed out.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['members', serverId] });
+      onDone();
+    } catch (err) {
+      toastStore.addToast({
+        type: 'warning',
+        title: 'Timeout Failed',
+        message: (err as Error)?.message || 'Could not timeout user.',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Stack
+      gap={8}
+      style={{
+        width: 220,
+        flexShrink: 0,
+        padding: 12,
+        borderRadius: 8,
+        background: 'var(--bg-secondary, rgba(0,0,0,0.15))',
+      }}
+    >
+      <Text size="sm" fw={600}>Timeout {username}</Text>
+
+      <SimpleGrid cols={3} spacing={4}>
+        {TIMEOUT_PRESETS.map((p) => (
+          <Button
+            key={p.seconds}
+            variant={!useCustom && duration === p.seconds ? 'filled' : 'light'}
+            color={!useCustom && duration === p.seconds ? 'yellow' : 'gray'}
+            size="compact-xs"
+            onClick={() => { setDuration(p.seconds); setUseCustom(false); }}
+          >
+            {p.label}
+          </Button>
+        ))}
+      </SimpleGrid>
+
+      <Group gap={4}>
+        <NumberInput
+          size="xs"
+          placeholder="Custom"
+          value={customVal}
+          onChange={(v) => { setCustomVal(typeof v === 'number' ? v : ''); setUseCustom(true); }}
+          min={1}
+          max={9999}
+          style={{ flex: 1 }}
+        />
+        <Select
+          size="xs"
+          data={TIMEOUT_UNIT_OPTIONS}
+          value={customUnit}
+          onChange={(v) => { if (v) { setCustomUnit(v); setUseCustom(true); } }}
+          allowDeselect={false}
+          style={{ width: 70 }}
+        />
+      </Group>
+
+      <Textarea
+        size="xs"
+        placeholder="Reason (optional)"
+        value={reason}
+        onChange={(e) => setReason(e.currentTarget.value)}
+        maxLength={256}
+        minRows={2}
+        maxRows={3}
+        autosize
+      />
+
+      <Group gap={4}>
+        <Button size="compact-xs" color="yellow" onClick={handleSubmit} loading={loading} disabled={effectiveDuration <= 0} style={{ flex: 1 }}>
+          Timeout
+        </Button>
+        <Button size="compact-xs" variant="subtle" color="gray" onClick={onDone}>
+          Cancel
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
+
 export function MembersPanel({ serverId }: { serverId: string }) {
   const { data: members } = useQuery({
     queryKey: ['members', serverId],
@@ -128,6 +261,7 @@ export function MembersPanel({ serverId }: { serverId: string }) {
   const [transferOpen, setTransferOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [timeoutMemberId, setTimeoutMemberId] = useState<string | null>(null);
 
   const filtered = (members || []).filter((m) =>
     m.username.toLowerCase().includes(search.toLowerCase()) ||
@@ -150,11 +284,10 @@ export function MembersPanel({ serverId }: { serverId: string }) {
     } catch { /* silently fail */ }
   };
 
-  const handleTimeout = async (userId: string) => {
-    try {
-      await api.post(`/api/servers/${serverId}/members/${userId}/timeout`, { duration: 600 });
-      queryClient.invalidateQueries({ queryKey: ['members', serverId] });
-    } catch { /* silently fail */ }
+  const handleToggleTimeout = (userId: string) => {
+    setTimeoutMemberId(timeoutMemberId === userId ? null : userId);
+    // Close role panel if timeout panel is opening
+    if (timeoutMemberId !== userId) setSelectedMemberId(null);
   };
 
   return (
@@ -188,7 +321,7 @@ export function MembersPanel({ serverId }: { serverId: string }) {
                   border: isSelected ? '1px solid var(--mantine-color-violet-5)' : '1px solid transparent',
                   cursor: 'pointer',
                 }}
-                onClick={() => setSelectedMemberId(isSelected ? null : memberId)}
+                onClick={() => { setSelectedMemberId(isSelected ? null : memberId); setTimeoutMemberId(null); }}
               >
                 <Avatar src={member.avatar_url} size={28} radius="xl" color="brand">
                   {member.username.charAt(0).toUpperCase()}
@@ -197,8 +330,13 @@ export function MembersPanel({ serverId }: { serverId: string }) {
                   <Text size="sm" truncate>{member.display_name || member.username}</Text>
                 </div>
                 <Group gap={4}>
-                  <Tooltip label="Timeout (10 min)" withArrow>
-                    <ActionIcon variant="subtle" color="yellow" size={24} onClick={(e) => { e.stopPropagation(); handleTimeout(memberId); }}>
+                  <Tooltip label="Timeout" withArrow>
+                    <ActionIcon
+                      variant={timeoutMemberId === memberId ? 'light' : 'subtle'}
+                      color="yellow"
+                      size={24}
+                      onClick={(e) => { e.stopPropagation(); handleToggleTimeout(memberId); }}
+                    >
                       <IconClock size={14} />
                     </ActionIcon>
                   </Tooltip>
@@ -222,6 +360,18 @@ export function MembersPanel({ serverId }: { serverId: string }) {
             </Text>
           )}
         </Stack>
+
+        {/* Inline timeout panel */}
+        {timeoutMemberId && (
+          <InlineTimeoutPanel
+            serverId={serverId}
+            memberId={timeoutMemberId}
+            username={
+              (members || []).find((m) => (m.user_id || m.id) === timeoutMemberId)?.username || 'User'
+            }
+            onDone={() => setTimeoutMemberId(null)}
+          />
+        )}
 
         {/* Member detail panel */}
         {selectedMemberId && (

@@ -10,9 +10,13 @@ interface NicknameModalProps {
   userId: string;
   currentNickname: string;
   serverId: string;
+  /** 'self' = editing own nickname; 'admin' = admin editing another user's nickname */
+  mode?: 'self' | 'admin';
+  /** When mode is 'admin', the target user's ID to update */
+  targetUserId?: string;
 }
 
-export function NicknameModal({ opened, onClose, userId, currentNickname, serverId }: NicknameModalProps) {
+export function NicknameModal({ opened, onClose, userId, currentNickname, serverId, mode = 'self', targetUserId }: NicknameModalProps) {
   const [nickname, setNickname] = useState(currentNickname);
   const [saving, setSaving] = useState(false);
 
@@ -25,9 +29,18 @@ export function NicknameModal({ opened, onClose, userId, currentNickname, server
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.patch(`/api/servers/${serverId}/members/${userId}`, {
-        nickname: nickname.trim() || null,
-      });
+      if (mode === 'self') {
+        // Self: PATCH own member nickname
+        await api.patch(`/api/servers/${serverId}/members/me/nickname`, {
+          nickname: nickname.trim() || null,
+        });
+      } else {
+        // Admin: PATCH target user's member nickname
+        const target = targetUserId || userId;
+        await api.patch(`/api/servers/${serverId}/members/${target}/nickname`, {
+          nickname: nickname.trim() || null,
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['members', serverId] });
       toastStore.addToast({
         type: 'system',
@@ -39,7 +52,7 @@ export function NicknameModal({ opened, onClose, userId, currentNickname, server
       toastStore.addToast({
         type: 'warning',
         title: 'Failed to Update Nickname',
-        message: (err as any)?.message || 'Could not update nickname.',
+        message: (err as Error)?.message || 'Could not update nickname.',
       });
     } finally {
       setSaving(false);
@@ -50,11 +63,13 @@ export function NicknameModal({ opened, onClose, userId, currentNickname, server
     setNickname('');
   };
 
+  const title = mode === 'admin' ? 'Change Nickname (Admin)' : 'Change Nickname';
+
   return (
     <Modal
       opened={opened}
       onClose={onClose}
-      title="Change Nickname"
+      title={title}
       centered
       size="sm"
       transitionProps={{ transition: 'pop', duration: 200 }}

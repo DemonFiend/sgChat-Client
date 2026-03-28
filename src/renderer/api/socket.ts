@@ -12,7 +12,7 @@ import { useAuthStore } from '../stores/authStore';
 import { soundService } from '../lib/soundService';
 import { blockedUsersStore } from '../stores/blockedUsersStore';
 import { ignoredUsersStore } from '../stores/ignoredUsersStore';
-import { cacheParticipantInfo, updateServerVoiceState } from '../lib/voiceService';
+import { cacheParticipantInfo, updateServerVoiceState, setServerMuted, setServerDeafened, handleForceMove, handleRelaySwitch, updateParticipantStatus } from '../lib/voiceService';
 import { isDMConnected } from '../lib/dmVoiceService';
 import {
   setKeyMaterial, encrypt as cryptoEncrypt, decrypt as cryptoDecrypt,
@@ -84,6 +84,8 @@ export async function connectSocket(): Promise<void> {
     // Load blocked/ignored user lists
     blockedUsersStore.fetchBlocked();
     ignoredUsersStore.fetchIgnored();
+    // Load sound settings
+    soundService.loadSettings();
   });
 
   socket.on('gateway.resumed', async (rawData: any) => {
@@ -604,17 +606,28 @@ function handleEvent(type: string, data: any): void {
           isServerMuted: data.is_server_muted,
           isServerDeafened: data.is_server_deafened,
         });
+        // Update voice status if present
+        if (typeof data.voice_status === 'string') {
+          updateParticipantStatus(data.user_id, data.voice_status);
+        }
       }
       break;
     }
     case 'voice.force_move': {
       const voiceStore = useVoiceStore.getState();
-      if (voiceStore.connected) {
-        voiceStore.leave().then(() => {
-          if (data.to_channel_id) {
-            voiceStore.join(data.to_channel_id, data.to_channel_name);
-          }
+      if (voiceStore.connected && data.to_channel_id) {
+        handleForceMove(data.to_channel_id, data.to_channel_name).then(() => {
+          // Update store state to reflect the new channel
+          voiceStore.join(data.to_channel_id, data.to_channel_name);
         });
+        // Show toast with reason
+        const reasonMap: Record<string, string> = {
+          afk: 'You were moved to the AFK channel due to inactivity',
+          moderator: `A moderator moved you to ${data.to_channel_name || 'another channel'}`,
+          temp_channel: 'Your temporary channel was deleted',
+        };
+        const message = reasonMap[data.reason as string] || `You were moved to ${data.to_channel_name || 'another channel'}`;
+        toastStore.addToast({ type: 'system', title: 'Moved', message });
       }
       break;
     }
@@ -627,19 +640,36 @@ function handleEvent(type: string, data: any): void {
       }
       break;
     }
+    case 'voice.relay_switch': {
+      // Server instructs us to reconnect via a different relay
+      const voiceStoreRS = useVoiceStore.getState();
+      if (voiceStoreRS.connected && data.channel_id) {
+        handleRelaySwitch(data.channel_id).then(() => {
+          voiceStoreRS.join(data.channel_id, data.channel_name);
+        });
+        toastStore.addToast({
+          type: 'system',
+          title: 'Relay Switch',
+          message: `Reconnecting to ${data.relay_name || 'a new relay server'}...`,
+        });
+      }
+      break;
+    }
     case 'voice.server_mute': {
-      // A moderator muted/unmuted the current user
+      // A moderator muted/unmuted the current user — enforce locally
       const myId = useAuthStore.getState().user?.id;
       if (myId) {
         updateServerVoiceState(myId, { isServerMuted: data.muted });
+        setServerMuted(data.muted);
       }
       break;
     }
     case 'voice.server_deafen': {
-      // A moderator deafened/undeafened the current user
+      // A moderator deafened/undeafened the current user — enforce locally
       const myId2 = useAuthStore.getState().user?.id;
       if (myId2) {
         updateServerVoiceState(myId2, { isServerDeafened: data.deafened });
+        setServerDeafened(data.deafened);
       }
       break;
     }
