@@ -210,7 +210,13 @@ npm run build:main && npm run build:preload && npm run build:renderer
 # 4. Run a quick smoke test to verify the app launches
 npx playwright test --grep "Suite 1"
 
-# 5. Read the suite spec file before writing/running tests
+# 5. If running parity tests: check for server drift first
+#    Read .claude/agents/parity-audit-state.md
+#    Compare server commit hash against current server HEAD
+#    If different: run "QA: parity-drift" before parity suites
+#    If >5 server commits since last audit: recommend full parity audit
+
+# 6. Read the suite spec file before writing/running tests
 #    .claude/agents/qa-suites/suite-{NN}.md
 ```
 
@@ -1367,10 +1373,107 @@ Run with: `QA: parity` or individual sub-commands below.
 
 ---
 
+## PARITY DRIFT CHECK — MANDATORY BEFORE PARITY AUDITS
+
+**Run this before ANY `QA: parity-*` command.** It detects server changes since the last
+audit and ensures suite specs are up-to-date before testing.
+
+### Step 1 — Read the audit state
+
+```bash
+# Read the tracking file
+cat .claude/agents/parity-audit-state.md
+# Note the "Server Commit" hash from "Last Full Audit"
+```
+
+### Step 2 — Get server changes since last audit
+
+```bash
+SERVER_REPO="c:/Users/DemonFiend/Documents/LLMs/VibeCoding/sgChat-Server"
+LAST_HASH="<hash from parity-audit-state.md>"
+
+# Commits since last audit
+git -C "$SERVER_REPO" log --oneline ${LAST_HASH}..HEAD
+
+# Changed files in web UI
+git -C "$SERVER_REPO" diff --name-only ${LAST_HASH}..HEAD -- packages/web/src/
+
+# New files (didn't exist at last audit)
+git -C "$SERVER_REPO" diff --diff-filter=A --name-only ${LAST_HASH}..HEAD -- packages/web/src/
+
+# Deleted files
+git -C "$SERVER_REPO" diff --diff-filter=D --name-only ${LAST_HASH}..HEAD -- packages/web/src/
+```
+
+### Step 3 — Classify each change
+
+**Commit count determines audit scope:**
+- **0 commits** since last audit → skip drift check, run suites as-is
+- **1-5 commits** → partial audit (only changed areas)
+- **>5 commits** → recommend full audit
+
+**For each changed file, classify:**
+
+| Change Type | What Happened | Action |
+|---|---|---|
+| New component (`A` flag) | Server added a new page/modal/panel | File parity bead (MISSING). If client already has it, create new suite spec. |
+| Modified component (`M` flag) | Server updated an existing feature | Check if existing suite covers it. Add new test cases for changed behavior. |
+| Deleted component (`D` flag) | Server removed a feature | Check if client still has it. Note in suite spec if so. |
+| New API route | Server added new endpoint | Check if client consumes it. Update suite if new behavior. |
+| New socket event | Server emits new real-time event | Check if client handles it. Update suite for the feature area. |
+| Permission/role change | Server modified permission structure | Update Suite 25 (Admin Parity) spec. |
+| Config/infra change | Docker, CI, env vars | No suite change needed. |
+
+### Step 4 — Write/update suite specs
+
+**For NEW features (component didn't exist before):**
+1. Read the server component to understand what it does
+2. Check if the client has a matching component
+3. If client component MISSING → file a parity bead:
+   ```bash
+   bd create --title="Parity: [Feature] — MISSING" --type=feature --priority=2 \
+     --description="Server has [component] at [path]. Client does not have equivalent."
+   ```
+4. If client component EXISTS → create suite spec:
+   - Use next available suite number (check `ls qa-suites/ | tail -1`)
+   - Follow `qa-suites/README.md` format exactly
+   - Add `**Spec:** qa-suites/suite-{NN}.md` pointer to QA_AGENT.md
+
+**For UPDATED features (component changed):**
+1. Read the server diff to understand what changed
+2. Find the existing suite spec that covers this area
+3. Append new test cases for the changed behavior
+4. Keep all existing tests (they verify previous behavior still works)
+
+### Step 5 — Update the audit state file
+
+After drift check completes, update `.claude/agents/parity-audit-state.md`:
+
+```markdown
+## Last Drift Check
+- **Date:** {today's date}
+- **Server Range:** {old_hash}..{new_hash}
+- **Commits Found:** {count}
+- **New Server Components Found:** [list of new files]
+- **New Suites Created:** [suite numbers and names]
+- **Existing Suites Updated:** [suite numbers and what was added]
+- **Parity Beads Filed:** [bead IDs for missing features]
+```
+
+If this was a full audit, also update the "Last Full Audit" section with the new server commit hash.
+
+### Step 6 — Run the parity suites
+
+Now that specs are current, run the tests using the updated suite specs.
+
+---
+
 ## AVAILABLE PARITY COMMANDS
 
 ```
-QA: parity              -> All 6 parity suites (21-26)
+QA: parity-drift        -> Run drift detection only (Steps 1-5, no testing)
+QA: parity-full         -> Drift check + all 6 parity suites (21-26)
+QA: parity              -> All 6 parity suites WITHOUT drift check (use if drift already ran)
 QA: parity-auth         -> Suite 21 (Auth parity)
 QA: parity-messaging    -> Suite 22 (Messaging parity)
 QA: parity-settings     -> Suite 23 (Settings parity)
