@@ -77,8 +77,8 @@ export function ReactionPicker({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const manifest = useEmojiStore((s) => s.manifest);
-  const packs = manifest?.packs || [];
-  const customEmojis = manifest?.emojis || [];
+  const packs = useMemo(() => manifest?.packs ?? [], [manifest]);
+  const customEmojis = useMemo(() => manifest?.emojis ?? [], [manifest]);
   const hasCustomPacks = manifest?.master_enabled && packs.length > 0;
 
   // Build hierarchical categories from packs
@@ -124,7 +124,11 @@ export function ReactionPicker({
       const allPackIds = categories.flatMap((c) => c.items.map((i) => i.id));
       setExpandedPacks(new Set(allPackIds));
     }
-  }, [isOpen, categories]); // eslint-disable-line react-hooks/exhaustive-deps
+    // activeCategoryId is intentionally excluded from deps below: this effect
+    // validates/resets the active category when the category list changes,
+    // so including it would create an infinite update loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, categories]);
 
   const togglePack = (packId: string) => {
     setExpandedPacks((prev) => {

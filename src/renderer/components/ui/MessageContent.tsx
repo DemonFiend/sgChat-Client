@@ -5,7 +5,7 @@ import { isImageUrl, getImageType, extractImageUrls } from '../../lib/imageUtils
 import { parseMentions, type ParsedMention } from '../../lib/mentionUtils';
 import { renderMarkdown } from '../../lib/markdownParser';
 import { useEmojiStore } from '../../stores/emojiStore';
-import { resolveAssetUrl } from '../../lib/api';
+import { api, resolveAssetUrl } from '../../lib/api';
 import { UserMentionBadge, ChannelMentionBadge, RoleMentionBadge, BroadcastMentionBadge, TimeMentionBadge } from './MentionBadges';
 import { UrlEmbed } from './UrlEmbed';
 
@@ -628,16 +628,14 @@ function MessageLinkEmbed({ channelId, messageId }: { channelId: string; message
     if (fetchedRef.current) return;
     fetchedRef.current = true;
 
-    import('../../lib/api').then(({ api: apiClient }) => {
-      apiClient.get<{ content: string; author: { username: string }; created_at: string }>(
-        `/api/channels/${channelId}/messages/${messageId}`
-      ).then((data) => {
-        setMsg(data);
-        setLoading(false);
-      }).catch(() => {
-        setErrored(true);
-        setLoading(false);
-      });
+    api.get<{ content: string; author: { username: string }; created_at: string }>(
+      `/api/channels/${channelId}/messages/${messageId}`
+    ).then((data) => {
+      setMsg(data);
+      setLoading(false);
+    }).catch(() => {
+      setErrored(true);
+      setLoading(false);
     });
   }, [channelId, messageId]);
 

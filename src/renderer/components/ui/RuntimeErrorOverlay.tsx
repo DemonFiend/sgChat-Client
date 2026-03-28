@@ -62,6 +62,25 @@ export function RuntimeErrorOverlay() {
       const reason = event.reason;
       const message = reason?.message || String(reason) || 'Unhandled promise rejection';
       const stack = reason?.stack || null;
+
+      // Suppress known non-critical API errors that can occur during
+      // normal operation (e.g. race conditions during connect/reconnect)
+      const suppressedPatterns = [
+        'You are not a member of this server',
+        'not a member',
+      ];
+      const isApiError = reason?.name === 'ApiError';
+      const isSuppressed =
+        (isApiError && reason?.status === 403) ||
+        suppressedPatterns.some((p) => message.toLowerCase().includes(p.toLowerCase()));
+
+      if (isSuppressed) {
+        // Prevent the error from propagating further
+        event.preventDefault();
+        console.debug('[RuntimeErrorOverlay] Suppressed non-critical API error:', message);
+        return;
+      }
+
       addError(message, stack);
 
       // Submit crash report

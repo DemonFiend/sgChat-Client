@@ -111,8 +111,9 @@ export async function connectSocket(): Promise<void> {
       ? await cryptoDecrypt(rawData) : rawData;
 
     lastSequences = data.sequences || {};
-    // Trigger initial data refetch
-    queryClient.invalidateQueries();
+    // Trigger initial data refetch — catch to prevent unhandled rejections
+    // when active queries fail (e.g. 403 "not a member" on server endpoints)
+    queryClient.invalidateQueries().catch(() => {});
     // Load blocked/ignored user lists
     blockedUsersStore.fetchBlocked();
     ignoredUsersStore.fetchIgnored();
@@ -150,7 +151,8 @@ export async function connectSocket(): Promise<void> {
     // Clear stale session and do a full reconnect
     gatewaySessionId = null;
     lastSequences = {};
-    queryClient.invalidateQueries();
+    // Catch to prevent unhandled rejections from failing query refetches
+    queryClient.invalidateQueries().catch(() => {});
   });
 
   socket.on('event', async (envelope: {
