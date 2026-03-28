@@ -11,19 +11,25 @@ you MUST use these exact suite numbers. Do NOT invent your own numbering.**
 
 | Suite | Name                              | Suite | Name                              |
 |-------|-----------------------------------|-------|-----------------------------------|
-| 1     | Environment & Connection Health   | 14    | Search & Command Palette          |
-| 2     | Authentication & Session Mgmt     | 15    | Admin Features                    |
-| 3     | Core Navigation & Routing         | 16    | Electron Native Features          |
-| 4     | Message Sending & Display         | 17    | Multi-Server Switching            |
-| 5     | Message Actions                   | 18    | Security                          |
-| 6     | File Uploads & Attachments        | 19    | Accessibility                     |
-| 7     | Friends, Blocking & User Search   | 20    | Performance & Error States        |
-| 8     | DM Messaging & Calls              | 21    | Auth Parity                       |
-| 9     | User Profiles & Popovers          | 22    | Messaging Parity                  |
-| 10    | User Settings                     | 23    | Settings Parity                   |
-| 11    | **Server Settings**               | 24    | Server Sidebar & UI Parity        |
-| 12    | Voice & Video (LiveKit)           | 25    | Server Admin Parity               |
-| 13    | Events System                     | 26    | Voice Parity                      |
+| 1     | Environment & Connection Health   | 20    | Performance & Error States        |
+| 2     | Authentication & Session Mgmt     | 21    | Auth Parity                       |
+| 3     | Core Navigation & Routing         | 22    | Messaging Parity                  |
+| 4     | Message Sending & Display         | 23    | Settings Parity                   |
+| 5     | Message Actions                   | 24    | Server Sidebar & UI Parity        |
+| 6     | File Uploads & Attachments        | 25    | Server Admin Parity               |
+| 7     | Friends, Blocking & User Search   | 26    | Voice Parity                      |
+| 8     | DM Messaging & Calls              | **27**| **Screen Share & Per-App Audio**  |
+| 9     | User Profiles & Popovers         | **28**| **Noise Suppression (RNNoise)**   |
+| 10    | User Settings                     | **29**| **Voice Channel Deep Testing**    |
+| 11    | **Server Settings**               | **30**| **DM Calls (Voice & Video)**      |
+| 12    | Voice & Video (LiveKit)           | **31**| **Soundboard & Voice Sounds**     |
+| 13    | Events System                     | **32**| **Channel & Category Settings**   |
+| 14    | Search & Command Palette          | **33**| **Notifications & Toasts**        |
+| 15    | Admin Features                    | **34**| **Server Management Modals**      |
+| 16    | Electron Native Features          | **35**| **Moderation Workflow**            |
+| 17    | Multi-Server Switching            | **36**| **Server Settings Extended Tabs** |
+| 18    | Security                          | **37**| **Error Recovery & Session Mgmt** |
+| 19    | Accessibility                     |       |                                   |
 
 Test IDs follow `{suite}.{case}` format (e.g. `4.05`, `11.16`, `18.07`).
 Playwright `test.describe` blocks MUST use `Suite {N} — {Name}` format.
@@ -386,7 +392,19 @@ QA: parity-settings     -> Suite 23 (settings parity)
 QA: parity-ui           -> Suite 24 (sidebar, skeleton, palette)
 QA: parity-admin        -> Suite 25 (server admin parity)
 QA: parity-voice        -> Suite 26 (voice parity)
-QA: suite [N]           -> Run specific suite by number (1-26)
+QA: screen-share        -> Suite 27 (screen share picker & per-app audio)
+QA: noise-suppression   -> Suite 28 (RNNoise WASM pipeline)
+QA: voice-deep          -> Suite 29 (voice channel deep testing)
+QA: dm-calls            -> Suite 30 (DM calls voice & video)
+QA: soundboard          -> Suite 31 (soundboard & voice sounds)
+QA: channel-settings    -> Suite 32 (channel & category settings)
+QA: notifications       -> Suite 33 (notifications & toasts)
+QA: server-modals       -> Suite 34 (create/join/transfer/claim modals)
+QA: moderation          -> Suite 35 (timeout, warnings, admin actions)
+QA: admin-tabs          -> Suite 36 (server settings extended tabs)
+QA: error-recovery      -> Suite 37 (error overlays & session management)
+QA: voice-full          -> Suites 12+27+28+29+30+31 (all voice/audio)
+QA: suite [N]           -> Run specific suite by number (1-37)
 QA: status              -> All open QA beads by priority
 QA: retest [bead-id]    -> Verify a specific fix
 ```
@@ -1360,6 +1378,168 @@ QA: parity-ui           -> Suite 24 (Sidebar, skeleton, palette)
 QA: parity-admin        -> Suite 25 (Server admin parity)
 QA: parity-voice        -> Suite 26 (Voice parity)
 ```
+
+---
+
+# TIER 9 — EXTENDED COVERAGE (Added 2026-03-28)
+
+These suites cover features and modals that were not fully covered by Tiers 1-8.
+
+---
+
+## SUITE 27 — SCREEN SHARE PICKER & PER-APP AUDIO
+
+**Spec:** `qa-suites/suite-27.md` — exact Playwright steps for every test below
+**Before:** `ccc find ScreenSharePicker appAudioBridge screen-sources`
+
+1. Picker modal opens with Screens/Apps tabs
+2. Source thumbnails render (320x180)
+3. Select source → highlighted, Share button enabled
+4. Audio mode selector: No Audio / App Audio / System Audio
+5. Auto-select App Audio for window sources on Windows
+6. Minimized windows show "Minimized" badge
+7. Quality presets: Standard (720p), High (1080p), Native
+8. Per-app audio IPC pipeline (Windows only)
+9. Source lost handling when app closes
+
+---
+
+## SUITE 28 — NOISE SUPPRESSION (RNNoise WASM)
+
+**Spec:** `qa-suites/suite-28.md` — exact Playwright steps for every test below
+**Before:** `ccc find noiseSuppressionService rnnoise-worklet voiceSettingsStore`
+
+1. Capability detection (AudioContext, AudioWorklet, WebAssembly)
+2. Model loading and benchmark
+3. Outbound pipeline: raw mic → RNNoise → clean track
+4. Inbound pipeline: per-participant processing, 8-pipeline cap
+5. CPU monitoring levels (low/moderate/high)
+6. Toggle persistence: settings survive reload
+7. Only applies on next voice join (not live toggle)
+
+---
+
+## SUITE 29 — VOICE CHANNEL DEEP TESTING
+
+**Spec:** `qa-suites/suite-29.md` — exact Playwright steps for every test below
+**Before:** `ccc find voiceService voiceStore VoiceConnectedBar VoiceParticipantsList`
+
+1. Connection state transitions and UI indicators
+2. Auto-rejoin after refresh, 1-hour expiry
+3. Per-user volume (0-200%), localStorage persistence
+4. Local mute (client-only, not server mute)
+5. Speaking indicators and voice activity detection
+6. Connection quality: ping/jitter/packet loss
+7. Force move/disconnect from server
+8. Deafen also mutes; undeafen restores previous state
+9. Activity tracking for AFK timeout
+
+---
+
+## SUITE 30 — DM CALLS (VOICE & VIDEO)
+
+**Spec:** `qa-suites/suite-30.md` — exact Playwright steps for every test below
+**Before:** `ccc find dmVoiceService DMCallArea GlobalIncomingCall DMVoiceControls`
+
+1. Call phases: idle → notifying → waiting → connected
+2. Incoming call notification with accept/decline
+3. Auto-kick timer, remote left detection
+4. Video toggle and local/remote preview
+5. Screen share during DM calls
+6. Mute/deafen controls
+7. Ringtone lifecycle (play/stop)
+8. End call full cleanup
+
+---
+
+## SUITE 31 — SOUNDBOARD & VOICE SOUNDS
+
+**Spec:** `qa-suites/suite-31.md` — exact Playwright steps for every test below
+**Before:** `ccc find SoundboardPanel VoiceSoundsPanel soundService`
+
+1. Soundboard panel: expand/collapse, sound grid, search
+2. Play locally vs play for everyone
+3. Upload with size/duration/count limits
+4. Delete own sounds, cannot delete others
+5. Custom join/leave sounds: upload, preview, delete
+
+---
+
+## SUITE 32 — CHANNEL & CATEGORY SETTINGS MODALS
+
+**Spec:** `qa-suites/suite-32.md` — exact Playwright steps for every test below
+**Before:** `ccc find ChannelSettingsModal CategorySettingsModal PermissionEditor`
+
+1. Open settings via gear icon or context menu
+2. General tab: name, topic, save
+3. Voice: bitrate slider (8-384kbps), user limit (0-99), relay policy
+4. Permissions tab: role overrides with tri-state (Allow/Neutral/Deny)
+5. Add/remove permission overrides
+6. Category settings: name, permissions
+
+---
+
+## SUITE 33 — NOTIFICATIONS & TOASTS
+
+**Spec:** `qa-suites/suite-33.md` — exact Playwright steps for every test below
+**Before:** `ccc find NotificationPanel NotificationToast notificationStore`
+
+1. Bell icon opens notification panel
+2. Unread/read sections, mark all read, delete
+3. Empty and loading states
+4. Unread count badge on bell
+5. Toast appear, auto-dismiss, stack
+
+---
+
+## SUITE 34 — SERVER MANAGEMENT MODALS
+
+**Spec:** `qa-suites/suite-34.md` — exact Playwright steps for every test below
+**Before:** `ccc find CreateServerModal JoinServerModal TransferOwnershipModal ClaimAdminModal`
+
+1. Create server: name input, validation, submit
+2. Join server: invite code parsing (bare/URL), error on invalid
+3. Transfer ownership: two-step (select member → type TRANSFER)
+4. Claim admin: code input for unclaimed servers
+5. Unclaimed server banner visibility
+
+---
+
+## SUITE 35 — MODERATION WORKFLOW
+
+**Spec:** `qa-suites/suite-35.md` — exact Playwright steps for every test below
+**Before:** `ccc find TimeoutModal WarningsModal AdminMenu UserContextMenu`
+
+1. Timeout: preset durations, custom input, reason, submit
+2. Warnings history: timeline with color-coded entries
+3. Admin menu: moderation actions (warn, timeout, kick, ban)
+4. Kick/ban confirmation pattern
+5. User context menu with permission-based options
+
+---
+
+## SUITE 36 — SERVER SETTINGS EXTENDED TABS
+
+**Spec:** `qa-suites/suite-36.md` — exact Playwright steps for every test below
+**Before:** `ccc find RoleReactionsPanel AFKSettingsPanel RelayServersPanel CrashReportsPanel`
+
+1. Role reactions: create/delete reaction-to-role mappings
+2. AFK settings: timeout and channel selection
+3. Relay servers: list with status, health check
+4. Crash reports: list with details
+5. Soundboard config, webhooks, welcome popup, bans, storage
+
+---
+
+## SUITE 37 — ERROR RECOVERY & SESSION MANAGEMENT
+
+**Spec:** `qa-suites/suite-37.md` — exact Playwright steps for every test below
+**Before:** `ccc find SessionExpiredOverlay RuntimeErrorOverlay ErrorBoundary`
+
+1. Session expired: reason-based display, countdown, auto-redirect
+2. Runtime error overlay: capture, stack trace, dismiss, copy
+3. Error boundary: fallback UI, reload
+4. Crash report submission via IPC
 
 ---
 
