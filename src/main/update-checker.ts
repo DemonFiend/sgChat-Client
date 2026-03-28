@@ -13,10 +13,17 @@ interface ReleaseInfo {
   published_at: string;
 }
 
-const updateStore = new Store<{ dismissedVersion: string }>({
-  name: 'updates',
-  defaults: { dismissedVersion: '' },
-});
+// Lazy init — electron-store needs app to be ready for userData path resolution
+let _updateStore: Store<{ dismissedVersion: string }> | null = null;
+function getUpdateStore(): Store<{ dismissedVersion: string }> {
+  if (!_updateStore) {
+    _updateStore = new Store<{ dismissedVersion: string }>({
+      name: 'updates',
+      defaults: { dismissedVersion: '' },
+    });
+  }
+  return _updateStore;
+}
 
 function compareVersions(a: string, b: string): number {
   const pa = a.split('.').map(Number);
@@ -47,7 +54,7 @@ export async function checkForUpdates(mainWindow: BrowserWindow): Promise<void> 
     if (compareVersions(release.version, currentVersion) <= 0) return;
 
     // Skip if user already dismissed this version (unless required)
-    if (!release.required && updateStore.get('dismissedVersion') === release.version) return;
+    if (!release.required && getUpdateStore().get('dismissedVersion') === release.version) return;
 
     mainWindow.webContents.send('update:available', release);
   } catch {
@@ -61,7 +68,7 @@ export function initUpdateChecker(mainWindow: BrowserWindow): void {
 
   // IPC handler to dismiss an optional update
   ipcMain.handle('update:dismiss', (_event, version: string) => {
-    updateStore.set('dismissedVersion', version);
+    getUpdateStore().set('dismissedVersion', version);
   });
 
   // IPC handler to open download URL

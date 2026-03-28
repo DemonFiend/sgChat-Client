@@ -24,6 +24,7 @@ function AuthRouter() {
   const isLoading = useAuthStore((s) => s.isLoading);
   const isPendingApproval = useAuthStore((s) => s.isPendingApproval);
   const serverUrl = useAuthStore((s) => s.serverUrl);
+  const isPendingApproval = useAuthStore((s) => s.isPendingApproval);
   const checkAuth = useAuthStore((s) => s.checkAuth);
   const [view, setView] = useState<AuthView>('loading');
   const [resetToken, setResetToken] = useState('');
@@ -35,6 +36,8 @@ function AuthRouter() {
   useEffect(() => {
     if (isLoading) {
       setView('loading');
+    } else if (isPendingApproval) {
+      setView('pending-approval');
     } else if (isAuthenticated) {
       setView('app');
     } else if (isPendingApproval) {
@@ -78,6 +81,10 @@ function AuthRouter() {
 
   if (view === 'reset-password') {
     return <ResetPasswordPage token={resetToken} onBack={() => setView('login')} />;
+  }
+
+  if (view === 'pending-approval') {
+    return <PendingApprovalPage />;
   }
 
   return <AppLayout />;

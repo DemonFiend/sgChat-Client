@@ -22,15 +22,21 @@ async function buildMain() {
     ...esbuildOptions,
     entryPoints: [mainEntry],
     outdir: 'dist/main',
+    outExtension: { '.js': '.cjs' },
   });
   console.log('[dev] Main process built');
 }
 
 async function buildPreload() {
+  // Preload stays CJS — sandboxed context doesn't fully support ESM
   await build({
-    ...esbuildOptions,
+    bundle: true,
+    platform: 'node',
+    external: ['electron'],
+    format: 'cjs',
+    sourcemap: true,
     entryPoints: [preloadEntry],
-    outdir: 'dist/preload',
+    outfile: 'dist/preload/index.cjs',
   });
   console.log('[dev] Preload script built');
 }

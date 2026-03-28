@@ -84,7 +84,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const result = await electronAPI.auth.register(serverUrl, username, email, password, inviteCode);
     if (result.success) {
       if (result.pending_approval) {
-        set({ isPendingApproval: true, serverUrl });
+        // Server may or may not issue tokens for pending users
+        if (result.user) {
+          set({ user: result.user, isAuthenticated: true, isPendingApproval: true, serverUrl });
+        } else {
+          set({ isPendingApproval: true, serverUrl });
+        }
       } else {
         set({ user: result.user, isAuthenticated: true, serverUrl, isPendingApproval: false });
       }
@@ -97,9 +102,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await electronAPI.auth.logout();
     if (forgetDevice) {
       electronAPI.config.clearServerUrl?.();
-      set({ user: null, isAuthenticated: false, authError: null, serverUrl: '' });
+      set({ user: null, isAuthenticated: false, authError: null, isPendingApproval: false, serverUrl: '' });
     } else {
-      set({ user: null, isAuthenticated: false, authError: null });
+      set({ user: null, isAuthenticated: false, authError: null, isPendingApproval: false });
     }
   },
 
@@ -121,7 +126,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (isAuth) {
         const res = await electronAPI.api.request('GET', '/api/users/me');
         if (res.ok) {
-          set({ user: res.data, isAuthenticated: true, isLoading: false, serverUrl });
+          // Server may indicate the user is pending approval
+          const isPending = res.data?.pending_approval === true;
+          set({
+            user: res.data,
+            isAuthenticated: true,
+            isLoading: false,
+            serverUrl,
+            isPendingApproval: isPending,
+          });
           return;
         }
       }

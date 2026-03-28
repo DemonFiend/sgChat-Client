@@ -22,6 +22,11 @@ interface ScreenShareSelection {
 // Pending screen share selection — resolved when renderer picks a source
 let pendingScreenShareResolve: ((selection: ScreenShareSelection) => void) | null = null;
 
+// Enable remote debugging for Playwright tests (must be before app.whenReady)
+if (process.env.NODE_ENV === 'test') {
+  app.commandLine.appendSwitch('remote-debugging-port', '0');
+}
+
 // Register custom protocol BEFORE app is ready
 registerAppProtocol();
 
@@ -48,7 +53,7 @@ function createWindow(): BrowserWindow {
     backgroundColor: '#1a1b1e',
     icon: path.join(__dirname, '../../resources/icon.png'),
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
+      preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

@@ -53,7 +53,7 @@ export function initTray(mainWindow: BrowserWindow): void {
 
   // Set a flag so the tray close handler knows when we're really quitting
   app.on('before-quit', () => {
-    (app as any).isQuitting = true;
+    app.isQuitting = true;
   });
 }
 

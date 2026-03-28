@@ -1,6 +1,11 @@
 import Store from 'electron-store';
-import { randomBytes } from 'crypto';
-import path from 'path';
+import { randomBytes } from 'node:crypto';
+
+// ── Lazy Store Initialization ────────────────────────────────────────────────
+// electron-store v10 needs `app.getPath('userData')` to resolve the config dir.
+// At module-load time in bundled CJS, the Electron `app` module isn't ready yet,
+// causing `conf` to throw "Please specify the `projectName` option."
+// We defer store creation to first access, which is always after app.whenReady().
 
 // ── Settings Store (unencrypted) ──────────────────────────────────────────────
 
@@ -26,33 +31,40 @@ interface SettingsSchema {
   savedServers: SavedServer[];
 }
 
-const settingsStore = new Store<SettingsSchema>({
-  name: 'settings',
-  defaults: {
-    autoStart: false,
-    windowState: {
-      width: 1280,
-      height: 800,
-      isMaximized: false,
-    },
-    savedServers: [],
-  },
-});
+let _settingsStore: Store<SettingsSchema> | null = null;
+
+function getSettingsStore(): Store<SettingsSchema> {
+  if (!_settingsStore) {
+    _settingsStore = new Store<SettingsSchema>({
+      name: 'settings',
+      defaults: {
+        autoStart: false,
+        windowState: {
+          width: 1280,
+          height: 800,
+          isMaximized: false,
+        },
+        savedServers: [],
+      },
+    });
+  }
+  return _settingsStore;
+}
 
 export function getAutoStart(): boolean {
-  return settingsStore.get('autoStart');
+  return getSettingsStore().get('autoStart');
 }
 
 export function setAutoStart(enabled: boolean): void {
-  settingsStore.set('autoStart', enabled);
+  getSettingsStore().set('autoStart', enabled);
 }
 
 export function getWindowState(): SettingsSchema['windowState'] {
-  return settingsStore.get('windowState');
+  return getSettingsStore().get('windowState');
 }
 
 export function setWindowState(state: SettingsSchema['windowState']): void {
-  settingsStore.set('windowState', state);
+  getSettingsStore().set('windowState', state);
 }
 
 // ── Auth Store (encrypted) ────────────────────────────────────────────────────
@@ -77,73 +89,80 @@ function getEncryptionKey(): string {
   return key;
 }
 
-const authStore = new Store<AuthSchema>({
-  name: 'auth',
-  encryptionKey: getEncryptionKey(),
-  defaults: {
-    serverUrl: '',
-    accessToken: '',
-    refreshToken: '',
-    userId: '',
-    rememberedEmail: '',
-    encryptionSalt: '',
-  },
-});
+let _authStore: Store<AuthSchema> | null = null;
+
+function getAuthStore(): Store<AuthSchema> {
+  if (!_authStore) {
+    _authStore = new Store<AuthSchema>({
+      name: 'auth',
+      encryptionKey: getEncryptionKey(),
+      defaults: {
+        serverUrl: '',
+        accessToken: '',
+        refreshToken: '',
+        userId: '',
+        rememberedEmail: '',
+        encryptionSalt: '',
+      },
+    });
+  }
+  return _authStore;
+}
 
 export function getServerUrl(): string {
-  return authStore.get('serverUrl');
+  return getAuthStore().get('serverUrl');
 }
 
 export function setServerUrl(url: string): void {
   const normalized = url.replace(/\/+$/, '');
-  authStore.set('serverUrl', normalized);
+  getAuthStore().set('serverUrl', normalized);
 }
 
 export function hasServerUrl(): boolean {
-  const url = authStore.get('serverUrl');
+  const url = getAuthStore().get('serverUrl');
   return typeof url === 'string' && url.length > 0;
 }
 
 export function getAccessToken(): string {
-  return authStore.get('accessToken');
+  return getAuthStore().get('accessToken');
 }
 
 export function getRefreshToken(): string {
-  return authStore.get('refreshToken');
+  return getAuthStore().get('refreshToken');
 }
 
 export function getUserId(): string {
-  return authStore.get('userId');
+  return getAuthStore().get('userId');
 }
 
 export function setTokens(accessToken: string, refreshToken: string, userId: string): void {
-  authStore.set('accessToken', accessToken);
-  authStore.set('refreshToken', refreshToken);
-  authStore.set('userId', userId);
+  getAuthStore().set('accessToken', accessToken);
+  getAuthStore().set('refreshToken', refreshToken);
+  getAuthStore().set('userId', userId);
 }
 
 export function clearTokens(): void {
-  authStore.set('accessToken', '');
-  authStore.set('refreshToken', '');
-  authStore.set('userId', '');
+  getAuthStore().set('accessToken', '');
+  getAuthStore().set('refreshToken', '');
+  getAuthStore().set('userId', '');
 }
 
 export function isAuthenticated(): boolean {
-  return !!authStore.get('accessToken') && !!authStore.get('refreshToken');
+  return !!getAuthStore().get('accessToken') && !!getAuthStore().get('refreshToken');
 }
 
 export function getRememberedEmail(): string {
-  return authStore.get('rememberedEmail');
+  return getAuthStore().get('rememberedEmail');
 }
 
 export function setRememberedEmail(email: string): void {
-  authStore.set('rememberedEmail', email);
+  getAuthStore().set('rememberedEmail', email);
 }
 
 // ── Saved Servers (quick switcher) ────────────────────────────────────────────
 
 export function getSavedServers(): SavedServer[] {
-  return settingsStore.get('savedServers') || [];
+  return getSettingsStore().get('savedServers') || [];
 }
 
 export function saveServer(server: Omit<SavedServer, 'lastUsed'>): void {
@@ -155,12 +174,12 @@ export function saveServer(server: Omit<SavedServer, 'lastUsed'>): void {
   } else {
     servers.push(entry);
   }
-  settingsStore.set('savedServers', servers);
+  getSettingsStore().set('savedServers', servers);
 }
 
 export function removeSavedServer(url: string): void {
   const servers = getSavedServers().filter((s) => s.url !== url);
-  settingsStore.set('savedServers', servers);
+  getSettingsStore().set('savedServers', servers);
 }
 
 /**
@@ -200,9 +219,8 @@ export function switchToServer(targetUrl: string): SavedServer | null {
   const updatedServers = getSavedServers();
   const idx = updatedServers.findIndex((s) => s.url === target.url);
   if (idx >= 0) updatedServers[idx] = target;
-  settingsStore.set('savedServers', updatedServers);
+  getSettingsStore().set('savedServers', updatedServers);
 
   return target;
 }
 
-export { settingsStore, authStore };

@@ -165,8 +165,13 @@ export async function register(
 
     const data = await parseResponse(res);
 
-    // Server may return pending_approval instead of tokens
+    // Server may return pending_approval — with or without tokens
     if (data.pending_approval) {
+      // If server also issued tokens for the pending user, store them
+      if (data.access_token && data.refresh_token && data.user) {
+        setTokens(data.access_token, data.refresh_token, data.user.id);
+        return { success: true, pending_approval: true, user: data.user };
+      }
       return { success: true, pending_approval: true };
     }
 
