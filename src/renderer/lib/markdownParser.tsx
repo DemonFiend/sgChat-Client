@@ -233,7 +233,16 @@ function RenderNode({ node, withEmojis = false }: { node: MarkdownNode; withEmoj
       return (
         <span
           className="md-spoiler"
-          onClick={(e) => (e.currentTarget.classList.toggle('md-spoiler--revealed'))}
+          onClick={(e) => {
+            const el = e.currentTarget;
+            if (!el.classList.contains('md-spoiler--revealed')) {
+              // First click: reveal the spoiler, block link navigation
+              e.preventDefault();
+              e.stopPropagation();
+              el.classList.add('md-spoiler--revealed');
+            }
+            // Subsequent clicks: let events propagate normally (links work)
+          }}
         >
           {node.children ? renderChildren(node.children) : renderLeafText(node.content, withEmojis)}
         </span>

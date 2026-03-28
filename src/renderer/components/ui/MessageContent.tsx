@@ -472,7 +472,14 @@ function SpoilerImageRenderer({ src, compact }: { src: string; compact?: boolean
   const maxH = compact ? 150 : 300;
 
   return (
-    <div style={{ margin: '4px 0', position: 'relative', display: 'inline-block', cursor: 'pointer' }} onClick={() => setRevealed((r) => !r)}>
+    <div style={{ margin: '4px 0', position: 'relative', display: 'inline-block', cursor: 'pointer' }} onClick={(e) => {
+      if (!revealed) {
+        // First click: reveal the spoiler image, block any link navigation
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      setRevealed((r) => !r);
+    }}>
       {!loaded && (
         <div style={{ width: compact ? 200 : 300, height: compact ? 150 : 200, background: 'var(--bg-tertiary)', borderRadius: 8, animation: 'pulse 1.5s ease-in-out infinite' }} />
       )}

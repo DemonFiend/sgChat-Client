@@ -43,6 +43,10 @@ interface AuthState {
   serverUrl: string;
   authError: AuthErrorReason | null;
   serverSignupsDisabled: boolean;
+  /** Set after auto-login check fails with 401/429 — prevents retry loops */
+  autoLoginFailed: boolean;
+  /** Timestamp of last checkAuth call — enforces cooldown */
+  lastCheckAuthAt: number;
 
   login: (serverUrl: string, email: string, password: string) => Promise<LoginResult>;
   register: (serverUrl: string, username: string, email: string, password: string, inviteCode?: string) => Promise<{ success: boolean; error?: string; pending_approval?: boolean }>;
@@ -61,6 +65,9 @@ interface AuthState {
   updateUser: (updates: Partial<User>) => void;
 }
 
+/** Minimum cooldown between checkAuth calls (30 seconds) */
+const CHECK_AUTH_COOLDOWN_MS = 30_000;
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
@@ -69,11 +76,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   serverUrl: '',
   authError: null,
   serverSignupsDisabled: false,
+  autoLoginFailed: false,
+  lastCheckAuthAt: 0,
 
   login: async (serverUrl, email, password) => {
     const result = await electronAPI.auth.login(serverUrl, email, password);
     if (result.success) {
-      set({ user: result.user, isAuthenticated: true, serverUrl, isPendingApproval: false });
+      // Successful explicit login clears the auto-login failure flag
+      set({ user: result.user, isAuthenticated: true, serverUrl, isPendingApproval: false, autoLoginFailed: false });
     } else if (result.pending_approval) {
       set({ isPendingApproval: true, serverUrl });
     }
@@ -102,13 +112,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await electronAPI.auth.logout();
     if (forgetDevice) {
       electronAPI.config.clearServerUrl?.();
-      set({ user: null, isAuthenticated: false, authError: null, isPendingApproval: false, serverUrl: '' });
+      set({ user: null, isAuthenticated: false, authError: null, isPendingApproval: false, serverUrl: '', autoLoginFailed: false });
     } else {
-      set({ user: null, isAuthenticated: false, authError: null, isPendingApproval: false });
+      set({ user: null, isAuthenticated: false, authError: null, isPendingApproval: false, autoLoginFailed: false });
     }
   },
 
   checkAuth: async () => {
+    const { autoLoginFailed, lastCheckAuthAt } = get();
+
+    // If auto-login already failed (401/429), don't retry automatically.
+    // Only an explicit login() call resets this flag.
+    if (autoLoginFailed) {
+      set({ isLoading: false });
+      return;
+    }
+
+    // Enforce cooldown between checkAuth calls (30s) — skip the very first call (lastCheckAuthAt === 0)
+    const now = Date.now();
+    if (lastCheckAuthAt > 0 && now - lastCheckAuthAt < CHECK_AUTH_COOLDOWN_MS) {
+      set({ isLoading: false });
+      return;
+    }
+    set({ lastCheckAuthAt: now });
+
     try {
       const hasServer = await electronAPI.config.hasServerUrl();
       if (!hasServer) {
@@ -134,13 +161,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             isLoading: false,
             serverUrl,
             isPendingApproval: isPending,
+            autoLoginFailed: false,
           });
+          return;
+        }
+
+        // /api/users/me failed — check if it's a 401/429 to prevent retry loops
+        if (res.status === 401 || res.status === 429) {
+          set({ isLoading: false, isAuthenticated: false, serverUrl, autoLoginFailed: true });
           return;
         }
       }
 
       set({ isLoading: false, isAuthenticated: false, serverUrl });
     } catch {
+      // Network errors are transient — don't set autoLoginFailed so retry is allowed
       set({ isLoading: false, isAuthenticated: false });
     }
   },
