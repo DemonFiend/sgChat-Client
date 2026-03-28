@@ -104,8 +104,9 @@ function loadApp(win: BrowserWindow): void {
   }
 }
 
-// Prevent multiple instances
-const gotSingleInstanceLock = app.requestSingleInstanceLock();
+// Prevent multiple instances (skip in test mode for Playwright)
+const isTestMode = process.env.NODE_ENV === 'test';
+const gotSingleInstanceLock = isTestMode || app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
   app.quit();
