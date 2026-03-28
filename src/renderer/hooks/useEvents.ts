@@ -17,6 +17,7 @@ export interface ServerEvent {
   visibility_role_id?: string;
   status: 'scheduled' | 'active' | 'cancelled' | 'completed';
   created_by: string;
+  creator_username?: string;
   created_at: string;
   rsvp_counts?: { interested: number; tentative: number; not_interested: number };
   my_rsvp?: RSVPStatus | null;

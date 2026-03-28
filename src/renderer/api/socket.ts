@@ -233,6 +233,10 @@ function handleEvent(type: string, data: any): void {
         const isEveryone = !!data.mentions_everyone;
         const isRole = !!data.mentions_roles;
         useUnreadStore.getState().increment(data.channel_id, isMention);
+        // Also increment server-level unreads
+        if (data.server_id) {
+          useUnreadStore.getState().incrementServer(data.server_id, isMention || isEveryone);
+        }
         // Toast if channel notification settings allow it
         const shouldShow = useChannelNotificationStore.getState().shouldNotify(
           data.channel_id, isMention, isEveryone, isRole,

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Center, Loader, Stack, Text } from '@mantine/core';
 import { queryClient } from './lib/queryClient';
 import { useAuthStore } from './stores/authStore';
 import { ServerSetupPage } from './pages/ServerSetupPage';
@@ -15,6 +14,7 @@ import { NotificationToast } from './components/ui/NotificationToast';
 import { RuntimeErrorOverlay } from './components/ui/RuntimeErrorOverlay';
 import { ScreenSharePicker } from './components/ui/ScreenSharePicker';
 import { UpdateModal } from './components/ui/UpdateModal';
+import { LayoutSkeleton } from './components/ui/LayoutSkeleton';
 
 type AuthView = 'loading' | 'server-setup' | 'login' | 'register' | 'forgot-password' | 'reset-password' | 'app';
 
@@ -43,15 +43,7 @@ function AuthRouter() {
   }, [isLoading, isAuthenticated, serverUrl]);
 
   if (view === 'loading') {
-    return (
-      <Center h="100vh" style={{ background: 'var(--bg-tertiary)' }}>
-        <div className="drag-region" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 32 }} />
-        <Stack align="center" gap="md">
-          <Loader color="brand" size="lg" />
-          <Text c="dimmed" size="sm">Loading...</Text>
-        </Stack>
-      </Center>
-    );
+    return <LayoutSkeleton />;
   }
 
   if (view === 'server-setup') {

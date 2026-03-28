@@ -1,10 +1,11 @@
 import { ActionIcon, Button, CopyButton, Divider, Group, Kbd, Modal, NavLink, PasswordInput, Progress, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton, Image, Paper, SimpleGrid, Tooltip } from '@mantine/core';
-import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay, IconRefresh, IconLock, IconMail, IconHistory, IconShield, IconEye, IconEyeOff, IconUpload, IconCopy, IconMusic, IconTrash } from '@tabler/icons-react';
+import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay, IconRefresh, IconLock, IconMail, IconHistory, IconShield, IconEye, IconEyeOff, IconUpload, IconCopy, IconMusic, IconTrash, IconId, IconDeviceDesktop } from '@tabler/icons-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import { useThemeStore, type ThemeName, themeNames } from '../stores/themeStore';
 import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
+import { useNotificationSettingsStore } from '../stores/notificationSettingsStore';
 import { useKeybindsStore, KEYBIND_LABELS, DEFAULT_KEYBINDS } from '../stores/keybindsStore';
 import { useDevModeStore } from '../stores/devModeStore';
 import { useServerVersion } from '../hooks/useServerInfo';
@@ -16,16 +17,26 @@ import { AvatarPicker } from '../components/ui/AvatarPicker';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
-type SettingsTab = 'profile' | 'appearance' | 'notifications' | 'keybinds' | 'voice';
+type SettingsTab = 'account' | 'profile' | 'appearance' | 'notifications' | 'keybinds' | 'voice';
 
 const electronAPI = (window as any).electronAPI;
 
 export function SettingsView() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('account');
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const setServerUrl = useAuthStore((s) => s.setServerUrl);
   const setView = useUIStore((s) => s.setView);
   const { data: serverVersion } = useServerVersion();
+
+  const handleLogout = (forgetDevice: boolean) => {
+    if (forgetDevice) {
+      // Clear stored server URL so user sees the setup screen on next launch
+      electronAPI.config.clearServerUrl?.();
+      setServerUrl('');
+    }
+    logout();
+  };
 
   return (
     <div style={{ flex: 1, display: 'flex', background: 'var(--bg-secondary)' }}>
@@ -62,6 +73,13 @@ export function SettingsView() {
             </Text>
             <NavLink
               label="My Account"
+              leftSection={<IconId size={18} />}
+              active={activeTab === 'account'}
+              onClick={() => setActiveTab('account')}
+              variant="subtle"
+            />
+            <NavLink
+              label="Profile"
               leftSection={<IconUser size={18} />}
               active={activeTab === 'profile'}
               onClick={() => setActiveTab('profile')}
@@ -103,7 +121,14 @@ export function SettingsView() {
               leftSection={<IconLogout size={18} />}
               color="red"
               variant="subtle"
-              onClick={logout}
+              onClick={() => handleLogout(false)}
+            />
+            <NavLink
+              label="Log Out & Forget Device"
+              leftSection={<IconDeviceDesktop size={18} />}
+              color="red"
+              variant="subtle"
+              onClick={() => handleLogout(true)}
             />
           </Stack>
         </ScrollArea>
@@ -121,6 +146,7 @@ export function SettingsView() {
       <div style={{ flex: 1, background: 'var(--bg-primary)' }}>
         <ScrollArea style={{ height: '100%' }} scrollbarSize={6} type="hover">
           <div style={{ maxWidth: 600, padding: 32 }}>
+            {activeTab === 'account' && <AccountSettings user={user} />}
             {activeTab === 'profile' && <ProfileSettings user={user} />}
             {activeTab === 'appearance' && <AppearanceSettings />}
             {activeTab === 'notifications' && <NotificationSettings />}
@@ -133,20 +159,10 @@ export function SettingsView() {
   );
 }
 
-function ProfileSettings({ user }: { user: any }) {
+function AccountSettings({ user }: { user: any }) {
   const updateAvatarUrl = useAuthStore((s) => s.updateAvatarUrl);
   const updateUser = useAuthStore((s) => s.updateUser);
   const addToast = useToastStore((s) => s.addToast);
-  const [displayName, setDisplayName] = useState(user?.display_name || '');
-  const [bio, setBio] = useState(user?.bio || '');
-  const [pronouns, setPronouns] = useState(user?.pronouns || '');
-  const [isSaving, setIsSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  // Custom status with clear-after
-  const [customStatus, setCustomStatus] = useState(user?.custom_status || '');
-  const [clearAfter, setClearAfter] = useState<string | null>(null);
-  const [statusSaving, setStatusSaving] = useState(false);
 
   // Email change
   const [emailModalOpen, setEmailModalOpen] = useState(false);
@@ -182,56 +198,6 @@ function ProfileSettings({ user }: { user: any }) {
   const [tfaDisableOpen, setTfaDisableOpen] = useState(false);
   const [tfaDisablePassword, setTfaDisablePassword] = useState('');
   const [tfaDisableLoading, setTfaDisableLoading] = useState(false);
-
-  const handleSaveProfile = async () => {
-    setIsSaving(true);
-    setSaved(false);
-    try {
-      const res = await electronAPI.api.request('PATCH', '/api/users/me', {
-        display_name: displayName || null,
-        bio: bio || null,
-        pronouns: pronouns || null,
-      });
-      if (res.ok) {
-        updateUser({ display_name: displayName || null, bio: bio || null, pronouns: pronouns || null });
-        setSaved(true);
-        addToast({ type: 'system', title: 'Profile Updated', message: 'Your profile has been saved.' });
-        setTimeout(() => setSaved(false), 2000);
-      }
-    } catch { /* ignore */ }
-    setIsSaving(false);
-  };
-
-  const handleSaveCustomStatus = async () => {
-    setStatusSaving(true);
-    try {
-      let expiresAt: string | null = null;
-      if (clearAfter) {
-        const now = new Date();
-        switch (clearAfter) {
-          case '30m': expiresAt = new Date(now.getTime() + 30 * 60 * 1000).toISOString(); break;
-          case '1h': expiresAt = new Date(now.getTime() + 60 * 60 * 1000).toISOString(); break;
-          case '4h': expiresAt = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString(); break;
-          case 'today': {
-            const eod = new Date(now);
-            eod.setHours(23, 59, 59, 999);
-            expiresAt = eod.toISOString();
-            break;
-          }
-          case 'week': expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(); break;
-        }
-      }
-      const res = await electronAPI.api.request('PATCH', '/api/users/me/status', {
-        custom_status: customStatus || null,
-        custom_status_expires_at: expiresAt,
-      });
-      if (res.ok) {
-        useAuthStore.getState().updateCustomStatus(customStatus || null, expiresAt);
-        addToast({ type: 'system', title: 'Status Updated', message: customStatus ? 'Custom status set.' : 'Custom status cleared.' });
-      }
-    } catch { /* ignore */ }
-    setStatusSaving(false);
-  };
 
   const handleChangeEmail = async () => {
     setEmailError('');
@@ -377,40 +343,6 @@ function ProfileSettings({ user }: { user: any }) {
 
       <Divider style={{ borderColor: 'var(--border)' }} />
 
-      {/* Custom Status with Clear After */}
-      <Stack gap={8}>
-        <Text size="sm" fw={600}>Custom Status</Text>
-        <Group align="flex-end" gap={8}>
-          <TextInput
-            placeholder="What's on your mind?"
-            value={customStatus}
-            onChange={(e) => setCustomStatus(e.currentTarget.value)}
-            maxLength={128}
-            style={{ flex: 1 }}
-          />
-          <Select
-            placeholder="Clear after..."
-            value={clearAfter}
-            onChange={setClearAfter}
-            data={[
-              { value: 'none', label: "Don't clear" },
-              { value: '30m', label: '30 minutes' },
-              { value: '1h', label: '1 hour' },
-              { value: '4h', label: '4 hours' },
-              { value: 'today', label: 'Today' },
-              { value: 'week', label: 'This week' },
-            ]}
-            clearable
-            style={{ width: 160 }}
-          />
-        </Group>
-        <Button size="xs" variant="light" onClick={handleSaveCustomStatus} loading={statusSaving} style={{ alignSelf: 'flex-start' }}>
-          {customStatus ? 'Set Status' : 'Clear Status'}
-        </Button>
-      </Stack>
-
-      <Divider style={{ borderColor: 'var(--border)' }} />
-
       <Stack gap={12}>
         <TextInput label="Username" value={user?.username || ''} readOnly />
         <Group align="flex-end" gap={8}>
@@ -432,40 +364,6 @@ function ProfileSettings({ user }: { user: any }) {
             onClick={() => { setCurrentPw(''); setNewPw(''); setConfirmPw(''); setPwError(''); setPwModalOpen(true); }}
           >
             Change Password
-          </Button>
-        </Group>
-        <TextInput
-          label="Display Name"
-          placeholder="How others see you"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.currentTarget.value)}
-          maxLength={32}
-        />
-        <TextInput
-          label="Pronouns"
-          placeholder="e.g. they/them, she/her, he/him"
-          value={pronouns}
-          onChange={(e) => setPronouns(e.currentTarget.value)}
-          maxLength={40}
-        />
-        <Textarea
-          label="Bio"
-          placeholder="Tell us about yourself..."
-          value={bio}
-          onChange={(e) => setBio(e.currentTarget.value)}
-          maxLength={190}
-          autosize
-          minRows={2}
-          maxRows={4}
-        />
-        <Group gap="xs">
-          <Button
-            size="sm"
-            onClick={handleSaveProfile}
-            loading={isSaving}
-            disabled={isSaving}
-          >
-            {saved ? 'Saved!' : 'Save Changes'}
           </Button>
         </Group>
       </Stack>
@@ -533,6 +431,35 @@ function ProfileSettings({ user }: { user: any }) {
               Enable 2FA
             </Button>
           )}
+        </Group>
+      </Stack>
+
+      <Divider style={{ borderColor: 'var(--border)' }} />
+
+      {/* Account Removal (scaffolded) */}
+      <Stack gap={12}>
+        <Text size="lg" fw={600} c="red">Account Removal</Text>
+        <Text size="sm" c="dimmed">
+          Disabling your account means you can recover it at any time after taking this action.
+          Deleting your account will permanently remove all your data.
+        </Text>
+        <Group gap={8}>
+          <Button
+            variant="light"
+            color="yellow"
+            size="sm"
+            onClick={() => addToast({ type: 'system', title: 'Not Available', message: 'Account disabling is not yet available.' })}
+          >
+            Disable Account
+          </Button>
+          <Button
+            variant="light"
+            color="red"
+            size="sm"
+            onClick={() => addToast({ type: 'system', title: 'Not Available', message: 'Account deletion is not yet available.' })}
+          >
+            Delete Account
+          </Button>
         </Group>
       </Stack>
 
@@ -681,6 +608,148 @@ function ProfileSettings({ user }: { user: any }) {
           </Group>
         </Stack>
       </Modal>
+    </Stack>
+  );
+}
+
+function ProfileSettings({ user }: { user: any }) {
+  const updateUser = useAuthStore((s) => s.updateUser);
+  const addToast = useToastStore((s) => s.addToast);
+  const [displayName, setDisplayName] = useState(user?.display_name || '');
+  const [bio, setBio] = useState(user?.bio || '');
+  const [pronouns, setPronouns] = useState(user?.pronouns || '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Custom status with clear-after
+  const [customStatus, setCustomStatus] = useState(user?.custom_status || '');
+  const [clearAfter, setClearAfter] = useState<string | null>(null);
+  const [statusSaving, setStatusSaving] = useState(false);
+
+  const handleSaveProfile = async () => {
+    setIsSaving(true);
+    setSaved(false);
+    try {
+      const res = await electronAPI.api.request('PATCH', '/api/users/me', {
+        display_name: displayName || null,
+        bio: bio || null,
+        pronouns: pronouns || null,
+      });
+      if (res.ok) {
+        updateUser({ display_name: displayName || null, bio: bio || null, pronouns: pronouns || null });
+        setSaved(true);
+        addToast({ type: 'system', title: 'Profile Updated', message: 'Your profile has been saved.' });
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } catch { /* ignore */ }
+    setIsSaving(false);
+  };
+
+  const handleSaveCustomStatus = async () => {
+    setStatusSaving(true);
+    try {
+      let expiresAt: string | null = null;
+      if (clearAfter) {
+        const now = new Date();
+        switch (clearAfter) {
+          case '30m': expiresAt = new Date(now.getTime() + 30 * 60 * 1000).toISOString(); break;
+          case '1h': expiresAt = new Date(now.getTime() + 60 * 60 * 1000).toISOString(); break;
+          case '4h': expiresAt = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString(); break;
+          case 'today': {
+            const eod = new Date(now);
+            eod.setHours(23, 59, 59, 999);
+            expiresAt = eod.toISOString();
+            break;
+          }
+          case 'week': expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(); break;
+        }
+      }
+      const res = await electronAPI.api.request('PATCH', '/api/users/me/status', {
+        custom_status: customStatus || null,
+        custom_status_expires_at: expiresAt,
+      });
+      if (res.ok) {
+        useAuthStore.getState().updateCustomStatus(customStatus || null, expiresAt);
+        addToast({ type: 'system', title: 'Status Updated', message: customStatus ? 'Custom status set.' : 'Custom status cleared.' });
+      }
+    } catch { /* ignore */ }
+    setStatusSaving(false);
+  };
+
+  return (
+    <Stack gap={24}>
+      <Text size="xl" fw={700}>Profile</Text>
+
+      {/* Custom Status with Clear After */}
+      <Stack gap={8}>
+        <Text size="sm" fw={600}>Custom Status</Text>
+        <Group align="flex-end" gap={8}>
+          <TextInput
+            placeholder="What's on your mind?"
+            value={customStatus}
+            onChange={(e) => setCustomStatus(e.currentTarget.value)}
+            maxLength={128}
+            style={{ flex: 1 }}
+          />
+          <Select
+            placeholder="Clear after..."
+            value={clearAfter}
+            onChange={setClearAfter}
+            data={[
+              { value: 'none', label: "Don't clear" },
+              { value: '30m', label: '30 minutes' },
+              { value: '1h', label: '1 hour' },
+              { value: '4h', label: '4 hours' },
+              { value: 'today', label: 'Today' },
+              { value: 'week', label: 'This week' },
+            ]}
+            clearable
+            style={{ width: 160 }}
+          />
+        </Group>
+        <Button size="xs" variant="light" onClick={handleSaveCustomStatus} loading={statusSaving} style={{ alignSelf: 'flex-start' }}>
+          {customStatus ? 'Set Status' : 'Clear Status'}
+        </Button>
+      </Stack>
+
+      <Divider style={{ borderColor: 'var(--border)' }} />
+
+      <Stack gap={12}>
+        <TextInput
+          label="Display Name"
+          placeholder="How others see you"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.currentTarget.value)}
+          maxLength={32}
+        />
+        <TextInput
+          label="Pronouns"
+          placeholder="e.g. they/them, she/her, he/him"
+          value={pronouns}
+          onChange={(e) => setPronouns(e.currentTarget.value)}
+          maxLength={40}
+        />
+        <Textarea
+          label="Bio"
+          placeholder="Tell us about yourself..."
+          value={bio}
+          onChange={(e) => setBio(e.currentTarget.value)}
+          maxLength={190}
+          autosize
+          minRows={2}
+          maxRows={4}
+        />
+        <Group gap="xs">
+          <Button
+            size="sm"
+            onClick={handleSaveProfile}
+            loading={isSaving}
+            disabled={isSaving}
+          >
+            {saved ? 'Saved!' : 'Save Changes'}
+          </Button>
+        </Group>
+      </Stack>
     </Stack>
   );
 }
@@ -844,10 +913,15 @@ function AppearanceSettings() {
 }
 
 function NotificationSettings() {
-  const [desktopNotifs, setDesktopNotifs] = useState(true);
-  const [notifSounds, setNotifSounds] = useState(true);
+  const desktopNotifs = useNotificationSettingsStore((s) => s.desktopNotifications);
+  const setDesktopNotifs = useNotificationSettingsStore((s) => s.setDesktopNotifications);
+  const notifSounds = useNotificationSettingsStore((s) => s.notificationSounds);
+  const setNotifSounds = useNotificationSettingsStore((s) => s.setNotificationSounds);
+  const flashTaskbar = useNotificationSettingsStore((s) => s.flashTaskbar);
+  const setFlashTaskbar = useNotificationSettingsStore((s) => s.setFlashTaskbar);
+  const mentionOnly = useNotificationSettingsStore((s) => s.mentionOnly);
+  const setMentionOnly = useNotificationSettingsStore((s) => s.setMentionOnly);
   const [autoStart, setAutoStart] = useState(false);
-  const [flashTaskbar, setFlashTaskbar] = useState(true);
 
   return (
     <Stack gap={24}>
@@ -869,6 +943,12 @@ function NotificationSettings() {
         description="Flash the taskbar icon on new mentions and DMs"
         checked={flashTaskbar}
         onChange={(e) => setFlashTaskbar(e.currentTarget.checked)}
+      />
+      <Switch
+        label="Mentions Only"
+        description="Only show notifications for direct mentions, not all messages"
+        checked={mentionOnly}
+        onChange={(e) => setMentionOnly(e.currentTarget.checked)}
       />
       <Divider style={{ borderColor: 'var(--border)' }} />
       <Switch

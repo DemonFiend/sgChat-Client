@@ -5,6 +5,9 @@ import { useAuthStore } from '../stores/authStore';
 import { usePresenceStore } from '../stores/presenceStore';
 import { connectSocket, disconnectSocket } from '../api/socket';
 import { soundService } from '../lib/soundService';
+import { loadRemoteSettings } from '../lib/settingsSync';
+import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
+import { useNotificationSettingsStore } from '../stores/notificationSettingsStore';
 import { ServerView } from '../pages/ServerView';
 import { DMView } from '../pages/DMView';
 import { FriendsView } from '../pages/FriendsView';
@@ -21,6 +24,15 @@ export function AppLayout() {
   useEffect(() => {
     connectSocket();
     soundService.preload();
+
+    // One-shot: hydrate local stores from server-side settings
+    loadRemoteSettings().then((remote) => {
+      if (remote) {
+        useVoiceSettingsStore.getState().hydrateFromServer(remote);
+        useNotificationSettingsStore.getState().hydrateFromServer(remote);
+      }
+    });
+
     return () => disconnectSocket();
   }, []);
 

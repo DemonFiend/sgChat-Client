@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { saveRemoteSetting, type RemoteSettings } from '../lib/settingsSync';
 
 const STORAGE_KEY = 'sgchat_voice_settings';
 
@@ -37,6 +38,8 @@ interface VoiceSettingsState extends VoiceSettingsData {
    * If a saved device ID is no longer present, reset it to 'default'.
    */
   validateDevices: (availableInputIds: string[], availableOutputIds: string[]) => void;
+  /** Hydrate syncable settings from server (NOT device IDs). */
+  hydrateFromServer: (remote: RemoteSettings) => void;
 }
 
 const DEFAULTS: VoiceSettingsData = {
@@ -75,10 +78,27 @@ function persist(data: Partial<VoiceSettingsData>) {
   }
 }
 
-/** Auto-persisting setter: updates zustand state + writes to localStorage */
+/** Map from local key to remote settings key for syncable settings. */
+const SYNCABLE_KEYS: Partial<Record<keyof VoiceSettingsData, keyof RemoteSettings>> = {
+  noiseSuppression: 'noise_suppression',
+  echoCancellation: 'echo_cancellation',
+  autoGainControl: 'auto_gain_control',
+  vad: 'vad',
+  aiNoiseSuppression: 'ai_noise_suppression',
+  inputVolume: 'input_volume',
+  outputVolume: 'output_volume',
+  joinSoundEnabled: 'join_sound_enabled',
+  leaveSoundEnabled: 'leave_sound_enabled',
+};
+
+/** Auto-persisting setter: updates zustand state + writes to localStorage + remote sync */
 function autoPersist<K extends keyof VoiceSettingsData>(key: K) {
   return (value: VoiceSettingsData[K]) => {
     persist({ [key]: value });
+    const remoteKey = SYNCABLE_KEYS[key];
+    if (remoteKey) {
+      saveRemoteSetting({ [remoteKey]: value });
+    }
     return { [key]: value } as Pick<VoiceSettingsData, K>;
   };
 }
@@ -115,4 +135,22 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set) => ({
       }
       return {};
     }),
+
+  hydrateFromServer: (remote) => {
+    const updates: Partial<VoiceSettingsData> = {};
+    if (remote.noise_suppression !== undefined) updates.noiseSuppression = remote.noise_suppression;
+    if (remote.echo_cancellation !== undefined) updates.echoCancellation = remote.echo_cancellation;
+    if (remote.auto_gain_control !== undefined) updates.autoGainControl = remote.auto_gain_control;
+    if (remote.vad !== undefined) updates.vad = remote.vad;
+    if (remote.ai_noise_suppression !== undefined) updates.aiNoiseSuppression = remote.ai_noise_suppression;
+    if (remote.input_volume !== undefined) updates.inputVolume = remote.input_volume;
+    if (remote.output_volume !== undefined) updates.outputVolume = remote.output_volume;
+    if (remote.join_sound_enabled !== undefined) updates.joinSoundEnabled = remote.join_sound_enabled;
+    if (remote.leave_sound_enabled !== undefined) updates.leaveSoundEnabled = remote.leave_sound_enabled;
+
+    if (Object.keys(updates).length > 0) {
+      persist(updates);
+      set(updates);
+    }
+  },
 }));

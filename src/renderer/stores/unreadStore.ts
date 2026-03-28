@@ -13,10 +13,16 @@ interface UnreadState {
   unreads: Record<string, UnreadEntry>;
   /** DM conversation unreads (keyed by conversationId) */
   dmUnreads: Record<string, number>;
+  /** Server-level aggregated unreads (keyed by serverId) */
+  serverUnreads: Record<string, UnreadEntry>;
   increment: (channelId: string, isMention?: boolean) => void;
   markRead: (channelId: string) => void;
   incrementDM: (conversationId: string) => void;
   markDMRead: (conversationId: string) => void;
+  /** Increment server-level unread counters. */
+  incrementServer: (serverId: string, isMention?: boolean) => void;
+  /** Mark a server's channel as read — decrements server counters by channel's unreads. */
+  markServerRead: (serverId: string, channelId: string) => void;
   getUnread: (channelId: string) => UnreadEntry;
   getCategoryUnreadCount: (channelIds: string[]) => number;
   getTotalUnread: () => number;
@@ -27,6 +33,7 @@ interface UnreadState {
 export const useUnreadStore = create<UnreadState>((set, get) => ({
   unreads: {},
   dmUnreads: {},
+  serverUnreads: {},
 
   increment: (channelId, isMention = false) => {
     set((s) => {
@@ -65,6 +72,42 @@ export const useUnreadStore = create<UnreadState>((set, get) => ({
     set((s) => {
       const { [conversationId]: _, ...rest } = s.dmUnreads;
       return { dmUnreads: rest };
+    });
+  },
+
+  incrementServer: (serverId, isMention = false) => {
+    set((s) => {
+      const prev = s.serverUnreads[serverId] || { count: 0, mentions: 0 };
+      return {
+        serverUnreads: {
+          ...s.serverUnreads,
+          [serverId]: {
+            count: prev.count + 1,
+            mentions: isMention ? prev.mentions + 1 : prev.mentions,
+          },
+        },
+      };
+    });
+  },
+
+  markServerRead: (serverId, channelId) => {
+    const channelEntry = get().unreads[channelId];
+    if (!channelEntry) return;
+    set((s) => {
+      const prev = s.serverUnreads[serverId];
+      if (!prev) return {};
+      const newCount = Math.max(0, prev.count - channelEntry.count);
+      const newMentions = Math.max(0, prev.mentions - channelEntry.mentions);
+      if (newCount === 0 && newMentions === 0) {
+        const { [serverId]: _, ...rest } = s.serverUnreads;
+        return { serverUnreads: rest };
+      }
+      return {
+        serverUnreads: {
+          ...s.serverUnreads,
+          [serverId]: { count: newCount, mentions: newMentions },
+        },
+      };
     });
   },
 

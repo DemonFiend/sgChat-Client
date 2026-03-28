@@ -31,6 +31,8 @@ export interface UserPermissions {
   disconnect_members: boolean;
   priority_speaker: boolean;
   use_voice_activity: boolean;
+  create_events: boolean;
+  manage_events: boolean;
 }
 
 function getPermissions(): UserPermissions | null {
@@ -112,4 +114,23 @@ export function hasAnyPermission(permissions: (keyof UserPermissions)[]): boolea
 
 export function hasAllPermissions(permissions: (keyof UserPermissions)[]): boolean {
   return permissions.every((p) => hasPermission(p));
+}
+
+export function canCreateEvents(): boolean {
+  return isAdmin() || hasPermission('create_events') || hasPermission('manage_events') || hasPermission('manage_server');
+}
+
+export function canManageEvents(): boolean {
+  return isAdmin() || hasPermission('manage_events') || hasPermission('manage_server');
+}
+
+/**
+ * Can the current user edit a specific event?
+ * Allowed if: manage_events / admin OR (creator + create_events).
+ */
+export function canEditEvent(creatorId: string): boolean {
+  if (canManageEvents()) return true;
+  const user = useAuthStore.getState().user;
+  if (!user) return false;
+  return user.id === creatorId && canCreateEvents();
 }

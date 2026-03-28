@@ -36,7 +36,7 @@ interface AuthState {
 
   login: (serverUrl: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (serverUrl: string, username: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => Promise<void>;
+  logout: (forgetDevice?: boolean) => Promise<void>;
   checkAuth: () => Promise<void>;
   setServerUrl: (url: string) => void;
   triggerAuthError: (reason: AuthErrorReason) => void;
@@ -72,10 +72,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return result;
   },
 
-  logout: async () => {
+  logout: async (forgetDevice) => {
     clearCryptoSession();
     await electronAPI.auth.logout();
-    set({ user: null, isAuthenticated: false, authError: null });
+    if (forgetDevice) {
+      electronAPI.config.clearServerUrl?.();
+      set({ user: null, isAuthenticated: false, authError: null, serverUrl: '' });
+    } else {
+      set({ user: null, isAuthenticated: false, authError: null });
+    }
   },
 
   checkAuth: async () => {
