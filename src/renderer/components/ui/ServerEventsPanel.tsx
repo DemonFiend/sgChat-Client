@@ -1,8 +1,9 @@
 import { useState, useMemo, useCallback } from 'react';
 import { ActionIcon, Badge, Button, Group, Modal, ScrollArea, SegmentedControl, Stack, Text, Textarea, TextInput, Tooltip } from '@mantine/core';
-import { IconCalendar, IconCalendarPlus, IconCheck, IconChevronLeft, IconChevronRight, IconClock, IconHistory, IconMapPin, IconQuestionMark, IconX } from '@tabler/icons-react';
-import { useServerEvents, useEventHistory, useCreateEvent, useRsvpEvent, useCancelEvent, type ServerEvent } from '../../hooks/useEvents';
-import { hasPermission } from '../../stores/permissions';
+import { modals } from '@mantine/modals';
+import { IconCalendar, IconCalendarPlus, IconCheck, IconChevronLeft, IconChevronRight, IconClock, IconEdit, IconHistory, IconMapPin, IconQuestionMark, IconTrash, IconX } from '@tabler/icons-react';
+import { useServerEvents, useEventHistory, useCreateEvent, useUpdateEvent, useRsvpEvent, useCancelEvent, useDeleteEvent, type ServerEvent } from '../../hooks/useEvents';
+import { canCreateEvents, canManageEvents, canEditEvent } from '../../stores/permissions';
 
 function getCurrentMonth(): string {
   const now = new Date();
@@ -31,8 +32,9 @@ export function ServerEventsPanel({ serverId }: ServerEventsPanelProps) {
   const { data: historyEvents, isLoading: historyLoading } = useEventHistory(showHistory ? serverId : null, currentMonth);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<ServerEvent | null>(null);
+  const [editEvent, setEditEvent] = useState<ServerEvent | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
-  const canManage = hasPermission('manage_server');
+  const canManage = canCreateEvents();
 
   const displayEvents = showHistory ? historyEvents : events;
   const loading = showHistory ? historyLoading : isLoading;
@@ -149,8 +151,13 @@ export function ServerEventsPanel({ serverId }: ServerEventsPanelProps) {
         </ScrollArea>
       )}
 
-      {/* Create Event Modal */}
-      <CreateEventModal serverId={serverId} opened={createOpen} onClose={() => setCreateOpen(false)} />
+      {/* Create / Edit Event Modal */}
+      <CreateEventModal
+        serverId={serverId}
+        opened={createOpen || !!editEvent}
+        onClose={() => { setCreateOpen(false); setEditEvent(null); }}
+        editEvent={editEvent}
+      />
 
       {/* Event Details Modal */}
       {selectedEvent && (
@@ -159,6 +166,7 @@ export function ServerEventsPanel({ serverId }: ServerEventsPanelProps) {
           serverId={serverId}
           opened={!!selectedEvent}
           onClose={() => setSelectedEvent(null)}
+          onEdit={(evt) => { setSelectedEvent(null); setEditEvent(evt); }}
         />
       )}
     </div>
@@ -314,8 +322,23 @@ function CalendarGrid({ events, currentMonth, onEventClick }: { events: ServerEv
   );
 }
 
-function CreateEventModal({ serverId, opened, onClose }: { serverId: string; opened: boolean; onClose: () => void }) {
+/** Convert an ISO datetime string to a local datetime-local input value. */
+function toLocalDateTimeValue(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function CreateEventModal({ serverId, opened, onClose, editEvent }: {
+  serverId: string;
+  opened: boolean;
+  onClose: () => void;
+  editEvent?: ServerEvent | null;
+}) {
   const createEvent = useCreateEvent(serverId);
+  const updateEvent = useUpdateEvent(serverId);
+  const isEditing = !!editEvent;
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [startTime, setStartTime] = useState('');
@@ -323,31 +346,66 @@ function CreateEventModal({ serverId, opened, onClose }: { serverId: string; ope
   const [location, setLocation] = useState('');
   const [error, setError] = useState('');
 
-  const handleCreate = () => {
+  // Pre-fill when editing
+  const [lastEditId, setLastEditId] = useState<string | null>(null);
+  if (editEvent && editEvent.id !== lastEditId) {
+    setTitle(editEvent.title);
+    setDescription(editEvent.description || '');
+    setStartTime(toLocalDateTimeValue(editEvent.start_time));
+    setEndTime(editEvent.end_time ? toLocalDateTimeValue(editEvent.end_time) : '');
+    setLocation(editEvent.location || '');
+    setError('');
+    setLastEditId(editEvent.id);
+  }
+
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setStartTime('');
+    setEndTime('');
+    setLocation('');
+    setError('');
+    setLastEditId(null);
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
+  const handleSubmit = () => {
     if (!title.trim()) { setError('Title is required'); return; }
     if (!startTime) { setError('Start time is required'); return; }
     setError('');
-    createEvent.mutate({
-      title: title.trim(),
-      description: description.trim() || undefined,
-      start_time: new Date(startTime).toISOString(),
-      end_time: endTime ? new Date(endTime).toISOString() : undefined,
-      location: location.trim() || undefined,
-    }, {
-      onSuccess: () => {
-        onClose();
-        setTitle('');
-        setDescription('');
-        setStartTime('');
-        setEndTime('');
-        setLocation('');
-      },
-      onError: (err) => setError(err instanceof Error ? err.message : 'Failed to create event'),
-    });
+
+    if (isEditing) {
+      updateEvent.mutate({
+        eventId: editEvent.id,
+        title: title.trim(),
+        description: description.trim() || undefined,
+        start_time: new Date(startTime).toISOString(),
+        end_time: endTime ? new Date(endTime).toISOString() : undefined,
+        location: location.trim() || undefined,
+      }, {
+        onSuccess: () => handleClose(),
+        onError: (err) => setError(err instanceof Error ? err.message : 'Failed to update event'),
+      });
+    } else {
+      createEvent.mutate({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        start_time: new Date(startTime).toISOString(),
+        end_time: endTime ? new Date(endTime).toISOString() : undefined,
+        location: location.trim() || undefined,
+      }, {
+        onSuccess: () => handleClose(),
+        onError: (err) => setError(err instanceof Error ? err.message : 'Failed to create event'),
+      });
+    }
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Create Event" centered>
+    <Modal opened={opened} onClose={handleClose} title={isEditing ? 'Edit Event' : 'Create Event'} centered>
       <Stack gap={12}>
         {error && <Text size="sm" c="red">{error}</Text>}
         <TextInput label="Title" required value={title} onChange={(e) => setTitle(e.currentTarget.value)} maxLength={100} />
@@ -356,20 +414,47 @@ function CreateEventModal({ serverId, opened, onClose }: { serverId: string; ope
         <TextInput label="End Time" type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.currentTarget.value)} />
         <TextInput label="Location" placeholder="Optional" value={location} onChange={(e) => setLocation(e.currentTarget.value)} />
         <Group justify="flex-end" mt={8}>
-          <Button variant="subtle" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleCreate} loading={createEvent.isPending}>Create Event</Button>
+          <Button variant="subtle" onClick={handleClose}>Cancel</Button>
+          <Button onClick={handleSubmit} loading={isEditing ? updateEvent.isPending : createEvent.isPending}>
+            {isEditing ? 'Save Changes' : 'Create Event'}
+          </Button>
         </Group>
       </Stack>
     </Modal>
   );
 }
 
-function EventDetailsModal({ event, serverId, opened, onClose }: { event: ServerEvent; serverId: string; opened: boolean; onClose: () => void }) {
+function EventDetailsModal({ event, serverId, opened, onClose, onEdit }: {
+  event: ServerEvent;
+  serverId: string;
+  opened: boolean;
+  onClose: () => void;
+  onEdit: (event: ServerEvent) => void;
+}) {
   const rsvp = useRsvpEvent(serverId);
   const cancel = useCancelEvent(serverId);
-  const canManage = hasPermission('manage_server');
+  const deleteEvent = useDeleteEvent(serverId);
+  const userCanManage = canManageEvents();
+  const userCanEdit = canEditEvent(event.created_by);
   const startDate = new Date(event.start_time);
   const endDate = event.end_time ? new Date(event.end_time) : null;
+
+  const handleDelete = () => {
+    modals.openConfirmModal({
+      title: 'Delete Event',
+      children: (
+        <Text size="sm">
+          Are you sure you want to permanently delete &quot;{event.title}&quot;? This action cannot be undone.
+        </Text>
+      ),
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => {
+        deleteEvent.mutate(event.id);
+        onClose();
+      },
+    });
+  };
 
   return (
     <Modal opened={opened} onClose={onClose} title={event.title} centered size="md">
@@ -391,6 +476,10 @@ function EventDetailsModal({ event, serverId, opened, onClose }: { event: Server
             <IconMapPin size={16} style={{ color: 'var(--text-muted)' }} />
             <Text size="sm">{event.location}</Text>
           </Group>
+        )}
+
+        {event.creator_username && (
+          <Text size="xs" c="dimmed">Created by {event.creator_username}</Text>
         )}
 
         {event.description && (
@@ -432,20 +521,43 @@ function EventDetailsModal({ event, serverId, opened, onClose }: { event: Server
           </>
         )}
 
-        {/* Admin actions */}
-        {canManage && event.status !== 'cancelled' && (
-          <Group justify="flex-end" mt={8}>
-            <Button
-              variant="light"
-              color="red"
-              size="xs"
-              onClick={() => {
-                cancel.mutate(event.id);
-                onClose();
-              }}
-            >
-              Cancel Event
-            </Button>
+        {/* Event actions (edit / cancel / delete) */}
+        {event.status !== 'cancelled' && (userCanEdit || userCanManage) && (
+          <Group justify="flex-end" mt={8} gap={8}>
+            {userCanEdit && (
+              <Button
+                variant="light"
+                size="xs"
+                leftSection={<IconEdit size={14} />}
+                onClick={() => onEdit(event)}
+              >
+                Edit Event
+              </Button>
+            )}
+            {userCanManage && (
+              <Button
+                variant="light"
+                color="yellow"
+                size="xs"
+                onClick={() => {
+                  cancel.mutate(event.id);
+                  onClose();
+                }}
+              >
+                Cancel Event
+              </Button>
+            )}
+            {userCanManage && (
+              <Button
+                variant="light"
+                color="red"
+                size="xs"
+                leftSection={<IconTrash size={14} />}
+                onClick={handleDelete}
+              >
+                Delete
+              </Button>
+            )}
           </Group>
         )}
       </Stack>
