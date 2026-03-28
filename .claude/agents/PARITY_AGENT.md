@@ -83,19 +83,27 @@ COMMIT_COUNT=$(git -C "$SERVER_REPO" rev-list --count ${LAST_HASH}..HEAD)
 - **1-5 commits** → Partial drift. Check changed files, update affected suite specs, then audit those areas.
 - **>5 commits** → Significant drift. Run full classification (see QA_AGENT.md → PARITY DRIFT CHECK), update/create suite specs, then run full audit.
 
-**For each new server file (`--diff-filter=A`):**
-1. Read it to understand the feature
-2. Check if client has a matching component
-3. If MISSING → file a parity bead
-4. If EXISTS but no suite spec → create one (next available number after suite-37)
-5. Update `parity-audit-state.md` with findings
+**IMPORTANT: File drift tracking beads FIRST, investigate AFTER.**
+This protects against context loss mid-task. See QA_AGENT.md → PARITY DRIFT CHECK → Steps 3-4.
 
-**For each modified server file (`--diff-filter=M`):**
-1. Read the diff to understand what changed
-2. Find the suite spec that covers this area
-3. Add test cases for the new/changed behavior
+**For each changed server file, immediately file a drift bead:**
+```bash
+bd create --title="Drift: [ComponentName] — [NEW/MODIFIED/REMOVED] in server" --type=task --priority=2 \
+  --description="Server [added/changed/deleted] [path] in commit [hash]. Investigate and resolve."
+```
 
-**After drift check, update `parity-audit-state.md`** with the new server hash and findings.
+**Then work through each drift bead:**
+- **New feature, client MISSING** → file a parity bead (MISSING), close drift bead
+- **New feature, client HAS it** → create suite spec, close drift bead
+- **Modified feature** → update suite spec with new test cases, close drift bead
+  - If change adds behavior client doesn't have → also file parity bead
+- **Deleted feature** → note in suite spec, close drift bead
+
+**Two layers of beads:**
+- **Drift beads** (task) — tracking work items, closed after investigation
+- **Parity beads** (feature) — implementation items, stay open until feature is built
+
+**After all drift beads are resolved, update `parity-audit-state.md`** with the new server hash and findings.
 
 ### Step 1 — Check existing parity work
 

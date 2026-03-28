@@ -1405,45 +1405,95 @@ git -C "$SERVER_REPO" diff --diff-filter=A --name-only ${LAST_HASH}..HEAD -- pac
 git -C "$SERVER_REPO" diff --diff-filter=D --name-only ${LAST_HASH}..HEAD -- packages/web/src/
 ```
 
-### Step 3 — Classify each change
+### Step 3 — File a tracking bead for EVERY change found
+
+**This step is critical for context recovery.** If the agent runs out of context mid-task,
+the beads ensure nothing is lost. The next session picks up from open drift beads.
 
 **Commit count determines audit scope:**
 - **0 commits** since last audit → skip drift check, run suites as-is
 - **1-5 commits** → partial audit (only changed areas)
 - **>5 commits** → recommend full audit
 
-**For each changed file, classify:**
+**For each changed server file, IMMEDIATELY file a drift tracking bead:**
 
-| Change Type | What Happened | Action |
-|---|---|---|
-| New component (`A` flag) | Server added a new page/modal/panel | File parity bead (MISSING). If client already has it, create new suite spec. |
-| Modified component (`M` flag) | Server updated an existing feature | Check if existing suite covers it. Add new test cases for changed behavior. |
-| Deleted component (`D` flag) | Server removed a feature | Check if client still has it. Note in suite spec if so. |
-| New API route | Server added new endpoint | Check if client consumes it. Update suite if new behavior. |
-| New socket event | Server emits new real-time event | Check if client handles it. Update suite for the feature area. |
-| Permission/role change | Server modified permission structure | Update Suite 25 (Admin Parity) spec. |
-| Config/infra change | Docker, CI, env vars | No suite change needed. |
+```bash
+# For new components (A flag)
+bd create --title="Drift: [ComponentName] — NEW in server" --type=task --priority=2 \
+  --description="Server added [path] in commit [hash]. Needs investigation:
+1. Does client have equivalent?
+2. If MISSING → file parity bead for implementation
+3. If EXISTS → create/update suite spec for testing"
 
-### Step 4 — Write/update suite specs
+# For modified components (M flag)
+bd create --title="Drift: [ComponentName] — MODIFIED in server" --type=task --priority=3 \
+  --description="Server changed [path] in commit [hash]. Needs investigation:
+1. What behavior changed?
+2. Does existing suite spec cover it?
+3. Add test cases for new behavior if needed"
 
-**For NEW features (component didn't exist before):**
+# For deleted components (D flag)
+bd create --title="Drift: [ComponentName] — REMOVED from server" --type=task --priority=3 \
+  --description="Server deleted [path] in commit [hash]. Check if client still has it."
+
+# For new API routes, socket events, permission changes — same pattern
+```
+
+**Do NOT skip this step.** File beads first, investigate after. This protects against context loss.
+
+After filing all drift beads:
+```bash
+bd list --status open --json  # verify beads created
+```
+
+### Step 4 — Investigate each drift bead: file parity beads + write/update suite specs
+
+**Work through each open drift bead one at a time.** This step produces TWO outputs:
+1. **Parity beads** — for features the client is MISSING (stays open for implementation pipeline)
+2. **Suite spec updates** — for features the client HAS (test them)
+
+Close each drift bead only after investigation is complete.
+
+**For NEW server features:**
 1. Read the server component to understand what it does
 2. Check if the client has a matching component
-3. If client component MISSING → file a parity bead:
+3. **If client MISSING the feature** → file a parity bead AND close the drift bead:
    ```bash
    bd create --title="Parity: [Feature] — MISSING" --type=feature --priority=2 \
-     --description="Server has [component] at [path]. Client does not have equivalent."
+     --description="Server has [component] at [path]. Client does not have equivalent.
+   Web reference: [server file path]
+   Acceptance: Client must implement matching feature with Mantine UI."
+
+   bd close <drift-bead-id> --reason="Parity bead filed: <parity-bead-id>. Client missing feature."
    ```
-4. If client component EXISTS → create suite spec:
+4. **If client HAS the feature** → create suite spec AND close the drift bead:
    - Use next available suite number (check `ls qa-suites/ | tail -1`)
    - Follow `qa-suites/README.md` format exactly
    - Add `**Spec:** qa-suites/suite-{NN}.md` pointer to QA_AGENT.md
+   ```bash
+   bd close <drift-bead-id> --reason="Suite spec created: suite-{NN}.md with N tests."
+   ```
 
-**For UPDATED features (component changed):**
+**For MODIFIED server features:**
 1. Read the server diff to understand what changed
 2. Find the existing suite spec that covers this area
 3. Append new test cases for the changed behavior
 4. Keep all existing tests (they verify previous behavior still works)
+5. **If the change adds new behavior the client doesn't have** → also file a parity bead
+6. Close the drift bead:
+   ```bash
+   bd close <drift-bead-id> --reason="Updated suite-{NN}.md with N new test cases."
+   # OR if client missing new behavior:
+   bd close <drift-bead-id> --reason="Parity bead filed: <id>. Updated suite-{NN}.md for existing behavior."
+   ```
+
+**For DELETED server features:**
+1. Check if client still has the component
+2. Note in the suite spec if client has something the server removed
+3. Close the drift bead:
+   ```bash
+   bd close <drift-bead-id> --reason="Server removed [component]. Client still has it — noted for review."
+   ```
 
 ### Step 5 — Update the audit state file
 
