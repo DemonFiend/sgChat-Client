@@ -5,6 +5,7 @@ import {
 } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { useAuthStore } from '../stores/authStore';
+import { ServerStatusPill } from '../components/ui/ServerStatusPill';
 
 const electronAPI = (window as unknown as { electronAPI: ElectronAPI }).electronAPI;
 
@@ -154,7 +155,12 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: Logi
           { position: 'absolute', top: 0, left: 0, right: 0, height: 32, WebkitAppRegion: 'drag' } as React.CSSProperties
         }
       />
-      <Paper w={420} p="xl" radius="lg" withBorder>
+      <Paper w={420} p="xl" radius="lg" withBorder style={{ position: 'relative' }}>
+        {/* Server status pill — top-right of card */}
+        <div style={{ position: 'absolute', top: -12, right: 16, zIndex: 1 }}>
+          <ServerStatusPill variant="login" onChangeServer={onBack} />
+        </div>
+
         <Stack gap="sm">
           <Title order={1} ta="center" c="brand" fz="2.5rem" fw={700} style={{ letterSpacing: '-0.5px' }}>
             sgChat
@@ -234,11 +240,7 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: Logi
             </Anchor>
           </Text>
 
-          <Text ta="center" size="sm" c="dimmed">
-            <Anchor component="button" type="button" onClick={onBack}>
-              Change server
-            </Anchor>
-          </Text>
+          {/* "Change server" moved to ServerStatusPill popover */}
         </Stack>
       </Paper>
     </Center>

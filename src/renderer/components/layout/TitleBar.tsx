@@ -10,6 +10,7 @@ import { canManageServer } from '../../stores/permissions';
 import { ServerSettingsModal } from '../ui/ServerSettingsModal';
 import { ServerSwitcher } from '../ui/ServerSwitcher';
 import { NotificationPanel } from '../ui/NotificationPanel';
+import { ServerStatusPill } from '../ui/ServerStatusPill';
 
 const electronAPI = (window as any).electronAPI;
 
@@ -53,15 +54,17 @@ export function TitleBar() {
         flexShrink: 0,
       }}
     >
-      {/* Left: Logo */}
-      <Text
-        size="xs"
-        fw={700}
-        className="drag-region"
-        style={{ color: 'var(--accent)', letterSpacing: '-0.5px', flexShrink: 0, paddingRight: 12 }}
-      >
-        sgChat
-      </Text>
+      {/* Left: Logo + Server Status */}
+      <Group gap={8} style={{ flexShrink: 0, paddingRight: 12 }} className="drag-region">
+        <Text
+          size="xs"
+          fw={700}
+          style={{ color: 'var(--accent)', letterSpacing: '-0.5px' }}
+        >
+          sgChat
+        </Text>
+        <ServerStatusPill variant="titlebar" />
+      </Group>
 
       {/* Center: Navigation tabs */}
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }} className="drag-region">
