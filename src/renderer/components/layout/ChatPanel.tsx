@@ -351,6 +351,14 @@ function MessageList({ channelId, channelName, channelTopic }: { channelId: stri
   const isAtBottomRef = useRef(true);
   const initialScrollDone = useRef(false);
 
+  // Reset scroll state when channel changes
+  useEffect(() => {
+    initialScrollDone.current = false;
+    prevGroupCountRef.current = 0;
+    newMessageThresholdRef.current = 0;
+    isAtBottomRef.current = true;
+  }, [channelId]);
+
   // Pages are fetched newest-first; reverse page order so oldest page comes first, then flatten
   const messages = useMemo(
     () => data?.pages ? [...data.pages].reverse().flatMap((page) => page) : [],

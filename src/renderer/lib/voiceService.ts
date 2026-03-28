@@ -324,7 +324,11 @@ async function tryRelayDirectAuthorize(channelId: string): Promise<{
       return pa - pb;
     });
 
-  const token = useAuthStore.getState().token;
+  let token: string | undefined;
+  try {
+    const socketAuth = await electronAPI.auth.getSocketToken();
+    token = socketAuth?.token;
+  } catch { /* no token available */ }
   if (!token) return null;
 
   for (const relay of sorted) {
