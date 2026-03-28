@@ -44,6 +44,25 @@ The Electron app must be built first: `npm run build:main && npm run build:prelo
 - **Beads (`bd`)** — persistent memory. File every bug immediately, never at the end.
 - **Code search** — Read source files to understand expected behavior before testing.
 
+## TEST SUITE SPECS — MANDATORY
+
+**Before writing ANY Playwright test, you MUST read the suite spec file first:**
+
+```
+.claude/agents/qa-suites/suite-{NN}.md
+```
+
+Each suite spec file contains the EXACT Playwright actions and assertions for every test.
+Follow them step-by-step. Do NOT improvise, do NOT substitute `evaluate()` calls for
+real Playwright locator interactions.
+
+**Rules from qa-suites/README.md apply to ALL tests:**
+- Use Playwright locator APIs (`.click()`, `.fill()`, `.hover()`), NOT `page.evaluate()`
+- Every step is a real user action — click the actual button, fill the actual input
+- Assertions verify EFFECTS — CSS changes, element visibility, DOM state
+- Screenshots at every state transition
+- Invalid input tests check the specific error element, not body text search
+
 ---
 
 ## ENVIRONMENT
