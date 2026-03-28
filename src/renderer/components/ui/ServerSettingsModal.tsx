@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ActionIcon, Avatar, Badge, Button, CopyButton, Divider,
-  Group, Modal, NavLink, NumberInput, ScrollArea, Select, Stack, Switch, Text,
+  FileButton, Group, Modal, NavLink, NumberInput, ScrollArea, SegmentedControl, Select, Stack, Switch, Text,
   TextInput, Textarea, Tooltip,
 } from '@mantine/core';
 import {
@@ -10,12 +10,23 @@ import {
   IconTrash, IconCopy, IconCheck, IconBan,
   IconArrowUp, IconArrowDown, IconVolume,
   IconUpload, IconWebhook, IconSticker, IconChartBar,
-  IconMessageCircle,
+  IconMessageCircle, IconPhoto, IconGripVertical,
 } from '@tabler/icons-react';
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor,
+  useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove, SortableContext, sortableKeyboardCoordinates,
+  useSortable, verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { ServerPopupConfigForm } from './ServerPopupConfigForm';
 import { VoiceSoundsPanel } from './VoiceSoundsPanel';
+import { RichTextarea } from './RichTextarea';
+import { TIMEZONES } from '../../lib/timezones';
 import { useWebhooks, useCreateWebhook, useUpdateWebhook, useDeleteWebhook } from '../../hooks/useWebhooks';
 import { useStickers, useUploadSticker, useDeleteSticker } from '../../hooks/useStickers';
 import { useChannels } from '../../hooks/useChannels';
@@ -95,7 +106,14 @@ function GeneralTab({ serverId }: { serverId: string }) {
   const [welcomeChannelId, setWelcomeChannelId] = useState<string | null>(null);
   const [afkTimeout, setAfkTimeout] = useState<number | ''>(300);
   const [tempChannelTimeout, setTempChannelTimeout] = useState<number | ''>(900);
+  const [timezone, setTimezone] = useState('UTC');
+  const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>('24h');
   const [saving, setSaving] = useState(false);
+
+  // Icon upload state
+  const [iconUrl, setIconUrl] = useState<string | null>(null);
+  const [iconUploading, setIconUploading] = useState(false);
+  const [iconError, setIconError] = useState<string | null>(null);
 
   // Banner state
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
@@ -109,16 +127,44 @@ function GeneralTab({ serverId }: { serverId: string }) {
       setName(server.name || '');
       setDescription(server.description || '');
       setMotd(server.motd || '');
+      setIconUrl(server.icon_url || null);
       setBannerUrl(server.banner_url || null);
       setAnnounceJoins(server.announce_joins ?? server.settings?.announce_joins ?? false);
       setAnnounceLeaves(server.announce_leaves ?? server.settings?.announce_leaves ?? false);
       setWelcomeChannelId(server.welcome_channel_id ?? server.settings?.welcome_channel_id ?? null);
       setAfkTimeout(server.afk_timeout ?? server.settings?.afk_timeout ?? 300);
       setTempChannelTimeout(server.settings?.temp_channel_timeout ?? server.temp_channel_timeout ?? 900);
+      setTimezone(server.timezone ?? server.settings?.timezone ?? 'UTC');
+      setTimeFormat(server.time_format ?? server.settings?.time_format ?? '24h');
     }
   }, [server]);
 
   const textChannels = (channels || []).filter((c) => c.type === 'text' || c.type === 'announcement');
+
+  const handleIconUpload = useCallback(async (file: File | null) => {
+    if (!file) return;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setIconError('Invalid file type. Allowed: JPEG, PNG, GIF, WebP');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setIconError('File too large. Maximum size: 5 MB');
+      return;
+    }
+    setIconError(null);
+    setIconUploading(true);
+    try {
+      const result = await api.upload<{ url: string }>('/api/upload/image', file);
+      setIconUrl(result.url);
+      queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+    } catch (err: unknown) {
+      setIconError((err as Error).message || 'Failed to upload icon');
+    } finally {
+      setIconUploading(false);
+    }
+  }, [serverId]);
 
   const handleBannerUpload = async (file: File) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -137,8 +183,8 @@ function GeneralTab({ serverId }: { serverId: string }) {
       setBannerUrl(result.banner_url);
       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       queryClient.invalidateQueries({ queryKey: ['servers'] });
-    } catch (err: any) {
-      setBannerError(err.message || 'Failed to upload banner');
+    } catch (err: unknown) {
+      setBannerError((err as Error).message || 'Failed to upload banner');
     } finally {
       setBannerUploading(false);
     }
@@ -153,8 +199,8 @@ function GeneralTab({ serverId }: { serverId: string }) {
       setBannerUrl(null);
       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       queryClient.invalidateQueries({ queryKey: ['servers'] });
-    } catch (err: any) {
-      setBannerError(err.message || 'Failed to remove banner');
+    } catch (err: unknown) {
+      setBannerError((err as Error).message || 'Failed to remove banner');
     } finally {
       setBannerDeleting(false);
     }
@@ -163,15 +209,18 @@ function GeneralTab({ serverId }: { serverId: string }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.patch(`/api/servers/${serverId}`, {
+      await api.patch(`/api/servers/${serverId}/settings`, {
         name: name.trim(),
         description: description.trim() || null,
         motd: motd.trim() || null,
+        icon_url: iconUrl,
         announce_joins: announceJoins,
         announce_leaves: announceLeaves,
         welcome_channel_id: welcomeChannelId,
         afk_timeout: afkTimeout || 300,
         temp_channel_timeout: tempChannelTimeout || 900,
+        timezone,
+        time_format: timeFormat,
       });
       queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       queryClient.invalidateQueries({ queryKey: ['servers'] });
@@ -185,6 +234,64 @@ function GeneralTab({ serverId }: { serverId: string }) {
   return (
     <Stack gap={16}>
       <Text size="lg" fw={700}>General</Text>
+
+      {/* Server Icon + Name row */}
+      <Group gap={16} align="flex-start">
+        <Stack gap={4} align="center">
+          <Text size="xs" fw={600} c="dimmed" tt="uppercase">Server Icon</Text>
+          <div style={{ position: 'relative' }}>
+            <Avatar
+              src={iconUrl}
+              size={80}
+              radius="xl"
+              color="brand"
+              style={{ cursor: 'pointer' }}
+            >
+              {(name || 'S').charAt(0).toUpperCase()}
+            </Avatar>
+            {iconUploading && (
+              <div style={{
+                position: 'absolute', inset: 0, borderRadius: '50%',
+                background: 'rgba(0,0,0,0.5)', display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <div style={{
+                  width: 20, height: 20, border: '2px solid white',
+                  borderTopColor: 'transparent', borderRadius: '50%',
+                  animation: 'spin 0.6s linear infinite',
+                }} />
+              </div>
+            )}
+          </div>
+          <FileButton onChange={handleIconUpload} accept="image/jpeg,image/png,image/gif,image/webp">
+            {(props) => (
+              <Button {...props} variant="light" size="xs" leftSection={<IconPhoto size={14} />} loading={iconUploading}>
+                Upload
+              </Button>
+            )}
+          </FileButton>
+          {iconError && <Text size="xs" c="red">{iconError}</Text>}
+          <Text size="xs" c="dimmed">Min. 128x128</Text>
+        </Stack>
+
+        <Stack gap={8} style={{ flex: 1 }}>
+          <TextInput
+            label="Server Name"
+            value={name}
+            onChange={(e) => setName(e.currentTarget.value)}
+          />
+          <Textarea
+            label="Description"
+            description="A short description of your server (max 500 characters)"
+            value={description}
+            onChange={(e) => setDescription(e.currentTarget.value)}
+            maxLength={500}
+            minRows={2}
+            maxRows={3}
+            autosize
+          />
+        </Stack>
+      </Group>
 
       {/* Server Banner */}
       <Stack gap={8}>
@@ -225,32 +332,43 @@ function GeneralTab({ serverId }: { serverId: string }) {
         )}
       </Stack>
 
-      <TextInput
-        label="Server Name"
-        value={name}
-        onChange={(e) => setName(e.currentTarget.value)}
-      />
-
-      <Textarea
-        label="Description"
-        description="A short description of your server (max 500 characters)"
-        value={description}
-        onChange={(e) => setDescription(e.currentTarget.value)}
-        maxLength={500}
-        minRows={2}
-        maxRows={3}
-        autosize
-      />
-
-      <Textarea
-        label="Message of the Day"
-        description="Shown to members when they open the server"
+      {/* MOTD with RichTextarea (markdown preview toggle) */}
+      <RichTextarea
         value={motd}
-        onChange={(e) => setMotd(e.currentTarget.value)}
-        minRows={2}
-        maxRows={4}
-        autosize
+        onChange={setMotd}
+        label="Message of the Day"
+        placeholder="Shown to members when they open the server. Supports **markdown**."
+        minRows={3}
+        maxRows={6}
+        maxLength={2000}
       />
+
+      <Divider label="Server Configuration" labelPosition="left" />
+
+      {/* Timezone Select */}
+      <Select
+        label="Server Timezone"
+        description="Used for scheduling, timestamps, and event display"
+        value={timezone}
+        onChange={(val) => val && setTimezone(val)}
+        data={TIMEZONES.map((tz) => ({ value: tz.value, label: tz.label }))}
+        searchable
+        nothingFoundMessage="No timezone found"
+      />
+
+      {/* Time Format SegmentedControl */}
+      <Stack gap={4}>
+        <Text size="sm" fw={500}>Time Format</Text>
+        <SegmentedControl
+          value={timeFormat}
+          onChange={(val) => setTimeFormat(val as '12h' | '24h')}
+          data={[
+            { label: '24-hour (14:30)', value: '24h' },
+            { label: '12-hour (2:30 PM)', value: '12h' },
+          ]}
+          style={{ maxWidth: 300 }}
+        />
+      </Stack>
 
       <Divider label="Announcements" labelPosition="left" />
 
@@ -284,7 +402,7 @@ function GeneralTab({ serverId }: { serverId: string }) {
         label="AFK Timeout (seconds)"
         description="Move inactive voice users to AFK channel after this time"
         value={afkTimeout}
-        onChange={setAfkTimeout}
+        onChange={(val) => setAfkTimeout(typeof val === 'number' ? val : 300)}
         min={60}
         max={3600}
         step={60}
@@ -293,9 +411,9 @@ function GeneralTab({ serverId }: { serverId: string }) {
 
       <NumberInput
         label="Temp Channel Timeout (seconds)"
-        description="How long an empty temp voice channel waits before being deleted (30s–24h)"
+        description="How long an empty temp voice channel waits before being deleted (30s-24h)"
         value={tempChannelTimeout}
-        onChange={setTempChannelTimeout}
+        onChange={(val) => setTempChannelTimeout(typeof val === 'number' ? val : 900)}
         min={30}
         max={86400}
         step={30}
@@ -311,26 +429,201 @@ function GeneralTab({ serverId }: { serverId: string }) {
   );
 }
 
-/* ─── Channels Tab ─── */
+/* ─── Sortable Channel Item (DnD) ─── */
+
+function SortableChannelItem({
+  channel,
+  onDelete,
+}: {
+  channel: Channel;
+  onDelete: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: channel.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  const typeIcon = channel.type === 'voice' || channel.type === 'temp_voice'
+    ? '#voice' : channel.type === 'announcement' ? '#ann' : '#';
+
+  return (
+    <Group
+      ref={setNodeRef}
+      style={{ ...style, borderRadius: 4, background: 'var(--bg-hover)' }}
+      gap={8}
+      px={12}
+      py={6}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        style={{ cursor: 'grab', display: 'flex', alignItems: 'center' }}
+      >
+        <IconGripVertical size={14} style={{ color: 'var(--text-muted)' }} />
+      </div>
+      <Text size="xs" c="dimmed" style={{ width: 50 }}>{channel.type}</Text>
+      <Text size="sm" style={{ flex: 1 }}>{typeIcon}{channel.name}</Text>
+      {channel.topic && <Text size="xs" c="dimmed" truncate="end" style={{ maxWidth: 150 }}>{channel.topic}</Text>}
+      <Tooltip label="Delete Channel" withArrow>
+        <ActionIcon variant="subtle" color="red" size={24} onClick={onDelete}>
+          <IconTrash size={14} />
+        </ActionIcon>
+      </Tooltip>
+    </Group>
+  );
+}
+
+/* ─── Sortable Category Header (DnD) ─── */
+
+function SortableCategoryHeader({
+  category,
+  onDelete,
+}: {
+  category: { id: string; name: string; position: number };
+  onDelete: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: category.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <Group ref={setNodeRef} style={style} gap={8} px={4} py={6}>
+      <div
+        {...attributes}
+        {...listeners}
+        style={{ cursor: 'grab', display: 'flex', alignItems: 'center' }}
+      >
+        <IconGripVertical size={12} style={{ color: 'var(--text-muted)' }} />
+      </div>
+      <Text size="xs" fw={700} tt="uppercase" c="dimmed" style={{ flex: 1 }}>
+        {category.name}
+      </Text>
+      <Tooltip label="Delete Category" withArrow>
+        <ActionIcon variant="subtle" color="red" size={20} onClick={onDelete}>
+          <IconTrash size={12} />
+        </ActionIcon>
+      </Tooltip>
+    </Group>
+  );
+}
+
+/* ─── Channels Tab (with DnD) ─── */
 
 function ChannelsTab({ serverId }: { serverId: string }) {
-  const { data: channels } = useQuery({
+  const { data: channels, refetch: refetchChannels } = useQuery({
     queryKey: ['channels', serverId],
     queryFn: () => api.getArray<Channel>(`/api/servers/${serverId}/channels`),
   });
 
-  const { data: fetchedCategories } = useQuery({
+  const { data: fetchedCategories, refetch: refetchCategories } = useQuery({
     queryKey: ['categories', serverId],
     queryFn: () => api.getArray<{ id: string; name: string; position: number }>(`/api/servers/${serverId}/categories`),
   });
 
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<'text' | 'voice' | 'announcement' | 'music' | 'temp_voice_generator'>('text');
+  const [newCategoryId, setNewCategoryId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [localChannels, setLocalChannels] = useState<Channel[]>([]);
+  const [localCategories, setLocalCategories] = useState<{ id: string; name: string; position: number }[]>([]);
 
-  const sorted = [...(channels || [])].sort((a, b) => a.position - b.position);
-  const sortedCategories = [...(fetchedCategories || [])].sort((a, b) => a.position - b.position);
-  const uncategorized = sorted.filter((c) => !c.category_id);
+  // Sync from query
+  useEffect(() => {
+    if (channels) setLocalChannels([...channels].sort((a, b) => a.position - b.position));
+  }, [channels]);
+  useEffect(() => {
+    if (fetchedCategories) setLocalCategories([...fetchedCategories].sort((a, b) => a.position - b.position));
+  }, [fetchedCategories]);
+
+  const uncategorized = localChannels.filter((c) => !c.category_id);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleChannelDragEnd = (categoryId: string | null) => async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const catChannels = localChannels.filter((c) =>
+      categoryId ? c.category_id === categoryId : !c.category_id
+    ).sort((a, b) => a.position - b.position);
+
+    const oldIdx = catChannels.findIndex((c) => c.id === active.id);
+    const newIdx = catChannels.findIndex((c) => c.id === over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+
+    const reordered: Channel[] = arrayMove(catChannels, oldIdx, newIdx);
+    const withPositions = reordered.map((c: Channel, i: number) => ({ ...c, position: i }));
+
+    // Optimistic update
+    setLocalChannels((prev) => {
+      const others = prev.filter((c) =>
+        categoryId ? c.category_id !== categoryId : !!c.category_id
+      );
+      return [...others, ...withPositions].sort((a, b) => a.position - b.position);
+    });
+
+    try {
+      await api.patch(`/api/servers/${serverId}/channels/reorder`, {
+        channels: withPositions.map((c: Channel) => ({ id: c.id, position: c.position })),
+      });
+      refetchChannels();
+    } catch {
+      refetchChannels();
+    }
+  };
+
+  const handleCategoryDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const sorted = [...localCategories].sort((a, b) => a.position - b.position);
+    const oldIdx = sorted.findIndex((c) => c.id === active.id);
+    const newIdx = sorted.findIndex((c) => c.id === over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+
+    type CategoryItem = { id: string; name: string; position: number };
+    const reordered: CategoryItem[] = arrayMove(sorted, oldIdx, newIdx);
+    const withPositions = reordered.map((c: CategoryItem, i: number) => ({ ...c, position: i }));
+
+    // Optimistic update
+    setLocalCategories(withPositions);
+
+    try {
+      await api.post(`/api/servers/${serverId}/categories/reorder`, {
+        categories: withPositions.map((c: CategoryItem) => ({ id: c.id, position: c.position })),
+      });
+      refetchCategories();
+    } catch {
+      refetchCategories();
+    }
+  };
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -339,6 +632,7 @@ function ChannelsTab({ serverId }: { serverId: string }) {
       await api.post(`/api/servers/${serverId}/channels`, {
         name: newName.trim().toLowerCase().replace(/\s+/g, '-'),
         type: newType,
+        category_id: newCategoryId,
       });
       queryClient.invalidateQueries({ queryKey: ['channels', serverId] });
       setNewName('');
@@ -347,55 +641,24 @@ function ChannelsTab({ serverId }: { serverId: string }) {
     }
   };
 
-  const handleDelete = async (channelId: string) => {
+  const handleDeleteChannel = async (channelId: string) => {
     try {
       await api.delete(`/api/channels/${channelId}`);
       queryClient.invalidateQueries({ queryKey: ['channels', serverId] });
     } catch { /* silently fail */ }
   };
 
-  const handleMoveChannel = async (list: Channel[], index: number, direction: -1 | 1) => {
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= list.length) return;
-    const a = list[index];
-    const b = list[newIndex];
+  const handleDeleteCategory = async (categoryId: string) => {
+    const catChannels = localChannels.filter((c) => c.category_id === categoryId);
+    if (catChannels.length > 0) {
+      alert('Cannot delete category with channels. Move or delete channels first.');
+      return;
+    }
     try {
-      await api.patch(`/api/servers/${serverId}/channels/reorder`, {
-        channels: [
-          { id: a.id, position: b.position },
-          { id: b.id, position: a.position },
-        ],
-      });
-      queryClient.invalidateQueries({ queryKey: ['channels', serverId] });
+      await api.delete(`/api/servers/${serverId}/categories/${categoryId}`);
+      queryClient.invalidateQueries({ queryKey: ['categories', serverId] });
     } catch { /* silently fail */ }
   };
-
-  const renderChannel = (ch: Channel, index: number, list: Channel[]) => (
-    <Group
-      key={ch.id}
-      gap={8}
-      px={12}
-      py={6}
-      style={{ borderRadius: 4, background: 'var(--bg-hover)' }}
-    >
-      <Group gap={2}>
-        <ActionIcon variant="subtle" color="gray" size={20} disabled={index === 0} onClick={() => handleMoveChannel(list, index, -1)}>
-          <IconArrowUp size={12} />
-        </ActionIcon>
-        <ActionIcon variant="subtle" color="gray" size={20} disabled={index === list.length - 1} onClick={() => handleMoveChannel(list, index, 1)}>
-          <IconArrowDown size={12} />
-        </ActionIcon>
-      </Group>
-      <Text size="xs" c="dimmed" style={{ width: 50 }}>{ch.type}</Text>
-      <Text size="sm" style={{ flex: 1 }}>#{ch.name}</Text>
-      {ch.topic && <Text size="xs" c="dimmed" truncate style={{ maxWidth: 150 }}>{ch.topic}</Text>}
-      <Tooltip label="Delete Channel" withArrow>
-        <ActionIcon variant="subtle" color="red" size={24} onClick={() => handleDelete(ch.id)}>
-          <IconTrash size={14} />
-        </ActionIcon>
-      </Tooltip>
-    </Group>
-  );
 
   return (
     <Stack gap={16}>
@@ -424,40 +687,79 @@ function ChannelsTab({ serverId }: { serverId: string }) {
           size="xs"
           style={{ width: 140 }}
         />
+        <Select
+          label="Category"
+          placeholder="None"
+          value={newCategoryId}
+          onChange={setNewCategoryId}
+          data={localCategories.map((c) => ({ value: c.id, label: c.name }))}
+          clearable
+          size="xs"
+          style={{ width: 140 }}
+        />
         <Button leftSection={<IconPlus size={14} />} onClick={handleCreate} loading={creating} disabled={!newName.trim()}>
           Create
         </Button>
       </Group>
 
-      {/* Channel list */}
+      {/* Channel list with DnD */}
       <Stack gap={4}>
+        {/* Uncategorized channels */}
         {uncategorized.length > 0 && (
           <>
             <Text size="xs" fw={700} tt="uppercase" c="dimmed" px={4}>Uncategorized</Text>
-            {uncategorized.map((ch, i, arr) => renderChannel(ch, i, arr))}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleChannelDragEnd(null)}>
+              <SortableContext items={uncategorized.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+                <Stack gap={2}>
+                  {uncategorized.map((ch) => (
+                    <SortableChannelItem
+                      key={ch.id}
+                      channel={ch}
+                      onDelete={() => handleDeleteChannel(ch.id)}
+                    />
+                  ))}
+                </Stack>
+              </SortableContext>
+            </DndContext>
           </>
         )}
-        {sortedCategories.map((cat) => {
-          const children = sorted.filter((c) => c.category_id === cat.id);
-          return (
-            <div key={cat.id}>
-              <Group gap={8} px={4} py={6}>
-                <Text size="xs" fw={700} tt="uppercase" c="dimmed" style={{ flex: 1 }}>
-                  {cat.name}
-                </Text>
-                <Tooltip label="Delete Category" withArrow>
-                  <ActionIcon variant="subtle" color="red" size={20} onClick={() => handleDelete(cat.id)}>
-                    <IconTrash size={12} />
-                  </ActionIcon>
-                </Tooltip>
-              </Group>
-              <Stack gap={2} pl={12}>
-                {children.map((ch, i, arr) => renderChannel(ch, i, arr))}
-              </Stack>
-            </div>
-          );
-        })}
-        {(channels || []).length === 0 && (
+
+        {/* Categories with channels (both draggable) */}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
+          <SortableContext items={localCategories.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+            {localCategories.map((cat) => {
+              const catChannels = localChannels
+                .filter((c) => c.category_id === cat.id)
+                .sort((a, b) => a.position - b.position);
+              return (
+                <div key={cat.id}>
+                  <SortableCategoryHeader
+                    category={cat}
+                    onDelete={() => handleDeleteCategory(cat.id)}
+                  />
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleChannelDragEnd(cat.id)}>
+                    <SortableContext items={catChannels.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+                      <Stack gap={2} pl={12}>
+                        {catChannels.map((ch) => (
+                          <SortableChannelItem
+                            key={ch.id}
+                            channel={ch}
+                            onDelete={() => handleDeleteChannel(ch.id)}
+                          />
+                        ))}
+                        {catChannels.length === 0 && (
+                          <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }} pl={8}>No channels</Text>
+                        )}
+                      </Stack>
+                    </SortableContext>
+                  </DndContext>
+                </div>
+              );
+            })}
+          </SortableContext>
+        </DndContext>
+
+        {localChannels.length === 0 && localCategories.length === 0 && (
           <Text c="dimmed" size="sm" style={{ fontStyle: 'italic' }}>No channels.</Text>
         )}
       </Stack>
@@ -498,7 +800,7 @@ function InvitesTab({ serverId }: { serverId: string }) {
       <Text size="lg" fw={700}>Invites</Text>
 
       <Group gap={8} align="flex-end">
-        <NumberInput label="Max Uses" description="0 = unlimited" value={maxUses} onChange={setMaxUses} min={0} max={100} style={{ width: 140 }} />
+        <NumberInput label="Max Uses" description="0 = unlimited" value={maxUses} onChange={(val) => setMaxUses(typeof val === 'number' ? val : 0)} min={0} max={100} style={{ width: 140 }} />
         <Button leftSection={<IconPlus size={14} />} onClick={handleCreate} loading={creating}>Create Invite</Button>
       </Group>
 

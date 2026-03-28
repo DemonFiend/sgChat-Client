@@ -15,6 +15,7 @@ import { NotificationToast } from './components/ui/NotificationToast';
 import { RuntimeErrorOverlay } from './components/ui/RuntimeErrorOverlay';
 import { ScreenSharePicker } from './components/ui/ScreenSharePicker';
 import { UpdateModal } from './components/ui/UpdateModal';
+import { ImpersonationBanner } from './components/ui/ImpersonationBanner';
 
 type AuthView = 'loading' | 'server-setup' | 'login' | 'register' | 'forgot-password' | 'reset-password' | 'app';
 
@@ -93,6 +94,7 @@ export function App() {
         <RuntimeErrorOverlay />
         <ScreenSharePicker />
         <UpdateModal />
+        <ImpersonationBanner />
       </QueryClientProvider>
     </ErrorBoundary>
   );
