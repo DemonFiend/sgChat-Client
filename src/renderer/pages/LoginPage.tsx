@@ -155,13 +155,13 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: Logi
           { position: 'absolute', top: 0, left: 0, right: 0, height: 32, WebkitAppRegion: 'drag' } as React.CSSProperties
         }
       />
-      <Paper w={420} p="xl" radius="lg" withBorder style={{ position: 'relative' }}>
-        {/* Server status pill — top-right of card */}
-        <div style={{ position: 'absolute', top: -12, right: 16, zIndex: 1 }}>
-          <ServerStatusPill variant="login" onChangeServer={onBack} />
-        </div>
-
+      <Paper w={420} p="xl" radius="lg" withBorder>
         <Stack gap="sm">
+          {/* Server status pill — right-aligned above title */}
+          <Group justify="flex-end" mt={-4} mb={-8}>
+            <ServerStatusPill variant="login" onChangeServer={onBack} />
+          </Group>
+
           <Title order={1} ta="center" c="brand" fz="2.5rem" fw={700} style={{ letterSpacing: '-0.5px' }}>
             sgChat
           </Title>

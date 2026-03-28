@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Group, Text, Popover, Paper, Stack, ActionIcon, Tooltip, CopyButton,
+  Group, Text, Popover, Stack, ActionIcon, Tooltip, CopyButton,
 } from '@mantine/core';
 import { IconCopy, IconCheck, IconServer2, IconRefresh } from '@tabler/icons-react';
 import { useAuthStore } from '../../stores/authStore';
-
-const electronAPI = (window as unknown as { electronAPI?: { config?: { healthCheck?: (url: string) => Promise<{ name?: string; version?: string; status?: string }>; getServerUrl?: () => Promise<string> } } } }).electronAPI;
 
 interface ServerStatusPillProps {
   /** Called when user clicks "Change Server" in the popover */
@@ -22,10 +20,12 @@ export function ServerStatusPill({ onChangeServer, variant = 'titlebar' }: Serve
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
   const [pingMs, setPingMs] = useState<number | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const closeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Fetch server info + measure ping
+  // Use electronAPI.config.healthCheck if available (works inside Electron)
+  // Fall back to direct fetch (works in browser/Vite dev)
   const measurePing = useCallback(async () => {
     if (!serverUrl) {
       setConnectionState('disconnected');
@@ -33,8 +33,28 @@ export function ServerStatusPill({ onChangeServer, variant = 'titlebar' }: Serve
       return;
     }
 
+    const start = performance.now();
+
+    // Try electronAPI first (Electron main process proxies the request — avoids CORS)
+    const electronBridge = (window as unknown as { electronAPI?: { config?: { healthCheck?: (url: string) => Promise<{ name?: string; version?: string; status?: string }> } } }).electronAPI;
+
+    if (electronBridge?.config?.healthCheck) {
+      try {
+        const info = await electronBridge.config.healthCheck(serverUrl);
+        const elapsed = Math.round(performance.now() - start);
+        if (info) {
+          setServerName(info.name || 'Server');
+          setConnectionState('connected');
+          setPingMs(elapsed);
+          return;
+        }
+      } catch {
+        // Fall through to direct fetch
+      }
+    }
+
+    // Fallback: direct fetch (for browser/Vite dev mode)
     try {
-      const start = performance.now();
       const healthUrl = serverUrl.replace(/\/$/, '') + '/api/health';
       const resp = await fetch(healthUrl, { signal: AbortSignal.timeout(5000) });
       const elapsed = Math.round(performance.now() - start);
@@ -56,32 +76,42 @@ export function ServerStatusPill({ onChangeServer, variant = 'titlebar' }: Serve
   // Initial ping + periodic refresh
   useEffect(() => {
     measurePing();
-    pingInterval.current = setInterval(measurePing, 30000); // every 30s
+    pingInterval.current = setInterval(measurePing, 30000);
     return () => {
       if (pingInterval.current) clearInterval(pingInterval.current);
     };
   }, [measurePing]);
 
-  // Also try to get server name from electron-store health check
-  useEffect(() => {
-    if (electronAPI?.config?.healthCheck && serverUrl) {
-      electronAPI.config.healthCheck(serverUrl).then((info) => {
-        if (info?.name) setServerName(info.name);
-      }).catch(() => {});
-    }
-  }, [serverUrl]);
-
-  // Hover handlers with 400ms delay
+  // Hover open with 400ms delay
   const handleMouseEnter = () => {
+    // Cancel any pending close
+    if (closeTimeout.current) {
+      clearTimeout(closeTimeout.current);
+      closeTimeout.current = null;
+    }
     hoverTimeout.current = setTimeout(() => setPopoverOpen(true), 400);
   };
 
+  // Delayed close — gives user time to move mouse into the popover
   const handleMouseLeave = () => {
     if (hoverTimeout.current) {
       clearTimeout(hoverTimeout.current);
       hoverTimeout.current = null;
     }
-    setPopoverOpen(false);
+    closeTimeout.current = setTimeout(() => setPopoverOpen(false), 300);
+  };
+
+  // Keep popover open when mouse enters the dropdown
+  const handleDropdownMouseEnter = () => {
+    if (closeTimeout.current) {
+      clearTimeout(closeTimeout.current);
+      closeTimeout.current = null;
+    }
+  };
+
+  // Close when mouse leaves the dropdown
+  const handleDropdownMouseLeave = () => {
+    closeTimeout.current = setTimeout(() => setPopoverOpen(false), 300);
   };
 
   // Dot color
@@ -94,12 +124,15 @@ export function ServerStatusPill({ onChangeServer, variant = 'titlebar' }: Serve
   // Dot animation
   const dotAnimation = connectionState === 'connecting'
     ? 'pulse 1.5s ease-in-out infinite'
-    : connectionState === 'disconnected'
-      ? 'none'
-      : 'none';
+    : 'none';
 
   const isLogin = variant === 'login';
-  const displayName = serverName || (serverUrl ? new URL(serverUrl).hostname : 'No Server');
+
+  let displayName = serverName;
+  if (!displayName && serverUrl) {
+    try { displayName = new URL(serverUrl).hostname; } catch { displayName = serverUrl; }
+  }
+  if (!displayName) displayName = 'No Server';
 
   // Ping color
   const pingColor = pingMs === null ? 'dimmed'
@@ -171,6 +204,8 @@ export function ServerStatusPill({ onChangeServer, variant = 'titlebar' }: Serve
       </Popover.Target>
 
       <Popover.Dropdown
+        onMouseEnter={handleDropdownMouseEnter}
+        onMouseLeave={handleDropdownMouseLeave}
         style={{
           background: 'var(--bg-primary)',
           border: '1px solid var(--border)',
@@ -205,7 +240,7 @@ export function ServerStatusPill({ onChangeServer, variant = 'titlebar' }: Serve
           </Group>
 
           {/* Server URL */}
-          <Group gap={8} px="sm" py={8} style={{ borderBottom: '1px solid var(--border)' }}>
+          <Group gap={8} px="sm" py={8} style={{ borderBottom: onChangeServer ? '1px solid var(--border)' : 'none' }}>
             <Text size="xs" c="dimmed" style={{ width: 50 }}>URL</Text>
             <Text
               size="xs"
@@ -237,6 +272,7 @@ export function ServerStatusPill({ onChangeServer, variant = 'titlebar' }: Serve
               style={{
                 cursor: 'pointer',
                 transition: 'background 0.15s',
+                borderRadius: '0 0 8px 8px',
               }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover, var(--bg-secondary))'; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
