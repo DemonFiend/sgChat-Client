@@ -1,5 +1,5 @@
 import { ActionIcon, Button, CopyButton, Divider, Group, Kbd, Modal, NavLink, PasswordInput, Progress, ScrollArea, SegmentedControl, Select, Slider, Stack, Switch, Text, Textarea, TextInput, UnstyledButton, Image, Paper, SimpleGrid, Tooltip } from '@mantine/core';
-import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay, IconRefresh, IconLock, IconMail, IconHistory, IconShield, IconEye, IconEyeOff, IconUpload, IconCopy, IconMusic, IconTrash, IconId, IconDeviceDesktop } from '@tabler/icons-react';
+import { IconUser, IconPalette, IconBell, IconKeyboard, IconVolume, IconLogout, IconArrowLeft, IconCheck, IconMicrophone, IconPlayerPlay, IconRefresh, IconLock, IconMail, IconHistory, IconShield, IconEye, IconEyeOff, IconUpload, IconCopy, IconMusic, IconTrash, IconId, IconDeviceDesktop, IconPencil } from '@tabler/icons-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
@@ -165,6 +165,12 @@ function AccountSettings({ user }: { user: any }) {
   const updateUser = useAuthStore((s) => s.updateUser);
   const addToast = useToastStore((s) => s.addToast);
 
+  // Username editing
+  const [username, setUsername] = useState(user?.username || '');
+  const [usernameError, setUsernameError] = useState('');
+  const [usernameSaving, setUsernameSaving] = useState(false);
+  const usernameChanged = username !== (user?.username || '');
+
   // Email change
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
@@ -209,6 +215,44 @@ function AccountSettings({ user }: { user: any }) {
   const [tfaDisableOpen, setTfaDisableOpen] = useState(false);
   const [tfaDisablePassword, setTfaDisablePassword] = useState('');
   const [tfaDisableLoading, setTfaDisableLoading] = useState(false);
+
+  const validateUsername = (value: string): string => {
+    if (value.length < 2) return 'Username must be at least 2 characters';
+    if (value.length > 32) return 'Username must be 32 characters or fewer';
+    if (!/^[a-zA-Z0-9_-]+$/.test(value)) return 'Only letters, numbers, underscores, and hyphens allowed';
+    return '';
+  };
+
+  const handleUsernameChange = (value: string) => {
+    setUsername(value);
+    if (usernameError) {
+      const error = validateUsername(value);
+      setUsernameError(error);
+    }
+  };
+
+  const handleSaveUsername = async () => {
+    const error = validateUsername(username);
+    if (error) { setUsernameError(error); return; }
+    setUsernameError('');
+    setUsernameSaving(true);
+    try {
+      const res = await electronAPI.api.request('PATCH', '/api/users/me', {
+        username,
+      });
+      if (res.ok) {
+        updateUser({ username });
+        addToast({ type: 'system', title: 'Username Updated', message: 'Your username has been changed.' });
+      } else if (res.status === 409) {
+        setUsernameError('Username already in use');
+      } else {
+        setUsernameError(res.data?.error || 'Failed to update username');
+      }
+    } catch {
+      setUsernameError('Failed to update username');
+    }
+    setUsernameSaving(false);
+  };
 
   const handleChangeEmail = async () => {
     setEmailError('');
@@ -355,7 +399,28 @@ function AccountSettings({ user }: { user: any }) {
       <Divider style={{ borderColor: 'var(--border)' }} />
 
       <Stack gap={12}>
-        <TextInput label="Username" value={user?.username || ''} readOnly />
+        <Group align="flex-end" gap={8}>
+          <TextInput
+            label="Username"
+            description="Changing your username may affect how others find you"
+            value={username}
+            onChange={(e) => handleUsernameChange(e.currentTarget.value)}
+            error={usernameError || undefined}
+            maxLength={32}
+            style={{ flex: 1 }}
+          />
+          {usernameChanged && (
+            <Button
+              variant="light"
+              size="sm"
+              leftSection={<IconPencil size={14} />}
+              onClick={handleSaveUsername}
+              loading={usernameSaving}
+            >
+              Save
+            </Button>
+          )}
+        </Group>
         <Group align="flex-end" gap={8}>
           <TextInput label="Email" value={user?.email || ''} readOnly style={{ flex: 1 }} />
           <Button
