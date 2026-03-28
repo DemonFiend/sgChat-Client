@@ -80,12 +80,6 @@ ONE TESTING MODE — ELECTRON PLAYWRIGHT (Mode 1)
 NOTE: MCP Playwright servers have been removed. All QA testing uses local Playwright
 via the e2e test suite. Write tests in e2e/*.spec.ts and run with `npx playwright test`.
 
-DEPRECATED MODE 2 — RENDERER DEV SERVER (no longer used)
-  App URL:     http://localhost:5173
-  Tests:       Was Playwright MCP browsers pointed at the Vite dev server
-  What it tests: Renderer process only (web UI)
-  Server:      Same backend server
-
 ELECTRON-NATIVE FEATURES THAT STILL REQUIRE MANUAL VERIFICATION:
   - System tray icon and menu (no Playwright API for system tray)
   - Native OS notifications (desktop popups outside app window)
@@ -97,15 +91,13 @@ ELECTRON-NATIVE FEATURES THAT STILL REQUIRE MANUAL VERIFICATION:
   CAN now be tested via Mode 1 (Electron Playwright).
 ```
 
-When testing in Mode 1, the Electron app must be built first:
+The Electron app must be built before running tests:
 ```bash
-npm run build:main && npm run build:preload
+npm run build:main && npm run build:preload && npm run build:renderer
 npx playwright test                           # run all e2e tests
-npx playwright test --grep "pattern"          # run specific tests
+npx playwright test --grep "Suite 4"          # run specific suite
+npx playwright test --grep "4.05"             # run specific test
 ```
-
-When testing in Mode 2, Playwright MCP must NEVER open any domain other than `http://localhost:5173`.
-If no environment is specified — ask before proceeding.
 
 ---
 
@@ -147,18 +139,14 @@ Run this when testing on a fresh database or when no accounts exist.
 
 ```
 STEP 1 — Determine the target server:
-  Production: https://chat.sosiagaming.com (default for QA)
-  Local dev:  http://localhost:3124 (Docker Desktop — NOT usable from
-              Playwright MCP Docker due to crypto.subtle requiring HTTPS)
-  Always use the production server for Playwright QA testing.
+  Local dev:  http://localhost:3124 (default for QA)
+  Production: https://chat.sosiagaming.com
 
-STEP 2 — Open the production server in Playwright:
-  Navigate to https://chat.sosiagaming.com directly.
-  The web UI is served by the server — no Vite dev server needed.
+STEP 2 — Build and launch Electron app:
+  npm run build:main && npm run build:preload && npm run build:renderer
+  The Playwright tests launch the Electron app automatically via e2e/electron-fixture.ts.
 
-STEP 3 — Verify the page loads:
-  The login page should appear at https://chat.sosiagaming.com/login.
-  If already logged in, you'll land at https://chat.sosiagaming.com/channels/@me.
+STEP 3 — On first launch the app opens to ServerSetupPage.
 
 STEP 4 — Configure server URL:
   If ServerSetupPage appears, enter the server URL and click Connect/Continue.
@@ -210,22 +198,25 @@ bd list --label qa --status open --json
 # 2. Check critical issues
 bd list --label qa --priority 0 --status open --json
 
-# 3. Try to open http://localhost:5173 in Playwright
-#    If connection error — dev server isn't running. Stop and tell the user.
-#    If ServerSetupPage — configure server URL first.
-#    If login page — environment is up, proceed.
-#    If blank page — check browser console for errors.
+# 3. Build the Electron app
+npm run build:main && npm run build:preload && npm run build:renderer
+
+# 4. Run a quick smoke test to verify the app launches
+npx playwright test --grep "Suite 1"
+
+# 5. Read the suite spec file before writing/running tests
+#    .claude/agents/qa-suites/suite-{NN}.md
 ```
 
 ---
 
 ## YOUR CORE RULES
 
-0. **NO SUBAGENT QA** — The Orchestrator performs QA manually. Do NOT delegate QA testing to subagents. Subagents produce unreliable UI/UX test results. The person running QA must use Playwright MCP tools directly.
-1. **Always use Playwright MCP** — real browser every time. Never guess.
-2. **Check browser console** during testing — use `browser_console_messages` before and after each test.
+0. **READ THE SUITE SPEC FIRST** — Before writing ANY test, read `.claude/agents/qa-suites/suite-{NN}.md`. Follow it step-by-step. Do NOT improvise.
+1. **Always use Playwright locator APIs** — `.click()`, `.fill()`, `.hover()`, `.locator()`. NEVER substitute `page.evaluate(() => document.body.innerText.includes(...))` for real interactions.
+2. **Check browser console** during testing — use `window.on('console', ...)` to collect errors.
 3. **File every finding in Beads immediately** — never save them for the end.
-4. **Use CocoIndex before testing a section** — find the relevant code first.
+4. **Read the source code before testing** — understand the component structure, selectors, and expected behavior.
 5. **Take screenshots** on every failure and every significant step.
 6. **Be adversarial** — test like someone trying to break the app.
 7. **Severity**: P0=Critical | P1=High | P2=Medium | P3=Low | P4=Info
@@ -235,7 +226,7 @@ bd list --label qa --priority 0 --status open --json
 11. **Prove effects, don't just check existence** — when a setting claims to change something visual (theme, font size, layout mode, toggle), you MUST verify the actual effect:
     - Close the settings dialog and observe the app itself
     - Take before/after screenshots and compare them
-    - Use `browser_evaluate` to check computed CSS values (`getComputedStyle`, CSS variables)
+    - Use `window.evaluate(() => getComputedStyle(...))` to check computed CSS values
     - If before and after are identical, the setting is broken — file it
     - "The button exists and can be clicked" is NOT a passing test
 12. **Test every toggle/slider/dropdown at its extremes** — min, max, and default. A slider that moves but doesn't change anything is a bug.
@@ -287,14 +278,16 @@ bd close <bead-id> --reason "Verified fixed on LOCAL [date] via Playwright. Cons
 
 ## MONITORING DURING TESTING
 
-Check browser console before and after tests:
+Collect console and network errors during tests:
 
-```
-# Use Playwright to check console messages
-mcp__playwright__browser_console_messages
+```typescript
+// Collect console errors
+const consoleErrors: string[] = [];
+window.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
 
-# Use Playwright to check failed network requests
-mcp__playwright__browser_network_requests
+// Collect network failures
+const networkErrors: string[] = [];
+window.on('response', res => { if (res.status() >= 400) networkErrors.push(`${res.status()} ${res.url()}`); });
 ```
 
 **Console patterns to watch for:**
@@ -341,28 +334,19 @@ Security:       "find where user input is rendered"
 
 Some suites require two users interacting simultaneously:
 
-### Approach A: Dual Playwright Browsers (Default)
+### Approach A: Two Electron Instances (Preferred)
 ```
-The 2nd MCP playwright was causing issue and has temporarily been disabled.
+Launch two separate Electron app instances in the same test:
 
-This project has TWO Playwright MCP servers:
-  - `playwright`  (mcp__playwright__*)  — Browser 1, separate Chrome profile
-  - `playwright2` (mcp__playwright2__*) — Browser 2, separate Chrome profile
+  const app1 = await _electron.launch({ ... });  // qa_admin
+  const app2 = await _electron.launch({ ... });  // qa_user
 
-These are fully independent browsers with separate cookies/sessions.
-
-1. Browser 1 (playwright):  Navigate to http://localhost:5173, log in as qa_admin
-2. Browser 2 (playwright2): Navigate to http://localhost:5173, log in as qa_user
-3. Both browsers can interact simultaneously — verify real-time updates on BOTH screens
-
-Example — testing incoming DM:
-  mcp__playwright__browser_fill_form  -> qa_admin sends message
-  mcp__playwright2__browser_snapshot  -> verify qa_user sees message in real-time
+Both can interact simultaneously — verify real-time updates on BOTH windows.
 ```
 
 ### Approach B: Sequential (Fallback)
 ```
-Uses only the Local Playwright server. Tests actions in sequence, verifying effects after each step.
+Single Electron instance, test actions in sequence:
 1. Test as qa_admin -> log out
 2. Log in as qa_user -> verify what qa_admin did
 3. Log out -> log back in as qa_admin
@@ -374,9 +358,12 @@ Suites marked with **(multi-user)** should attempt Approach A first, fall back t
 
 ## AVAILABLE COMMANDS
 
+When a command is invoked, read the corresponding `qa-suites/suite-{NN}.md` file(s) FIRST,
+then implement the Playwright tests following those exact specs.
+
 ```
 QA: setup               -> Run the self-setup procedure
-QA: full audit          -> All 20 suites in priority order
+QA: full audit          -> All 26 suites in priority order
 QA: auth                -> Suite 2 (Authentication)
 QA: navigation          -> Suite 3 (Navigation)
 QA: messaging           -> Suites 4+5+6 (Messages, Actions, Uploads)
@@ -412,7 +399,7 @@ These principles override any shorthand in individual suites:
 
 1. **Effect verification**: If a setting/toggle/action claims to change something, PROVE the change happened. Check outside the dialog/panel where you made the change.
 2. **Screenshot proof**: Take before/after screenshots for any visual change. Compare them. Identical screenshots = broken feature.
-3. **Computed style verification**: For CSS-affecting settings (themes, font sizes, layout modes), use `browser_evaluate` with `getComputedStyle` to verify actual CSS values changed.
+3. **Computed style verification**: For CSS-affecting settings (themes, font sizes, layout modes), use `window.evaluate()` with `getComputedStyle` to verify actual CSS values changed.
 4. **Persistence verification**: Any saved setting must survive: (a) closing and reopening the settings panel, (b) a full page reload. Test both.
 5. **Cross-context verification**: Changes to username, display name, avatar, roles, etc. must be verified everywhere they appear.
 6. **Extreme values**: Sliders -> test min AND max. Text inputs -> test empty, max length, and XSS. Dropdowns -> test first and last option. Toggles -> test both states.
@@ -426,6 +413,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 1 — ENVIRONMENT & CONNECTION HEALTH
 
+**Spec:** `qa-suites/suite-01.md` — exact Playwright steps for every test below
 **Purpose:** Verify the dev environment is running, client connects to server, basic rendering works.
 
 1. Open http://localhost:5173 in Playwright — page loads without blank screen
@@ -443,6 +431,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 2 — AUTHENTICATION & SESSION MANAGEMENT
 
+**Spec:** `qa-suites/suite-02.md` — exact Playwright steps for every test below
 **Before:** `ccc find auth store login register and token management`
 **Console:** Watch for 401s, 403s, network errors
 
@@ -479,7 +468,7 @@ These principles override any shorthand in individual suites:
 22. Log in -> log out -> check if login form pre-fills credentials (security issue if so)
 
 ### Token Security:
-23. While logged in, use `browser_evaluate` to check:
+23. While logged in, use `window.evaluate()` to check:
     - `localStorage` — no tokens or secrets (only UI prefs)
     - `sessionStorage` — no tokens or secrets
     - `document.cookie` — empty or no auth tokens
@@ -490,6 +479,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 3 — CORE NAVIGATION & ROUTING
 
+**Spec:** `qa-suites/suite-03.md` — exact Playwright steps for every test below
 **Before:** `ccc find React Router routes and navigation components`
 **Console:** Watch for 404s and navigation errors
 
@@ -518,6 +508,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 4 — MESSAGE SENDING & DISPLAY (multi-user)
 
+**Spec:** `qa-suites/suite-04.md` — exact Playwright steps for every test below
 **Before:** `ccc find message sending and MessageContent rendering components`
 **Console:** Watch for errors on every message send
 
@@ -554,6 +545,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 5 — MESSAGE ACTIONS (multi-user)
 
+**Spec:** `qa-suites/suite-05.md` — exact Playwright steps for every test below
 **Before:** `ccc find message edit delete reply pin reaction thread handlers`
 
 ### Edit:
@@ -606,6 +598,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 6 — FILE UPLOADS & ATTACHMENTS
 
+**Spec:** `qa-suites/suite-06.md` — exact Playwright steps for every test below
 **Before:** `ccc find file upload handling and attachment rendering`
 
 ### Message Attachments:
@@ -640,6 +633,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 7 — FRIENDS, BLOCKING & USER SEARCH (multi-user)
 
+**Spec:** `qa-suites/suite-07.md` — exact Playwright steps for every test below
 **Before:** `ccc find useFriends hook friend request components and blocked users store`
 **Console:** Watch for 429 rate limits, constraint errors
 
@@ -684,6 +678,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 8 — DM MESSAGING & CALLS (multi-user)
 
+**Spec:** `qa-suites/suite-08.md` — exact Playwright steps for every test below
 **Before:** `ccc find DM conversation components and dmVoiceService`
 **Console:** Watch for Socket.IO errors, LiveKit connection failures
 
@@ -714,6 +709,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 9 — USER PROFILES & POPOVERS
 
+**Spec:** `qa-suites/suite-09.md` — exact Playwright steps for every test below
 **Before:** `ccc find user profile popover and user context menu components`
 
 1. Click on username in message -> profile popover opens
@@ -737,6 +733,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 10 — USER SETTINGS
 
+**Spec:** `qa-suites/suite-10.md` — exact Playwright steps for every test below
 **Before:** `ccc find settings view and all settings tab components`
 **Console:** Watch for errors on save
 
@@ -788,6 +785,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 11 — SERVER SETTINGS
 
+**Spec:** `qa-suites/suite-11.md` — exact Playwright steps for every test below
 **Before:** `ccc find server settings components and admin panel`
 **Console:** Watch for permission errors
 
@@ -842,6 +840,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 12 — VOICE & VIDEO (LiveKit) (multi-user)
 
+**Spec:** `qa-suites/suite-12.md` — exact Playwright steps for every test below
 **Before:** `ccc find voiceStore voiceService and LiveKit integration`
 **Console:** Watch for LiveKit connection errors, WebRTC failures
 
@@ -880,6 +879,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 13 — EVENTS SYSTEM
 
+**Spec:** `qa-suites/suite-13.md` — exact Playwright steps for every test below
 **Before:** `ccc find useEvents hook and event components`
 
 1. Navigate to Events section
@@ -896,6 +896,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 14 — SEARCH & COMMAND PALETTE
 
+**Spec:** `qa-suites/suite-14.md` — exact Playwright steps for every test below
 **Before:** `ccc find search components and command palette`
 
 1. Open search panel (Ctrl+K or search button)
@@ -913,6 +914,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 15 — ADMIN FEATURES
 
+**Spec:** `qa-suites/suite-15.md` — exact Playwright steps for every test below
 **Before:** `ccc find ServerAdminView and admin components`
 
 1. Navigate to admin panel (admin button in server header)
@@ -932,9 +934,9 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 16 — ELECTRON NATIVE FEATURES
 
+**Spec:** `qa-suites/suite-16.md` — exact Playwright steps for every test below
 **Purpose:** Test features that rely on the Electron main process and IPC bridge.
-**Mode:** Use Mode 1 (Electron Playwright) — `npx playwright test`
-**Setup:** Build first: `npm run build:main && npm run build:preload`
+**Setup:** Build first: `npm run build:main && npm run build:preload && npm run build:renderer`
 **Fixture:** `e2e/electron-fixture.ts` launches the real Electron app.
 
 ### Window Controls (Electron Playwright):
@@ -988,6 +990,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 17 — MULTI-SERVER SWITCHING
 
+**Spec:** `qa-suites/suite-17.md` — exact Playwright steps for every test below
 **Before:** `ccc find NetworkSelector networkStore and server switching`
 
 1. Open server/network selector (if visible in UI)
@@ -1011,6 +1014,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 18 — SECURITY (multi-user)
 
+**Spec:** `qa-suites/suite-18.md` — exact Playwright steps for every test below
 **Before:** `ccc find where user input is rendered and token storage`
 **Console:** Watch for any token/secret leaks
 
@@ -1023,9 +1027,9 @@ These principles override any shorthand in individual suites:
 6. Search query with XSS payload -> rendered as text
 
 ### Token Security:
-7. `browser_evaluate`: `Object.keys(localStorage)` -> no auth tokens
-8. `browser_evaluate`: `Object.keys(sessionStorage)` -> no auth tokens
-9. `browser_evaluate`: `document.cookie` -> no auth tokens
+7. `window.evaluate()`: `Object.keys(localStorage)` -> no auth tokens
+8. `window.evaluate()`: `Object.keys(sessionStorage)` -> no auth tokens
+9. `window.evaluate()`: `document.cookie` -> no auth tokens
 10. Check network tab -> Authorization header present on API calls (via IPC proxy)
 11. Token refresh works (wait or force expiry)
 
@@ -1046,6 +1050,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 19 — ACCESSIBILITY
 
+**Spec:** `qa-suites/suite-19.md` — exact Playwright steps for every test below
 **Before:** `ccc find Mantine accessibility props and ARIA labels`
 
 ### Keyboard Navigation:
@@ -1061,7 +1066,7 @@ These principles override any shorthand in individual suites:
 8. Navigate to new channel -> focus on message input
 
 ### Screen Reader Support:
-9. All interactive elements have accessible labels (check with `browser_evaluate`: `document.querySelectorAll('button:not([aria-label]):not([title])')`)
+9. All interactive elements have accessible labels (check with `window.evaluate()`: `document.querySelectorAll('button:not([aria-label]):not([title])')`)
 10. Images have alt text
 11. Form inputs have labels
 12. Status indicators have text alternatives
@@ -1077,6 +1082,7 @@ These principles override any shorthand in individual suites:
 
 ## SUITE 20 — PERFORMANCE & ERROR STATES
 
+**Spec:** `qa-suites/suite-20.md` — exact Playwright steps for every test below
 **Before:** `ccc find error boundary loading skeleton and empty state components`
 
 ### Loading States:
@@ -1122,6 +1128,7 @@ Run with: `QA: parity` or individual sub-commands below.
 
 ## SUITE 21 — AUTH PARITY
 
+**Spec:** `qa-suites/suite-21.md` — exact Playwright steps for every test below
 **Command:** `QA: parity-auth`
 **Before:** `ccc find RegisterPage LoginPage PendingApprovalPage AccessControlPanel`
 
@@ -1164,6 +1171,7 @@ Run with: `QA: parity` or individual sub-commands below.
 
 ## SUITE 22 — MESSAGING PARITY
 
+**Spec:** `qa-suites/suite-22.md` — exact Playwright steps for every test below
 **Command:** `QA: parity-messaging`
 **Before:** `ccc find MessageContent emojiRenderer markdownParser ReactionPicker DMChatPanel`
 
@@ -1204,6 +1212,7 @@ Run with: `QA: parity` or individual sub-commands below.
 
 ## SUITE 23 — SETTINGS PARITY
 
+**Spec:** `qa-suites/suite-23.md` — exact Playwright steps for every test below
 **Command:** `QA: parity-settings`
 **Before:** `ccc find SettingsView settingsSync notificationSettingsStore voiceSettingsStore`
 
@@ -1232,6 +1241,7 @@ Run with: `QA: parity` or individual sub-commands below.
 
 ## SUITE 24 — SERVER SIDEBAR & UI PARITY
 
+**Spec:** `qa-suites/suite-24.md` — exact Playwright steps for every test below
 **Command:** `QA: parity-ui`
 **Before:** `ccc find ServerSidebar unreadStore LayoutSkeleton CommandPalette`
 
@@ -1258,6 +1268,7 @@ Run with: `QA: parity` or individual sub-commands below.
 
 ## SUITE 25 — SERVER ADMIN PARITY
 
+**Spec:** `qa-suites/suite-25.md` — exact Playwright steps for every test below
 **Command:** `QA: parity-admin`
 **Before:** `ccc find ServerSettingsModal RolesPanel permissionMetadata ImpersonationBanner`
 
@@ -1302,6 +1313,7 @@ Run with: `QA: parity` or individual sub-commands below.
 
 ## SUITE 26 — VOICE PARITY
 
+**Spec:** `qa-suites/suite-26.md` — exact Playwright steps for every test below
 **Command:** `QA: parity-voice`
 **Before:** `ccc find voiceService soundService VoiceConnectedBar VoiceParticipantsList DMVoiceControls`
 
