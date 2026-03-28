@@ -68,11 +68,20 @@ async function parseResponse(res: Response): Promise<any> {
   return data;
 }
 
+export interface LoginResult {
+  success: boolean;
+  user?: AuthResponse['user'];
+  error?: string;
+  error_code?: string;
+  retry_after?: string;
+  pending_approval?: boolean;
+}
+
 export async function login(
   serverUrl: string,
   email: string,
   password: string
-): Promise<{ success: boolean; user?: AuthResponse['user']; error?: string }> {
+): Promise<LoginResult> {
   try {
     const res = await net.fetch(`${serverUrl}/api/auth/login`, {
       method: 'POST',
@@ -82,7 +91,40 @@ export async function login(
 
     if (!res.ok) {
       const data = await parseResponse(res).catch(() => ({ message: 'Login failed' }));
-      return { success: false, error: data.message || `Login failed (${res.status})` };
+      const result: LoginResult = {
+        success: false,
+        error: data.message || `Login failed (${res.status})`,
+      };
+
+      // Propagate error_code from server response
+      if (data.error_code) {
+        result.error_code = data.error_code;
+      }
+
+      // Handle 429 rate limiting — parse Retry-After header or body field
+      if (res.status === 429) {
+        result.error_code = result.error_code || 'RATE_LIMITED';
+        const retryHeader = res.headers.get('Retry-After');
+        if (data.retry_after) {
+          result.retry_after = data.retry_after;
+        } else if (retryHeader) {
+          // Retry-After can be seconds or an HTTP-date
+          const seconds = parseInt(retryHeader, 10);
+          if (!isNaN(seconds)) {
+            result.retry_after = new Date(Date.now() + seconds * 1000).toISOString();
+          } else {
+            result.retry_after = new Date(retryHeader).toISOString();
+          }
+        }
+      }
+
+      // Handle pending approval
+      if (data.pending_approval) {
+        result.pending_approval = true;
+        result.error_code = result.error_code || 'PENDING_APPROVAL';
+      }
+
+      return result;
     }
 
     const data: AuthResponse = await parseResponse(res);

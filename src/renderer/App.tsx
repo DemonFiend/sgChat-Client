@@ -8,6 +8,7 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { PendingApprovalPage } from './pages/PendingApprovalPage';
 import { AppLayout } from './layouts/AppLayout';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { SessionExpiredOverlay } from './components/ui/SessionExpiredOverlay';
@@ -16,11 +17,12 @@ import { RuntimeErrorOverlay } from './components/ui/RuntimeErrorOverlay';
 import { ScreenSharePicker } from './components/ui/ScreenSharePicker';
 import { UpdateModal } from './components/ui/UpdateModal';
 
-type AuthView = 'loading' | 'server-setup' | 'login' | 'register' | 'forgot-password' | 'reset-password' | 'app';
+type AuthView = 'loading' | 'server-setup' | 'login' | 'register' | 'forgot-password' | 'reset-password' | 'pending-approval' | 'app';
 
 function AuthRouter() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const isPendingApproval = useAuthStore((s) => s.isPendingApproval);
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const checkAuth = useAuthStore((s) => s.checkAuth);
   const [view, setView] = useState<AuthView>('loading');
@@ -35,12 +37,14 @@ function AuthRouter() {
       setView('loading');
     } else if (isAuthenticated) {
       setView('app');
+    } else if (isPendingApproval) {
+      setView('pending-approval');
     } else if (!serverUrl) {
       setView('server-setup');
     } else {
       setView('login');
     }
-  }, [isLoading, isAuthenticated, serverUrl]);
+  }, [isLoading, isAuthenticated, isPendingApproval, serverUrl]);
 
   if (view === 'loading') {
     return (
@@ -74,6 +78,10 @@ function AuthRouter() {
 
   if (view === 'forgot-password') {
     return <ForgotPasswordPage onBack={() => setView('login')} />;
+  }
+
+  if (view === 'pending-approval') {
+    return <PendingApprovalPage onBack={() => setView('login')} />;
   }
 
   if (view === 'reset-password') {
