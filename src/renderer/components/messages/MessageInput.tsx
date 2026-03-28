@@ -19,9 +19,11 @@ interface MessageInputProps {
   channelId: string;
   channelName: string;
   onSendOverride?: (content: string) => void;
+  /** Optional callback for typing emit (used by DM panels with custom typing logic) */
+  onTyping?: () => void;
 }
 
-export function MessageInput({ channelId, channelName, onSendOverride }: MessageInputProps) {
+export function MessageInput({ channelId, channelName, onSendOverride, onTyping }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [spoilerFiles, setSpoilerFiles] = useState<Set<number>>(new Set());
@@ -202,7 +204,11 @@ export function MessageInput({ channelId, channelName, onSendOverride }: Message
     const now = Date.now();
     if (now - lastTypingEmit.current > 3000) {
       lastTypingEmit.current = now;
-      emitTypingStart(channelId);
+      if (onTyping) {
+        onTyping();
+      } else {
+        emitTypingStart(channelId);
+      }
     }
   };
 
