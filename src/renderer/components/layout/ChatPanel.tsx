@@ -346,7 +346,7 @@ function MessageSkeleton() {
 function MessageList({ channelId, channelName, channelTopic }: { channelId: string; channelName?: string; channelTopic?: string }) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useMessages(channelId);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const prevGroupCountRef = useRef(0);
+  const prevMessageCountRef = useRef(0);
   const newMessageThresholdRef = useRef(0);
   const isAtBottomRef = useRef(true);
   const initialScrollDone = useRef(false);
@@ -354,7 +354,7 @@ function MessageList({ channelId, channelName, channelTopic }: { channelId: stri
   // Reset scroll state when channel changes
   useEffect(() => {
     initialScrollDone.current = false;
-    prevGroupCountRef.current = 0;
+    prevMessageCountRef.current = 0;
     newMessageThresholdRef.current = 0;
     isAtBottomRef.current = true;
   }, [channelId]);
@@ -397,11 +397,13 @@ function MessageList({ channelId, channelName, channelTopic }: { channelId: stri
     overscan: 10,
   });
 
-  // Scroll to bottom on initial load and when new messages arrive
+  // Scroll to bottom on initial load and when new messages arrive.
+  // Track messages.length (not groups.length) because a new message may join an
+  // existing group (same author within 5 min) without changing groups.length.
   useEffect(() => {
-    const prevCount = prevGroupCountRef.current;
-    const newCount = groups.length;
-    prevGroupCountRef.current = newCount;
+    const prevCount = prevMessageCountRef.current;
+    const newCount = messages.length;
+    prevMessageCountRef.current = newCount;
 
     if (newCount === 0) {
       initialScrollDone.current = false;
@@ -419,11 +421,16 @@ function MessageList({ channelId, channelName, channelTopic }: { channelId: stri
       // New messages arrived
       newMessageThresholdRef.current = prevCount;
       if (isAtBottomRef.current) {
-        // Only auto-scroll if user was at bottom
+        // Scroll virtualizer to last item, then ensure we reach absolute bottom
+        // after the DOM re-measures the (possibly taller) last group
         virtualizer.scrollToIndex(totalCount - 1, { align: 'end' });
+        requestAnimationFrame(() => {
+          const el = scrollContainerRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        });
       }
     }
-  }, [groups.length, totalCount, virtualizer]);
+  }, [messages.length, totalCount, virtualizer]);
 
   // Track whether user is scrolled to bottom
   const handleScroll = useCallback(() => {
