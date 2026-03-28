@@ -2,7 +2,7 @@ import { NavLink, ScrollArea, Stack, Text } from '@mantine/core';
 import {
   IconShield, IconUsers, IconDatabase, IconHistory,
   IconMoodSmile, IconHeartHandshake, IconArrowLeft, IconServer2,
-  IconZzz, IconBug, IconShieldLock,
+  IconZzz, IconBug, IconEye,
 } from '@tabler/icons-react';
 import { useUIStore } from '../stores/uiStore';
 import { RolesPanel } from '../components/ui/server-settings/RolesPanel';
@@ -14,7 +14,7 @@ import { RoleReactionsPanel } from '../components/ui/server-settings/RoleReactio
 import { RelayServersPanel } from '../components/ui/server-settings/RelayServersPanel';
 import { AFKSettingsPanel } from '../components/ui/server-settings/AFKSettingsPanel';
 import { CrashReportsPanel } from '../components/ui/server-settings/CrashReportsPanel';
-import { AccessControlPanel } from '../components/ui/server-settings/AccessControlPanel';
+import { ImpersonationControlPanel } from '../components/ui/ImpersonationControlPanel';
 
 const ADMIN_SECTIONS = [
   { id: 'roles' as const, label: 'Roles & Permissions', icon: IconShield },
@@ -26,7 +26,7 @@ const ADMIN_SECTIONS = [
   { id: 'relay-servers' as const, label: 'Relay Servers', icon: IconServer2 },
   { id: 'afk-settings' as const, label: 'AFK Settings', icon: IconZzz },
   { id: 'crash-reports' as const, label: 'Crash Reports', icon: IconBug },
-  { id: 'access-control' as const, label: 'Access Control', icon: IconShieldLock },
+  { id: 'impersonation' as const, label: 'Impersonate User', icon: IconEye },
 ] as const;
 
 export type AdminSection = typeof ADMIN_SECTIONS[number]['id'];
@@ -94,7 +94,7 @@ export function ServerAdminView() {
           {adminSection === 'relay-servers' && <RelayServersPanel serverId={activeServerId} />}
           {adminSection === 'afk-settings' && <AFKSettingsPanel serverId={activeServerId} />}
           {adminSection === 'crash-reports' && <CrashReportsPanel serverId={activeServerId} />}
-          {adminSection === 'access-control' && <AccessControlPanel serverId={activeServerId} />}
+          {adminSection === 'impersonation' && <ImpersonationControlPanel serverId={activeServerId} />}
         </div>
       </ScrollArea>
     </div>

@@ -1,14 +1,156 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ActionIcon, Alert, Badge, Button, ColorInput, Divider,
-  Group, Stack, Switch, Text, TextInput, Tooltip,
+  Accordion, Badge, Button, ColorInput, Divider,
+  Group, SegmentedControl, Stack, Switch, Text, TextInput, Tooltip,
 } from '@mantine/core';
-import { IconAlertTriangle, IconPlus, IconTrash, IconArrowUp, IconArrowDown } from '@tabler/icons-react';
+import {
+  IconAlertTriangle, IconGripVertical, IconPlus, IconSearch, IconTrash,
+} from '@tabler/icons-react';
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor,
+  useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove, SortableContext, sortableKeyboardCoordinates,
+  useSortable, verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { api } from '../../../lib/api';
 import { queryClient } from '../../../lib/queryClient';
-import { type Role, ROLE_PERMISSIONS, hasBit, setBit } from './types';
+import { type Role, hasBit, setBit } from './types';
+import { PERMISSION_GROUPS, DANGEROUS_PERM_KEYS, type PermissionDef } from './permissionMetadata';
 
+type TriState = 'default' | 'allow' | 'deny';
+
+// ── Sortable Role List Item ────────────────────────────────────────
+function SortableRoleItem({
+  role,
+  isSelected,
+  onSelect,
+  isDragDisabled,
+}: {
+  role: Role;
+  isSelected: boolean;
+  onSelect: () => void;
+  isDragDisabled: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: role.id, disabled: isDragDisabled });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <Group
+      ref={setNodeRef}
+      style={{
+        ...style,
+        borderRadius: 4,
+        background: isSelected ? 'rgba(139, 92, 246, 0.15)' : 'var(--bg-hover)',
+        border: isSelected ? '1px solid var(--mantine-color-violet-5)' : '1px solid transparent',
+        cursor: 'pointer',
+      }}
+      gap={8}
+      px={8}
+      py={6}
+      onClick={onSelect}
+    >
+      {!isDragDisabled ? (
+        <div
+          {...attributes}
+          {...listeners}
+          style={{ cursor: 'grab', display: 'flex', alignItems: 'center' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <IconGripVertical size={14} style={{ color: 'var(--text-muted)' }} />
+        </div>
+      ) : (
+        <div style={{ width: 14 }} />
+      )}
+      <div style={{
+        width: 12, height: 12, borderRadius: '50%',
+        background: role.color || 'var(--text-muted)', flexShrink: 0,
+      }} />
+      <Text size="sm" style={{ flex: 1 }}>{role.name}</Text>
+      {(role.hoist || role.is_hoisted) && (
+        <Badge size="xs" variant="outline" color="gray">Hoisted</Badge>
+      )}
+    </Group>
+  );
+}
+
+// ── Tri-state permission control ─────────────────────────────────
+function PermissionTriState({
+  perm,
+  value,
+  onChange,
+}: {
+  perm: PermissionDef;
+  value: TriState;
+  onChange: (val: TriState) => void;
+}) {
+  const isDangerous = DANGEROUS_PERM_KEYS.has(perm.key);
+
+  return (
+    <Group
+      gap={12}
+      px={12}
+      py={8}
+      style={{
+        borderRadius: 4,
+        background: value === 'allow' && isDangerous
+          ? 'rgba(239, 68, 68, 0.08)'
+          : value === 'deny'
+            ? 'rgba(239, 68, 68, 0.06)'
+            : undefined,
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Text
+          size="sm"
+          fw={500}
+          style={{ color: isDangerous ? 'var(--mantine-color-red-5)' : undefined }}
+        >
+          {perm.label}
+          {isDangerous && (
+            <IconAlertTriangle
+              size={12}
+              style={{ marginLeft: 4, verticalAlign: 'middle', color: 'var(--mantine-color-red-5)' }}
+            />
+          )}
+        </Text>
+        <Text size="xs" c="dimmed">{perm.description}</Text>
+      </div>
+      <SegmentedControl
+        value={value}
+        onChange={(val) => onChange(val as TriState)}
+        size="xs"
+        data={[
+          { label: 'Deny', value: 'deny' },
+          { label: 'Default', value: 'default' },
+          { label: 'Allow', value: 'allow' },
+        ]}
+        styles={{
+          root: { minWidth: 200 },
+        }}
+        color={value === 'allow' ? (isDangerous ? 'red' : 'green') : value === 'deny' ? 'red' : undefined}
+      />
+    </Group>
+  );
+}
+
+// ── Main RolesPanel ──────────────────────────────────────────────
 export function RolesPanel({ serverId }: { serverId: string }) {
   const { data: roles } = useQuery({
     queryKey: ['roles', serverId],
@@ -27,40 +169,26 @@ export function RolesPanel({ serverId }: { serverId: string }) {
   const [editHoisted, setEditHoisted] = useState(false);
   const [editMentionable, setEditMentionable] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [roleSearch, setRoleSearch] = useState('');
 
-  const sortedRoles = [...(roles || [])].sort((a, b) => b.position - a.position);
+  const sortedRoles = useMemo(
+    () => [...(roles || [])].sort((a, b) => b.position - a.position),
+    [roles],
+  );
+
+  const filteredRoles = useMemo(() => {
+    if (!roleSearch) return sortedRoles;
+    const q = roleSearch.toLowerCase();
+    return sortedRoles.filter((r) => r.name.toLowerCase().includes(q));
+  }, [sortedRoles, roleSearch]);
+
   const selectedRole = sortedRoles.find((r) => r.id === selectedRoleId);
 
-  const hasDuplicatePositions = useMemo(() => {
-    if (!roles || roles.length <= 1) return false;
-    const positions = roles.map((r) => r.position);
-    return new Set(positions).size !== positions.length;
-  }, [roles]);
-
-  const [fixingPositions, setFixingPositions] = useState(false);
-  const handleFixPositions = async () => {
-    if (!roles || roles.length === 0) return;
-    setFixingPositions(true);
-    try {
-      // sortedRoles is highest-position first; assign descending positions
-      // @everyone gets position 0 (lowest), others get sequential positions above
-      const everyoneRole = sortedRoles.find((r) => r.name === '@everyone');
-      const nonEveryone = sortedRoles.filter((r) => r.name !== '@everyone');
-      const reordered = nonEveryone.map((role, index) => ({
-        id: role.id,
-        position: nonEveryone.length - index, // highest first
-      }));
-      if (everyoneRole) {
-        reordered.push({ id: everyoneRole.id, position: 0 });
-      }
-      await api.patch(`/api/servers/${serverId}/roles/reorder`, { roles: reordered });
-      queryClient.invalidateQueries({ queryKey: ['roles', serverId] });
-    } catch {
-      // silently fail
-    } finally {
-      setFixingPositions(false);
-    }
-  };
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   useEffect(() => {
     const role = (roles || []).find((r) => r.id === selectedRoleId);
@@ -92,21 +220,32 @@ export function RolesPanel({ serverId }: { serverId: string }) {
     }
   };
 
-  const handleMoveRole = async (index: number, direction: -1 | 1) => {
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= sortedRoles.length) return;
-    const a = sortedRoles[index];
-    const b = sortedRoles[newIndex];
-    if (a.name === '@everyone' || b.name === '@everyone') return;
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = filteredRoles.findIndex((r) => r.id === active.id);
+    const newIndex = filteredRoles.findIndex((r) => r.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered: Role[] = arrayMove(filteredRoles, oldIndex, newIndex);
+    const everyoneRole = reordered.find((r: Role) => r.name === '@everyone');
+    const nonEveryone = reordered.filter((r: Role) => r.name !== '@everyone');
+    const positions = nonEveryone.map((role: Role, index: number) => ({
+      id: role.id,
+      position: nonEveryone.length - index,
+    }));
+    if (everyoneRole) {
+      positions.push({ id: everyoneRole.id, position: 0 });
+    }
+
     try {
-      await api.patch(`/api/servers/${serverId}/roles/reorder`, {
-        roles: [
-          { id: a.id, position: b.position },
-          { id: b.id, position: a.position },
-        ],
-      });
+      await api.patch(`/api/servers/${serverId}/roles/reorder`, { roles: positions });
       queryClient.invalidateQueries({ queryKey: ['roles', serverId] });
-    } catch { /* silently fail */ }
+    } catch {
+      // revert on failure
+      queryClient.invalidateQueries({ queryKey: ['roles', serverId] });
+    }
   };
 
   const handleDelete = async (roleId: string) => {
@@ -123,7 +262,7 @@ export function RolesPanel({ serverId }: { serverId: string }) {
     if (!selectedRoleId) return;
     setSaving(true);
     try {
-      const body: Record<string, any> = {
+      const body: Record<string, unknown> = {
         server_permissions: editServerPerms,
         text_permissions: editTextPerms,
         voice_permissions: editVoicePerms,
@@ -142,6 +281,35 @@ export function RolesPanel({ serverId }: { serverId: string }) {
       // silently fail
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Helpers for tri-state permission get/set
+  const getPermTriState = (perm: PermissionDef): TriState => {
+    let perms: number;
+    switch (perm.scope) {
+      case 'server': perms = editServerPerms; break;
+      case 'text': perms = editTextPerms; break;
+      case 'voice': perms = editVoicePerms; break;
+    }
+    const isOn = hasBit(perms, perm.bit);
+    // For tri-state: currently we map bitmask on = allow, off = default
+    // Deny state uses a separate deny mask concept — for now, on = allow, off = default
+    return isOn ? 'allow' : 'default';
+  };
+
+  const setPermTriState = (perm: PermissionDef, state: TriState) => {
+    const isOn = state === 'allow';
+    switch (perm.scope) {
+      case 'server':
+        setEditServerPerms((prev) => setBit(prev, perm.bit, isOn));
+        break;
+      case 'text':
+        setEditTextPerms((prev) => setBit(prev, perm.bit, isOn));
+        break;
+      case 'voice':
+        setEditVoicePerms((prev) => setBit(prev, perm.bit, isOn));
+        break;
     }
   };
 
@@ -169,75 +337,73 @@ export function RolesPanel({ serverId }: { serverId: string }) {
         </Button>
       </Group>
 
-      {/* Duplicate position warning */}
-      {hasDuplicatePositions && (
-        <Alert
-          icon={<IconAlertTriangle size={16} />}
-          color="yellow"
-          variant="light"
-          title="Duplicate Positions Detected"
-        >
-          <Text size="xs" mb={8}>
-            Multiple roles share the same position. This can cause hierarchy issues.
-          </Text>
-          <Button
-            size="xs"
-            variant="filled"
-            color="yellow"
-            loading={fixingPositions}
-            onClick={handleFixPositions}
-          >
-            Fix Positions
-          </Button>
-        </Alert>
-      )}
+      {/* Role search */}
+      <TextInput
+        placeholder="Search roles..."
+        leftSection={<IconSearch size={14} />}
+        value={roleSearch}
+        onChange={(e) => setRoleSearch(e.currentTarget.value)}
+        size="sm"
+      />
 
-      {/* Role list */}
-      {sortedRoles.length > 0 ? (
-        <Stack gap={4}>
-          {sortedRoles.map((role, index) => (
-            <Group
-              key={role.id}
-              gap={8}
-              px={12}
-              py={8}
-              style={{
-                borderRadius: 4,
-                background: selectedRoleId === role.id ? 'rgba(139, 92, 246, 0.15)' : 'var(--bg-hover)',
-                border: selectedRoleId === role.id ? '1px solid var(--mantine-color-violet-5)' : '1px solid transparent',
-                cursor: 'pointer',
-              }}
-              onClick={() => setSelectedRoleId(selectedRoleId === role.id ? null : role.id)}
+      {/* Role list with DnD */}
+      {filteredRoles.length > 0 ? (
+        roleSearch ? (
+          // When searching, disable DnD
+          <Stack gap={4}>
+            {filteredRoles.map((role) => (
+              <Group
+                key={role.id}
+                gap={8}
+                px={12}
+                py={8}
+                style={{
+                  borderRadius: 4,
+                  background: selectedRoleId === role.id ? 'rgba(139, 92, 246, 0.15)' : 'var(--bg-hover)',
+                  border: selectedRoleId === role.id ? '1px solid var(--mantine-color-violet-5)' : '1px solid transparent',
+                  cursor: 'pointer',
+                }}
+                onClick={() => setSelectedRoleId(selectedRoleId === role.id ? null : role.id)}
+              >
+                <div style={{
+                  width: 12, height: 12, borderRadius: '50%',
+                  background: role.color || 'var(--text-muted)', flexShrink: 0,
+                }} />
+                <Text size="sm" style={{ flex: 1 }}>{role.name}</Text>
+                {role.name !== '@everyone' && (
+                  <Tooltip label="Delete Role" withArrow>
+                    <div onClick={(e) => { e.stopPropagation(); handleDelete(role.id); }} style={{ cursor: 'pointer' }}>
+                      <IconTrash size={14} style={{ color: 'var(--mantine-color-red-5)' }} />
+                    </div>
+                  </Tooltip>
+                )}
+              </Group>
+            ))}
+          </Stack>
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={filteredRoles.map((r) => r.id)}
+              strategy={verticalListSortingStrategy}
             >
-              {role.name !== '@everyone' && (
-                <Group gap={2} onClick={(e) => e.stopPropagation()}>
-                  <ActionIcon variant="subtle" color="gray" size={20} disabled={index === 0} onClick={() => handleMoveRole(index, -1)}>
-                    <IconArrowUp size={12} />
-                  </ActionIcon>
-                  <ActionIcon variant="subtle" color="gray" size={20} disabled={index === sortedRoles.length - 1 || sortedRoles[index + 1]?.name === '@everyone'} onClick={() => handleMoveRole(index, 1)}>
-                    <IconArrowDown size={12} />
-                  </ActionIcon>
-                </Group>
-              )}
-              <div style={{
-                width: 12, height: 12, borderRadius: '50%',
-                background: role.color || 'var(--text-muted)', flexShrink: 0,
-              }} />
-              <Text size="sm" style={{ flex: 1 }}>{role.name}</Text>
-              {(role.hoist || role.is_hoisted) && (
-                <Badge size="xs" variant="outline" color="gray">Hoisted</Badge>
-              )}
-              <Text size="xs" c="dimmed">Pos: {role.position}</Text>
-              {role.name !== '@everyone' && (
-                <Tooltip label="Delete Role" withArrow>
-                  <ActionIcon variant="subtle" color="red" size={24} onClick={(e) => { e.stopPropagation(); handleDelete(role.id); }}>
-                    <IconTrash size={14} />
-                  </ActionIcon>
-                </Tooltip>
-              )}
-            </Group>
-          ))}
-        </Stack>
+              <Stack gap={4}>
+                {filteredRoles.map((role) => (
+                  <SortableRoleItem
+                    key={role.id}
+                    role={role}
+                    isSelected={selectedRoleId === role.id}
+                    onSelect={() => setSelectedRoleId(selectedRoleId === role.id ? null : role.id)}
+                    isDragDisabled={role.name === '@everyone'}
+                  />
+                ))}
+              </Stack>
+            </SortableContext>
+          </DndContext>
+        )
       ) : (
         <Text c="dimmed" size="sm" style={{ fontStyle: 'italic' }}>No roles configured.</Text>
       )}
@@ -280,47 +446,63 @@ export function RolesPanel({ serverId }: { serverId: string }) {
             size="xs"
           />
 
-          <Text size="xs" fw={700} tt="uppercase" c="dimmed">Server Permissions</Text>
-          <Stack gap={2}>
-            {ROLE_PERMISSIONS.server.map((perm) => (
-              <Switch
-                key={perm.key}
-                label={perm.label}
-                description={perm.description}
-                checked={hasBit(editServerPerms, perm.bit)}
-                onChange={(e) => setEditServerPerms(setBit(editServerPerms, perm.bit, e.currentTarget.checked))}
-                size="xs"
-              />
-            ))}
-          </Stack>
+          {/* Permission groups as Accordion */}
+          <Divider label="Permissions" labelPosition="left" />
 
-          <Text size="xs" fw={700} tt="uppercase" c="dimmed">Text Permissions</Text>
-          <Stack gap={2}>
-            {ROLE_PERMISSIONS.text.map((perm) => (
-              <Switch
-                key={perm.key}
-                label={perm.label}
-                description={perm.description}
-                checked={hasBit(editTextPerms, perm.bit)}
-                onChange={(e) => setEditTextPerms(setBit(editTextPerms, perm.bit, e.currentTarget.checked))}
-                size="xs"
-              />
-            ))}
-          </Stack>
+          <Accordion variant="separated" multiple>
+            {PERMISSION_GROUPS.map((group) => {
+              const allowCount = group.permissions.filter((p) => getPermTriState(p) === 'allow').length;
+              const hasDangerous = group.permissions.some(
+                (p) => p.dangerous && getPermTriState(p) === 'allow',
+              );
 
-          <Text size="xs" fw={700} tt="uppercase" c="dimmed">Voice Permissions</Text>
-          <Stack gap={2}>
-            {ROLE_PERMISSIONS.voice.map((perm) => (
-              <Switch
-                key={perm.key}
-                label={perm.label}
-                description={perm.description}
-                checked={hasBit(editVoicePerms, perm.bit)}
-                onChange={(e) => setEditVoicePerms(setBit(editVoicePerms, perm.bit, e.currentTarget.checked))}
-                size="xs"
-              />
-            ))}
-          </Stack>
+              return (
+                <Accordion.Item key={group.category} value={group.category}>
+                  <Accordion.Control>
+                    <Group gap={8}>
+                      <Text size="sm" fw={600}>{group.name}</Text>
+                      {allowCount > 0 && (
+                        <Badge
+                          size="xs"
+                          variant="light"
+                          color={hasDangerous ? 'red' : 'green'}
+                        >
+                          {allowCount} allowed
+                        </Badge>
+                      )}
+                    </Group>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Stack gap={2}>
+                      {group.permissions.map((perm) => (
+                        <PermissionTriState
+                          key={perm.key}
+                          perm={perm}
+                          value={getPermTriState(perm)}
+                          onChange={(val) => setPermTriState(perm, val)}
+                        />
+                      ))}
+                    </Stack>
+                  </Accordion.Panel>
+                </Accordion.Item>
+              );
+            })}
+          </Accordion>
+
+          {/* Danger zone */}
+          {selectedRole.name !== '@everyone' && (
+            <>
+              <Divider label="Danger Zone" labelPosition="left" color="red" />
+              <Button
+                variant="outline"
+                color="red"
+                leftSection={<IconTrash size={14} />}
+                onClick={() => handleDelete(selectedRole.id)}
+              >
+                Delete Role
+              </Button>
+            </>
+          )}
 
           <Group>
             <Button onClick={handleSaveRole} loading={saving}>Save Role</Button>
