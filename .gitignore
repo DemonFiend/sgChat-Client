@@ -30,6 +30,7 @@ src-tauri/
 
 # Claude Code
 .claude/
+AGENTS.md
 
 # Plan/working files
 clientplan.md
@@ -45,6 +46,15 @@ srv-api-endpoint.md
 
 # Beads issue tracking
 .beads/
+.gitattributes
+
+# Test output
+playwright-report/
+qa-screenshots/
+test-*.cjs
+
+# TypeScript build cache
+*.tsbuildinfo
 
 # Server backups
 .srv_backup/

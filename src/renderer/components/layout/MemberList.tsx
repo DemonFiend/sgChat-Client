@@ -31,6 +31,33 @@ interface Member {
   status?: string;
   custom_status?: string;
   joined_at?: string;
+  is_system?: boolean;
+  system?: boolean;
+  is_bot?: boolean;
+  bot?: boolean;
+  user?: {
+    is_system?: boolean;
+    system?: boolean;
+    is_bot?: boolean;
+    bot?: boolean;
+  };
+}
+
+function resolveMemberStatus(member: Member, statuses: Record<string, string>): string {
+  return statuses[member.id] || member.status || 'offline';
+}
+
+function isVisibleSystemAccount(member: Member): boolean {
+  return Boolean(
+    member.is_system ||
+    member.system ||
+    member.is_bot ||
+    member.bot ||
+    member.user?.is_system ||
+    member.user?.system ||
+    member.user?.is_bot ||
+    member.user?.bot
+  );
 }
 
 export function MemberList() {
@@ -162,12 +189,13 @@ export function MemberList() {
 
   // Filter members by search query
   const query = searchQuery.trim().toLowerCase();
+  const visibleMembers = (members || []).filter((m) => !isVisibleSystemAccount(m));
   const filteredMembers = query
-    ? (members || []).filter((m) =>
-        m.username.toLowerCase().includes(query) ||
-        (m.display_name && m.display_name.toLowerCase().includes(query))
-      )
-    : (members || []);
+    ? visibleMembers.filter((m) =>
+      m.username.toLowerCase().includes(query) ||
+      (m.display_name && m.display_name.toLowerCase().includes(query))
+    )
+    : visibleMembers;
 
   // Group members by their highest hoisted role
   const hoistedRoles = (roles || [])
@@ -176,10 +204,11 @@ export function MemberList() {
 
   const grouped: { role: Role | null; label: string; members: Member[] }[] = [];
   const assigned = new Set<string>();
+  const isOnlineVisible = (member: Member) => resolveMemberStatus(member, statuses) !== 'offline';
 
   for (const role of hoistedRoles) {
     const roleMembers = filteredMembers.filter(
-      (m) => m.roles?.some((r) => r.id === role.id) && !assigned.has(m.id)
+      (m) => m.roles?.some((r) => r.id === role.id) && !assigned.has(m.id) && isOnlineVisible(m)
     );
     if (roleMembers.length > 0) {
       grouped.push({ role, label: role.name, members: roleMembers });
@@ -189,8 +218,8 @@ export function MemberList() {
 
   // Remaining online/offline
   const remaining = filteredMembers.filter((m) => !assigned.has(m.id));
-  const online = remaining.filter((m) => statuses[m.id] && statuses[m.id] !== 'offline');
-  const offline = remaining.filter((m) => !statuses[m.id] || statuses[m.id] === 'offline');
+  const online = remaining.filter((m) => isOnlineVisible(m));
+  const offline = remaining.filter((m) => !isOnlineVisible(m));
 
   if (online.length > 0) grouped.push({ role: null, label: 'Online', members: online });
   if (offline.length > 0) grouped.push({ role: null, label: 'Offline', members: offline });
