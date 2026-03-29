@@ -52,7 +52,7 @@ function createWindow(): BrowserWindow {
     },
     show: false,
     backgroundColor: '#1a1b1e',
-    icon: path.join(__dirname, '../../resources/icon.png'),
+    icon: path.join(__dirname, '../../resources/taskbar-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
