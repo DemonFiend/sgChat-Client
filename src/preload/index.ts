@@ -139,6 +139,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     set: (action: string, combo: string) => ipcRenderer.invoke('shortcuts:set', action, combo),
   },
 
+  // E2E encryption (DM end-to-end)
+  e2e: {
+    init: () => ipcRenderer.invoke('e2e:init'),
+    getKeyBundle: () => ipcRenderer.invoke('e2e:getKeyBundle'),
+    getDeviceId: () => ipcRenderer.invoke('e2e:getDeviceId'),
+    hasKeys: () => ipcRenderer.invoke('e2e:hasKeys'),
+    getLocalOTPCount: () => ipcRenderer.invoke('e2e:getLocalOTPCount'),
+    generateOTPKeys: (count?: number) => ipcRenderer.invoke('e2e:generateOTPKeys', count),
+    encrypt: (recipientUserId: string, plaintext: string, recipientBundle?: any) =>
+      ipcRenderer.invoke('e2e:encrypt', recipientUserId, plaintext, recipientBundle),
+    decrypt: (senderUserId: string, envelope: any) =>
+      ipcRenderer.invoke('e2e:decrypt', senderUserId, envelope),
+    hasSession: (userId: string) => ipcRenderer.invoke('e2e:hasSession', userId),
+    clearSession: (userId: string) => ipcRenderer.invoke('e2e:clearSession', userId),
+    clearAll: () => ipcRenderer.invoke('e2e:clearAll'),
+  },
+
   // Crypto (payload encryption)
   crypto: {
     negotiate: () => ipcRenderer.invoke('crypto:negotiate'),

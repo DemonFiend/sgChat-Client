@@ -16,6 +16,14 @@ import {
   getKeyMaterial, getSessionInfo, getSessionId,
   hasActiveSession,
 } from './crypto';
+import {
+  initE2EKeys, getKeyBundle, getDeviceId, getLocalOTPKeyCount,
+  generateMoreOneTimePreKeys, clearE2EKeys, hasE2EKeys,
+} from './e2e-keys';
+import {
+  initE2ESessions, e2eEncrypt, e2eDecrypt, hasSession,
+  clearSession, clearAllSessions, type E2EEncryptedEnvelope,
+} from './e2e-crypto';
 import { stopAppAudioCapture, isAppAudioSupported } from './app-audio-capture';
 import { getEnhancedSources } from './screen-sources';
 
@@ -138,6 +146,62 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         userId,
       });
     }
+  });
+
+  // ── E2E Encryption ──────────────────────────────────────────────────────
+  ipcMain.handle('e2e:init', () => {
+    initE2EKeys();
+    initE2ESessions();
+    return { deviceId: getDeviceId() };
+  });
+
+  ipcMain.handle('e2e:getKeyBundle', () => {
+    return getKeyBundle();
+  });
+
+  ipcMain.handle('e2e:getDeviceId', () => {
+    return getDeviceId();
+  });
+
+  ipcMain.handle('e2e:hasKeys', () => {
+    return hasE2EKeys();
+  });
+
+  ipcMain.handle('e2e:getLocalOTPCount', () => {
+    return getLocalOTPKeyCount();
+  });
+
+  ipcMain.handle('e2e:generateOTPKeys', (_event, count?: number) => {
+    return generateMoreOneTimePreKeys(count);
+  });
+
+  ipcMain.handle('e2e:encrypt', (_event, recipientUserId: string, plaintext: string, recipientBundle?: any) => {
+    try {
+      return { ok: true, envelope: e2eEncrypt(recipientUserId, plaintext, recipientBundle) };
+    } catch (err: any) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('e2e:decrypt', (_event, senderUserId: string, envelope: E2EEncryptedEnvelope) => {
+    try {
+      return { ok: true, plaintext: e2eDecrypt(senderUserId, envelope) };
+    } catch (err: any) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('e2e:hasSession', (_event, userId: string) => {
+    return hasSession(userId);
+  });
+
+  ipcMain.handle('e2e:clearSession', (_event, userId: string) => {
+    clearSession(userId);
+  });
+
+  ipcMain.handle('e2e:clearAll', () => {
+    clearAllSessions();
+    clearE2EKeys();
   });
 
   // ── Auth ───────────────────────────────────────────────────────────────

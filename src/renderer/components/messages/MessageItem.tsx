@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ActionIcon, Button, Group, Image, Modal, Text, Textarea, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconArrowBackUp, IconCopy, IconEdit, IconExternalLink, IconLink, IconMessage2, IconMoodSmile, IconPin, IconPinnedOff, IconTrash } from '@tabler/icons-react';
+import { IconArrowBackUp, IconCopy, IconEdit, IconExternalLink, IconLink, IconLock, IconMessage2, IconMoodSmile, IconPin, IconPinnedOff, IconTrash } from '@tabler/icons-react';
 import { useEditMessage, useDeleteMessage, useAddReaction, useRemoveReaction, usePinMessage, useUnpinMessage, type Message } from '../../hooks/useMessages';
 import { useCreateThread } from '../../hooks/useThreads';
 import { useMessagePreview } from '../../hooks/useServerInfo';
@@ -288,7 +288,16 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
         </div>
       ) : (
         <Text size="sm" style={{ color: 'var(--text-primary)', lineHeight: 1.375, wordBreak: 'break-word' }}>
-          <MessageContent content={message.content} isOwnMessage={isOwn} />
+          {message.is_encrypted ? (
+            <Text component="span" size="sm" c="dimmed" fs="italic" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <IconLock size={14} />
+              {message.content
+                ? <MessageContent content={message.content} isOwnMessage={isOwn} />
+                : 'This message is end-to-end encrypted.'}
+            </Text>
+          ) : (
+            <MessageContent content={message.content} isOwnMessage={isOwn} />
+          )}
           {isEdited && (
             <Text component="span" size="xs" c="dimmed" ml={4}>
               (edited)

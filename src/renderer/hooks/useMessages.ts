@@ -43,6 +43,8 @@ export interface Message {
   system_event: string | null;
   pinned?: boolean;
   is_tts?: boolean;
+  is_encrypted?: boolean;
+  encrypted_content?: string;
 }
 
 export function useMessages(channelId: string | null) {

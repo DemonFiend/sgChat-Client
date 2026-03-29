@@ -17,6 +17,7 @@ import { ScreenSharePicker } from './components/ui/ScreenSharePicker';
 import { UpdateModal } from './components/ui/UpdateModal';
 import { LayoutSkeleton } from './components/ui/LayoutSkeleton';
 import { ImpersonationBanner } from './components/ui/ImpersonationBanner';
+import { useE2EStore } from './stores/e2eStore';
 
 type AuthView = 'loading' | 'server-setup' | 'login' | 'register' | 'forgot-password' | 'reset-password' | 'pending-approval' | 'app';
 
@@ -59,6 +60,20 @@ function AuthRouter() {
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Initialize E2E encryption when authenticated
+  const e2eInit = useE2EStore((s) => s.init);
+  const e2eUploadKeys = useE2EStore((s) => s.uploadKeyBundle);
+  const e2eReplenish = useE2EStore((s) => s.replenishOTPKeys);
+  useEffect(() => {
+    if (isAuthenticated) {
+      e2eInit().then(() => {
+        e2eUploadKeys().catch(() => {});
+        e2eReplenish().catch(() => {});
+      }).catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (isLoading) {
