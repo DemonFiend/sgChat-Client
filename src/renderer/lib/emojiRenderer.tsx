@@ -194,11 +194,12 @@ export function renderCustomEmojis(text: string): (string | React.ReactElement)[
       let handled = false;
       if (hasManifest && enabledPackIds) {
         const emoji = manifest!.emojis.find((e) => e.shortcode === shortcode);
-        if (emoji && enabledPackIds.has(emoji.pack_id)) {
+        if (emoji && enabledPackIds.has(emoji.pack_id) && emoji.image_url) {
+          const url = resolveAssetUrl(emoji.image_url);
+          if (!url) break; // Skip if URL resolution fails
           if (match.index > lastIndex) {
             parts.push(text.slice(lastIndex, match.index));
           }
-          const url = resolveAssetUrl(emoji.image_url);
           parts.push(
             <Tooltip
               key={`emoji-${match.index}`}

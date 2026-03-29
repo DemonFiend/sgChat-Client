@@ -224,6 +224,9 @@ export async function connectSocket(): Promise<void> {
       heartbeatInterval = null;
     }
 
+    // Clear presence data on disconnect — will be refreshed on reconnect
+    usePresenceStore.getState().clearAll();
+
     // Try to resume on reconnect
     if (reason !== 'io client disconnect') {
       socket?.once('connect', () => {
@@ -474,6 +477,7 @@ export function handleEvent(type: string, data: any): void {
     case 'server.kicked':
       useVoiceStore.getState().leave().catch(() => {});
       queryClient.invalidateQueries({ queryKey: ['servers'] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
       toastStore.addToast({
         type: 'warning',
         title: 'Kicked',

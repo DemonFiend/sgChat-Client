@@ -30,8 +30,8 @@ export function EmojiAutocomplete({ text, cursorPosition, onSelect, inputRef }: 
     if (lastColon > 0 && text[lastColon - 1] !== ' ' && text[lastColon - 1] !== '\n') {
       return { query: null, colonStart: -1 };
     }
-    // Need at least 2 chars to search
-    if (partial.length < 2) return { query: null, colonStart: -1 };
+    // Need at least 1 char to search
+    if (partial.length < 1) return { query: null, colonStart: -1 };
     // No spaces in shortcode
     if (partial.includes(' ')) return { query: null, colonStart: -1 };
 

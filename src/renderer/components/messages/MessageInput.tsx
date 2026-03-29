@@ -126,7 +126,7 @@ export function MessageInput({ channelId, channelName, onSendOverride, onTyping 
     const file = new File([blob], 'message.txt', { type: 'text/plain' });
 
     try {
-      await api.upload(`/api/channels/${channelId}/messages/upload`, file);
+      await api.upload(`/api/upload/image`, file);
       setContent('');
       setReplyTo(null);
       lastTypingEmit.current = 0;
@@ -150,7 +150,7 @@ export function MessageInput({ channelId, channelName, onSendOverride, onTyping 
       for (let i = 0; i < files.length; i++) {
         try {
           const isSpoiler = spoilerFiles.has(i);
-          await api.upload(`/api/channels/${channelId}/messages/upload`, files[i], isSpoiler ? { spoiler: 'true' } : undefined);
+          await api.upload(`/api/upload/image`, files[i], isSpoiler ? { spoiler: 'true' } : undefined);
         } catch (err) {
           failedIndexes.add(i);
           toastStore.addToast({

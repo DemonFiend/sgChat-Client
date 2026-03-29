@@ -6,9 +6,11 @@ import {
   IconFolder,
   IconUserPlus,
   IconDoorExit,
+  IconLogout,
   IconServer2,
 } from '@tabler/icons-react';
 import { useUIStore } from '../../stores/uiStore';
+import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { toastStore } from '../../stores/toastNotifications';
@@ -153,6 +155,19 @@ export function ServerGearMenu({ opened, onClose, serverId, serverName, isAdmin,
             onClick={handleLeaveClick}
           >
             Leave Server
+          </Menu.Item>
+
+          <Menu.Divider />
+
+          <Menu.Item
+            leftSection={<IconLogout size={16} />}
+            color="red"
+            onClick={() => {
+              onClose();
+              useAuthStore.getState().logout(true);
+            }}
+          >
+            Log Out
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>

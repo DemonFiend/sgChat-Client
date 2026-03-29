@@ -81,13 +81,26 @@ export function RolePickerModal({ opened, onClose, serverId }: RolePickerModalPr
     enabled: opened && !!serverId,
   });
 
+  // Fetch all roles to resolve names when API response is missing role_name
+  const { data: serverRoles } = useQuery({
+    queryKey: ['roles', serverId],
+    queryFn: () => api.getArray<{ id: string; name: string; color?: string }>(`/api/servers/${serverId}/roles`),
+    enabled: opened && !!serverId,
+  });
+
+  const roleMap = new Map((serverRoles || []).map((r) => [r.id, r]));
   const myRoleIds = new Set(myRoles?.role_ids || []);
 
   const allMappings = (groups || []).flatMap((g) =>
-    g.mappings.map((m) => ({
-      ...m,
-      groupName: g.name,
-    })),
+    g.mappings.map((m) => {
+      const resolved = roleMap.get(m.role_id);
+      return {
+        ...m,
+        role_name: m.role_name || resolved?.name,
+        role_color: m.role_color || resolved?.color || null,
+        groupName: g.name,
+      };
+    }),
   );
 
   const handleToggle = async (roleId: string) => {

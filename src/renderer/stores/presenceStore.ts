@@ -8,6 +8,10 @@ interface PresenceState {
   updateStatusComment: (userId: string, comment: string) => void;
   getStatus: (userId: string) => string;
   getStatusComment: (userId: string) => string;
+  /** Set a batch of presence statuses (e.g. from initial member list load) */
+  setBulkPresence: (statuses: Record<string, string>) => void;
+  /** Clear all presence data (e.g. on socket disconnect) */
+  clearAll: () => void;
 }
 
 export const usePresenceStore = create<PresenceState>((set, get) => ({
@@ -27,4 +31,8 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
   getStatus: (userId) => get().statuses[userId] || 'offline',
 
   getStatusComment: (userId) => get().statusComments[userId] || '',
+
+  setBulkPresence: (statuses) => set({ statuses }),
+
+  clearAll: () => set({ statuses: {}, statusComments: {} }),
 }));
