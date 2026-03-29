@@ -52,6 +52,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     remove: (url: string) => ipcRenderer.invoke('servers:remove', url),
     switch: (targetUrl: string) => ipcRenderer.invoke('servers:switch', targetUrl),
     saveCurrentSession: () => ipcRenderer.invoke('servers:saveCurrentSession'),
+    getFavorite: () => ipcRenderer.invoke('servers:getFavorite'),
+    setFavorite: (url: string) => ipcRenderer.invoke('servers:setFavorite', url),
   },
 
   // Auth

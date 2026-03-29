@@ -29,6 +29,7 @@ interface SettingsSchema {
     isMaximized: boolean;
   };
   savedServers: SavedServer[];
+  favoriteServerUrl: string;
 }
 
 let _settingsStore: Store<SettingsSchema> | null = null;
@@ -45,6 +46,7 @@ function getSettingsStore(): Store<SettingsSchema> {
           isMaximized: false,
         },
         savedServers: [],
+        favoriteServerUrl: '',
       },
     });
   }
@@ -180,6 +182,20 @@ export function saveServer(server: Omit<SavedServer, 'lastUsed'>): void {
 export function removeSavedServer(url: string): void {
   const servers = getSavedServers().filter((s) => s.url !== url);
   getSettingsStore().set('savedServers', servers);
+  // Clear favorite if the removed server was the favorite
+  if (getFavoriteServerUrl() === url) {
+    setFavoriteServerUrl('');
+  }
+}
+
+// ── Favorite Server ──────────────────────────────────────────────────────────
+
+export function getFavoriteServerUrl(): string {
+  return getSettingsStore().get('favoriteServerUrl') || '';
+}
+
+export function setFavoriteServerUrl(url: string): void {
+  getSettingsStore().set('favoriteServerUrl', url);
 }
 
 /**

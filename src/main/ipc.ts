@@ -5,6 +5,7 @@ import {
   getRememberedEmail, setRememberedEmail,
   isAuthenticated,
   getSavedServers, saveServer, removeSavedServer, switchToServer,
+  getFavoriteServerUrl, setFavoriteServerUrl,
   getAccessToken, getRefreshToken, getUserId,
   type SavedServer,
 } from './store';
@@ -110,6 +111,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     clearCryptoSession();
     const result = switchToServer(targetUrl);
     return result;
+  });
+
+  ipcMain.handle('servers:getFavorite', () => {
+    return getFavoriteServerUrl();
+  });
+
+  ipcMain.handle('servers:setFavorite', (_event, url: string) => {
+    setFavoriteServerUrl(url);
   });
 
   ipcMain.handle('servers:saveCurrentSession', () => {

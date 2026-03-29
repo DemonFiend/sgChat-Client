@@ -16,6 +16,8 @@ interface ElectronAPI {
   };
   servers: {
     saveCurrentSession: () => void;
+    getFavorite: () => Promise<string>;
+    setFavorite: (url: string) => void;
   };
 }
 
@@ -96,6 +98,11 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword, onBack }: Logi
         electronAPI.config.setRememberedEmail(rememberMe ? email : '');
         if (rememberMe) {
           electronAPI.servers.saveCurrentSession();
+          // Auto-set the first "Remember me" server as favorite
+          const currentFavorite = await electronAPI.servers.getFavorite();
+          if (!currentFavorite) {
+            electronAPI.servers.setFavorite(serverUrl);
+          }
         }
       } else {
         // Handle specific error codes

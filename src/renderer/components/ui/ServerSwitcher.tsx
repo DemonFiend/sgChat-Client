@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActionIcon, Group, Popover, Text, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconServer2, IconTrash, IconCheck } from '@tabler/icons-react';
+import { IconServer2, IconTrash, IconCheck, IconStar, IconStarFilled } from '@tabler/icons-react';
 import { useAuthStore } from '../../stores/authStore';
 
 const electronAPI = (window as any).electronAPI;
@@ -15,14 +15,18 @@ interface SavedServer {
 export function ServerSwitcher() {
   const [opened, setOpened] = useState(false);
   const [servers, setServers] = useState<SavedServer[]>([]);
+  const [favoriteUrl, setFavoriteUrl] = useState('');
   const [switching, setSwitching] = useState(false);
   const currentServerUrl = useAuthStore((s) => s.serverUrl);
 
-  // Load saved servers when popover opens
+  // Load saved servers and favorite when popover opens
   useEffect(() => {
     if (opened) {
       electronAPI.servers.getSaved().then((saved: SavedServer[]) => {
         setServers(saved.sort((a: SavedServer, b: SavedServer) => b.lastUsed - a.lastUsed));
+      });
+      electronAPI.servers.getFavorite().then((fav: string) => {
+        setFavoriteUrl(fav || '');
       });
     }
   }, [opened]);
@@ -43,10 +47,20 @@ export function ServerSwitcher() {
     }
   };
 
+  const handleToggleFavorite = async (e: React.MouseEvent, serverUrl: string) => {
+    e.stopPropagation();
+    const newFav = favoriteUrl === serverUrl ? '' : serverUrl;
+    await electronAPI.servers.setFavorite(newFav);
+    setFavoriteUrl(newFav);
+  };
+
   const handleRemove = async (e: React.MouseEvent, url: string) => {
     e.stopPropagation();
     await electronAPI.servers.remove(url);
     setServers((prev) => prev.filter((s) => s.url !== url));
+    if (favoriteUrl === url) {
+      setFavoriteUrl('');
+    }
   };
 
   // Extract display name from URL (remove protocol, trailing slash)
@@ -58,6 +72,13 @@ export function ServerSwitcher() {
       return url;
     }
   };
+
+  // Sort: favorite first, then by lastUsed
+  const sortedServers = [...servers].sort((a, b) => {
+    if (a.url === favoriteUrl) return -1;
+    if (b.url === favoriteUrl) return 1;
+    return b.lastUsed - a.lastUsed;
+  });
 
   const hasOtherServers = servers.some((s) => s.url !== currentServerUrl);
 
@@ -111,8 +132,9 @@ export function ServerSwitcher() {
             </Text>
           )}
 
-          {servers.map((server) => {
+          {sortedServers.map((server) => {
             const isCurrent = server.url === currentServerUrl;
+            const isFavorite = server.url === favoriteUrl;
             return (
               <UnstyledButton
                 key={server.url}
@@ -154,6 +176,17 @@ export function ServerSwitcher() {
                   </Text>
                   <Text size="xs" c="dimmed" truncate>{server.email}</Text>
                 </div>
+
+                <Tooltip label={isFavorite ? 'Remove favorite' : 'Set as favorite'} position="left" withArrow>
+                  <ActionIcon
+                    variant="subtle"
+                    color={isFavorite ? 'yellow' : 'gray'}
+                    size={20}
+                    onClick={(e) => handleToggleFavorite(e, server.url)}
+                  >
+                    {isFavorite ? <IconStarFilled size={12} /> : <IconStar size={12} />}
+                  </ActionIcon>
+                </Tooltip>
 
                 {!isCurrent && (
                   <Tooltip label="Remove" position="left" withArrow>

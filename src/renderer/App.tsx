@@ -20,18 +20,45 @@ import { ImpersonationBanner } from './components/ui/ImpersonationBanner';
 
 type AuthView = 'loading' | 'server-setup' | 'login' | 'register' | 'forgot-password' | 'reset-password' | 'pending-approval' | 'app';
 
+const electronAPI = (window as any).electronAPI;
+
 function AuthRouter() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
   const isPendingApproval = useAuthStore((s) => s.isPendingApproval);
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const checkAuth = useAuthStore((s) => s.checkAuth);
+  const setServerUrl = useAuthStore((s) => s.setServerUrl);
   const [view, setView] = useState<AuthView>('loading');
   const [resetToken, setResetToken] = useState('');
 
+  // Auto-connect to favorite server on startup, then check auth
   useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const favoriteUrl = await electronAPI.servers.getFavorite();
+        if (cancelled) return;
+        if (favoriteUrl) {
+          const savedServers = await electronAPI.servers.getSaved();
+          if (cancelled) return;
+          const hasCreds = savedServers.some((s: any) => s.url === favoriteUrl);
+          if (hasCreds) {
+            const result = await electronAPI.servers.switch(favoriteUrl);
+            if (cancelled) return;
+            if (result) {
+              setServerUrl(favoriteUrl);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[AuthRouter] Auto-connect failed:', err);
+      }
+      if (!cancelled) checkAuth();
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (isLoading) {
