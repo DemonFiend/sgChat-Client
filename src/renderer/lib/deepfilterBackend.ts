@@ -12,6 +12,11 @@
 import { DeepFilterNet3Core } from 'deepfilternet3-noise-filter';
 import type { NsBackend } from './noiseSuppressionService';
 
+// Local asset path — WASM + model bundled in public/, no external CDN fetch
+const LOCAL_ASSET_BASE = import.meta.env.DEV
+  ? '/deepfilter'
+  : './deepfilter';
+
 export class DeepFilterBackend implements NsBackend {
   readonly name = 'deepfilter';
 
@@ -41,10 +46,11 @@ export class DeepFilterBackend implements NsBackend {
     rawStream: MediaStream,
     aggressiveness: number,
   ): Promise<MediaStream> {
-    // Initialize DeepFilterNet3 core (loads WASM + model)
+    // Initialize DeepFilterNet3 core (loads WASM + model from local bundled assets)
     this._core = new DeepFilterNet3Core({
       sampleRate: 48000,
       noiseReductionLevel: Math.round(aggressiveness * 100),
+      assetConfig: { cdnUrl: LOCAL_ASSET_BASE },
     });
     await this._core.initialize();
 
