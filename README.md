@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Ubuntu%20%7C%20Android-lightgrey" alt="Platform">
   <img src="https://img.shields.io/badge/status-alpha-orange" alt="Status">
 </p>
 
@@ -45,8 +45,8 @@ You need a running sgChat server to connect to. Don't have one? See [Host Your O
 | Platform | Download |
 |----------|----------|
 | Windows  | *Coming soon* |
-| macOS    | *Coming soon* |
-| Linux    | *Coming soon* |
+| Ubuntu (LTS) | *Coming soon* |
+| Android  | *Coming soon* |
 
 ### Setup
 
@@ -79,7 +79,7 @@ Have questions? Check the **[FAQ](https://github.com/DemonFiend/sgChat/blob/main
 This is alpha software. Here's what we know about:
 
 - Some features are still being ported from the web client
-- macOS and Linux builds have not been extensively tested
+- Ubuntu and Android builds have not been extensively tested
 - Auto-update is not yet connected to a release channel
 - Voice/video quality depends on your server's LiveKit relay configuration
 
