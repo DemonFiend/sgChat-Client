@@ -156,6 +156,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clearAll: () => ipcRenderer.invoke('e2e:clearAll'),
   },
 
+  // Mic noise suppression (DeepFilterNet IPC bridge)
+  micNs: {
+    sendPcm: (data: ArrayBuffer) =>
+      ipcRenderer.send('mic-ns:pcm-outbound', Buffer.from(data)),
+    onProcessedPcm: (callback: (data: Buffer) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: Buffer) => callback(data);
+      ipcRenderer.on('mic-ns:pcm-inbound', handler);
+      return () => ipcRenderer.removeListener('mic-ns:pcm-inbound', handler);
+    },
+    onFallback: (callback: () => void) => {
+      const handler = () => callback();
+      ipcRenderer.on('mic-ns:fallback', handler);
+      return () => ipcRenderer.removeListener('mic-ns:fallback', handler);
+    },
+    onLevelUpdate: (callback: (levels: { inputDb: number; outputDb: number }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, levels: { inputDb: number; outputDb: number }) => callback(levels);
+      ipcRenderer.on('mic-ns:level-update', handler);
+      return () => ipcRenderer.removeListener('mic-ns:level-update', handler);
+    },
+    start: (aggressiveness: number) =>
+      ipcRenderer.invoke('mic-ns:start', aggressiveness),
+    stop: () => ipcRenderer.invoke('mic-ns:stop'),
+    setAggressiveness: (value: number) =>
+      ipcRenderer.invoke('mic-ns:set-aggressiveness', value),
+    isAvailable: () => ipcRenderer.invoke('mic-ns:isAvailable'),
+  },
+
   // Crypto (payload encryption)
   crypto: {
     negotiate: () => ipcRenderer.invoke('crypto:negotiate'),

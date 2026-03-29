@@ -1220,8 +1220,10 @@ function VoiceSettings() {
   const setVadSetting = useVoiceSettingsStore((s) => s.setVad);
   const inputSensitivity = useVoiceSettingsStore((s) => s.inputSensitivity);
   const setInputSensitivitySetting = useVoiceSettingsStore((s) => s.setInputSensitivity);
-  const aiNoiseSuppression = useVoiceSettingsStore((s) => s.aiNoiseSuppression);
-  const setAiNoiseSuppressionSetting = useVoiceSettingsStore((s) => s.setAiNoiseSuppression);
+  const noiseCancellationMode = useVoiceSettingsStore((s) => s.noiseCancellationMode);
+  const setNoiseCancellationMode = useVoiceSettingsStore((s) => s.setNoiseCancellationMode);
+  const nsAggressiveness = useVoiceSettingsStore((s) => s.nsAggressiveness);
+  const setNsAggressiveness = useVoiceSettingsStore((s) => s.setNsAggressiveness);
   const validateDevices = useVoiceSettingsStore((s) => s.validateDevices);
   const joinSoundEnabled = useVoiceSettingsStore((s) => s.joinSoundEnabled);
   const leaveSoundEnabled = useVoiceSettingsStore((s) => s.leaveSoundEnabled);
@@ -1236,8 +1238,8 @@ function VoiceSettings() {
   const joinSoundRef = useRef<HTMLInputElement>(null);
   const leaveSoundRef = useRef<HTMLInputElement>(null);
 
-  const [aiNsSupported, setAiNsSupported] = useState(true);
-  const [aiNsUnsupportedReason, setAiNsUnsupportedReason] = useState<string | null>(null);
+  const [nsnet2Supported, setNsnet2Supported] = useState(true);
+  const [deepfilterAvailable, setDeepfilterAvailable] = useState(false);
   const [cpuLevel, setCpuLevel] = useState<CpuLevel>('low');
 
   const [inputDevices, setInputDevices] = useState<{ value: string; label: string }[]>([
@@ -1289,11 +1291,15 @@ function VoiceSettings() {
     return () => navigator.mediaDevices.removeEventListener('devicechange', onChange);
   }, [validateDevices]);
 
-  // Check AI noise suppression capabilities and subscribe to CPU level
+  // Check noise suppression capabilities and subscribe to CPU level
   useEffect(() => {
-    const caps = noiseSuppressionService.checkCapabilities();
-    setAiNsSupported(caps.supported);
-    if (!caps.supported) setAiNsUnsupportedReason(caps.reason || 'Not supported');
+    const caps = noiseSuppressionService.checkCapabilities('nsnet2');
+    setNsnet2Supported(caps.supported);
+    // Check DeepFilterNet binary availability (async IPC)
+    const api = (window as any).electronAPI;
+    api?.micNs?.isAvailable?.().then((available: boolean) => {
+      setDeepfilterAvailable(available);
+    }).catch(() => setDeepfilterAvailable(false));
     const unsub = noiseSuppressionService.onCpuLevelChange(setCpuLevel);
     return unsub;
   }, []);
@@ -1488,8 +1494,8 @@ function VoiceSettings() {
 
       <div>
         <Group gap={8} mb={4}>
-          <Text size="sm" fw={500}>AI Noise Suppression</Text>
-          {aiNoiseSuppression && aiNsSupported && (
+          <Text size="sm" fw={500}>Noise Cancellation</Text>
+          {noiseCancellationMode !== 'off' && (
             <div style={{
               width: 8,
               height: 8,
@@ -1498,23 +1504,55 @@ function VoiceSettings() {
             }} />
           )}
         </Group>
-        <Switch
-          label=""
-          description={
-            aiNsSupported
-              ? 'AI-powered noise removal using DTLN (processes audio locally)'
-              : aiNsUnsupportedReason || 'Not supported in this environment'
-          }
-          checked={aiNoiseSuppression}
-          disabled={!aiNsSupported}
-          onChange={(e) => {
-            setAiNoiseSuppressionSetting(e.currentTarget.checked);
+        <Text size="xs" c="dimmed" mb={8}>
+          Choose how background noise is removed from your microphone. All processing happens locally.
+        </Text>
+        <SegmentedControl
+          value={noiseCancellationMode}
+          onChange={(val) => {
+            setNoiseCancellationMode(val as any);
             applyAudioProcessingSettings();
           }}
+          data={[
+            { label: 'Off', value: 'off' },
+            { label: 'NSNet2', value: 'nsnet2', disabled: !nsnet2Supported },
+            { label: 'DeepFilter', value: 'deepfilter', disabled: !deepfilterAvailable },
+          ]}
+          fullWidth
         />
+        {!deepfilterAvailable && (
+          <Text size="xs" c="dimmed" mt={4}>
+            DeepFilterNet binary not found — download it to enable this option.
+          </Text>
+        )}
       </div>
 
-      {!aiNoiseSuppression && (
+      {noiseCancellationMode !== 'off' && (
+        <div>
+          <Text size="sm" fw={500} mb={4}>Aggressiveness</Text>
+          <Text size="xs" c="dimmed" mb={8}>
+            Higher values remove more noise but may affect voice quality.
+          </Text>
+          <Slider
+            value={nsAggressiveness}
+            onChange={(val) => {
+              setNsAggressiveness(val);
+              noiseSuppressionService.setAggressiveness(val);
+            }}
+            min={0}
+            max={1}
+            step={0.05}
+            marks={[
+              { value: 0, label: 'Light' },
+              { value: 0.5, label: 'Balanced' },
+              { value: 1, label: 'Max' },
+            ]}
+            label={(v) => `${Math.round(v * 100)}%`}
+          />
+        </div>
+      )}
+
+      {noiseCancellationMode === 'off' && (
         <Switch
           label="Browser Noise Suppression"
           description="Basic browser-level noise reduction (fallback)"

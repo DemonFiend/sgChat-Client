@@ -14,7 +14,9 @@ export interface RemoteSettings {
   echo_cancellation?: boolean;
   auto_gain_control?: boolean;
   vad?: boolean;
-  ai_noise_suppression?: boolean;
+  ai_noise_suppression?: boolean; // Legacy — kept for backward compat with old servers
+  noise_cancellation_mode?: string; // 'off' | 'nsnet2' | 'deepfilter'
+  ns_aggressiveness?: number; // 0.0 – 1.0
   input_sensitivity?: number;
   input_volume?: number;
   output_volume?: number;

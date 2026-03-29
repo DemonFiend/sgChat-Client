@@ -9,6 +9,7 @@ import { hasServerUrl, getServerUrl, getAccessToken } from './store';
 import { negotiateCryptoSession } from './crypto';
 import { initAppAudioCapture, startAppAudioCapture, stopAppAudioCapture } from './app-audio-capture';
 import { getEnhancedSources } from './screen-sources';
+import { initDeepFilter } from './noise-suppression/deepfilterProcessor';
 import { initCrashReporter } from './crash-reporter';
 import { initUpdateChecker } from './update-checker';
 
@@ -139,6 +140,9 @@ if (!gotSingleInstanceLock) {
 
     // Initialize per-app audio capture (sets binary paths for packaged builds)
     initAppAudioCapture();
+
+    // Initialize DeepFilterNet binary availability check
+    initDeepFilter();
 
     // Screen share: renderer sends selection via IPC (now includes audio mode)
     ipcMain.on('screen-share:source-selected', (_event, payload: ScreenShareSelection) => {

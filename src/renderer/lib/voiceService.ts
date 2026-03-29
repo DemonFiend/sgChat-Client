@@ -467,7 +467,9 @@ export async function joinVoiceChannel(channelId: string): Promise<{
 
     // Read voice settings for audio capture defaults
     const voiceSettings = useVoiceSettingsStore.getState();
-    const useAiNs = voiceSettings.aiNoiseSuppression && noiseSuppressionService.checkCapabilities().supported;
+    const nsMode = voiceSettings.noiseCancellationMode;
+    const nsSupported = nsMode !== 'off' && noiseSuppressionService.checkCapabilities(nsMode).supported;
+    const effectiveNsMode = nsSupported ? nsMode : 'off';
 
     const room = new Room({
       adaptiveStream: true,
@@ -476,7 +478,7 @@ export async function joinVoiceChannel(channelId: string): Promise<{
         deviceId: voiceSettings.inputDevice !== 'default' ? voiceSettings.inputDevice : undefined,
         autoGainControl: voiceSettings.autoGainControl,
         echoCancellation: voiceSettings.echoCancellation,
-        noiseSuppression: useAiNs ? false : voiceSettings.noiseSuppression,
+        noiseSuppression: effectiveNsMode !== 'off' ? false : voiceSettings.noiseSuppression,
       },
       audioOutput: {
         deviceId: voiceSettings.outputDevice !== 'default' ? voiceSettings.outputDevice : undefined,
@@ -595,9 +597,8 @@ export async function joinVoiceChannel(channelId: string): Promise<{
     await room.connect(livekitUrl, livekitToken);
 
     if (canSpeak) {
-      if (useAiNs) {
+      if (effectiveNsMode !== 'off') {
         try {
-          await noiseSuppressionService.loadModel();
           const rawStream = await navigator.mediaDevices.getUserMedia({
             audio: {
               deviceId: voiceSettings.inputDevice !== 'default' ? { exact: voiceSettings.inputDevice } : undefined,
@@ -606,14 +607,16 @@ export async function joinVoiceChannel(channelId: string): Promise<{
               noiseSuppression: false,
             },
           });
-          const cleanStream = await noiseSuppressionService.processOutboundTrack(rawStream);
+          const cleanStream = await noiseSuppressionService.processOutboundTrack(
+            rawStream, effectiveNsMode, voiceSettings.nsAggressiveness,
+          );
           const cleanTrack = cleanStream.getAudioTracks()[0];
           await room.localParticipant.publishTrack(cleanTrack, {
             source: Track.Source.Microphone,
           });
-          console.log('[VoiceService] Microphone enabled with AI noise suppression');
+          console.log(`[VoiceService] Microphone enabled with ${effectiveNsMode} noise suppression`);
         } catch (nsErr) {
-          console.warn('[VoiceService] AI NS failed, falling back to browser NS:', nsErr);
+          console.warn(`[VoiceService] ${effectiveNsMode} NS failed, falling back to browser NS:`, nsErr);
           await room.localParticipant.setMicrophoneEnabled(true);
         }
       } else {
@@ -1116,11 +1119,11 @@ export function getParticipantStatus(userId: string): string | undefined {
 
 export async function applyAudioProcessingSettings(): Promise<void> {
   if (!currentRoom) return;
-  const { noiseSuppression, echoCancellation, autoGainControl, inputDevice, aiNoiseSuppression } =
+  const { noiseSuppression, echoCancellation, autoGainControl, inputDevice, noiseCancellationMode } =
     useVoiceSettingsStore.getState();
 
   // When AI NS is active, browser noiseSuppression constraint stays false
-  const effectiveNoiseSuppression = aiNoiseSuppression && noiseSuppressionService.checkCapabilities().supported
+  const effectiveNoiseSuppression = noiseCancellationMode !== 'off' && noiseSuppressionService.checkCapabilities(noiseCancellationMode).supported
     ? false
     : noiseSuppression;
 

@@ -92,7 +92,9 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
     }>(`/api/voice/dm/join/${dmChannelId}`);
 
     const voiceSettings = useVoiceSettingsStore.getState();
-    const useAiNs = voiceSettings.aiNoiseSuppression && noiseSuppressionService.checkCapabilities().supported;
+    const nsMode = voiceSettings.noiseCancellationMode;
+    const nsSupported = nsMode !== 'off' && noiseSuppressionService.checkCapabilities(nsMode).supported;
+    const effectiveNsMode = nsSupported ? nsMode : 'off';
 
     const room = new Room({
       adaptiveStream: true,
@@ -101,7 +103,7 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
         deviceId: voiceSettings.inputDevice !== 'default' ? voiceSettings.inputDevice : undefined,
         autoGainControl: voiceSettings.autoGainControl,
         echoCancellation: voiceSettings.echoCancellation,
-        noiseSuppression: useAiNs ? false : voiceSettings.noiseSuppression,
+        noiseSuppression: effectiveNsMode !== 'off' ? false : voiceSettings.noiseSuppression,
       },
       audioOutput: {
         deviceId: voiceSettings.outputDevice !== 'default' ? voiceSettings.outputDevice : undefined,
@@ -179,9 +181,8 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
 
     await room.connect(response.livekit_url, response.livekit_token);
 
-    if (useAiNs) {
+    if (effectiveNsMode !== 'off') {
       try {
-        await noiseSuppressionService.loadModel();
         const rawStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             deviceId: voiceSettings.inputDevice !== 'default' ? { exact: voiceSettings.inputDevice } : undefined,
@@ -190,14 +191,16 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
             noiseSuppression: false,
           },
         });
-        const cleanStream = await noiseSuppressionService.processOutboundTrack(rawStream);
+        const cleanStream = await noiseSuppressionService.processOutboundTrack(
+          rawStream, effectiveNsMode, voiceSettings.nsAggressiveness,
+        );
         const cleanTrack = cleanStream.getAudioTracks()[0];
         await room.localParticipant.publishTrack(cleanTrack, {
           source: Track.Source.Microphone,
         });
-        console.log('[DMVoiceService] Microphone enabled with AI noise suppression');
+        console.log(`[DMVoiceService] Microphone enabled with ${effectiveNsMode} noise suppression`);
       } catch (nsErr) {
-        console.warn('[DMVoiceService] AI NS failed, falling back to browser NS:', nsErr);
+        console.warn(`[DMVoiceService] ${effectiveNsMode} NS failed, falling back to browser NS:`, nsErr);
         await room.localParticipant.setMicrophoneEnabled(true);
       }
     } else {

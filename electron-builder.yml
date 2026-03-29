@@ -15,6 +15,13 @@ files:
 
 asarUnpack:
   - node_modules/application-loopback/bin/**/*
+  - resources/deepfilter/**
+
+extraResources:
+  - from: resources/deepfilter
+    to: deepfilter
+    filter:
+      - "**/*"
 
 win:
   target:

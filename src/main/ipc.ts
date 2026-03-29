@@ -26,6 +26,10 @@ import {
 } from './e2e-crypto';
 import { stopAppAudioCapture, isAppAudioSupported } from './app-audio-capture';
 import { getEnhancedSources } from './screen-sources';
+import {
+  startDeepFilter, stopDeepFilter,
+  isDeepFilterAvailable, setDeepFilterAggressiveness,
+} from './noise-suppression/deepfilterProcessor';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // ── Window controls ────────────────────────────────────────────────────
@@ -305,6 +309,23 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle('app-audio:isSupported', () => {
     return isAppAudioSupported();
+  });
+
+  // ── Mic noise suppression (DeepFilterNet) ────────────────────────────
+  ipcMain.handle('mic-ns:start', (_event, aggressiveness: number) => {
+    return startDeepFilter(mainWindow, aggressiveness);
+  });
+
+  ipcMain.handle('mic-ns:stop', () => {
+    stopDeepFilter();
+  });
+
+  ipcMain.handle('mic-ns:isAvailable', () => {
+    return isDeepFilterAvailable();
+  });
+
+  ipcMain.handle('mic-ns:set-aggressiveness', (_event, value: number) => {
+    setDeepFilterAggressiveness(value);
   });
 
   // ── Clipboard ────────────────────────────────────────────────────────

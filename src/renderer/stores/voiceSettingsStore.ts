@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { saveRemoteSetting, type RemoteSettings } from '../lib/settingsSync';
+import type { NoiseCancellationMode } from '../types/noiseSuppression';
 
 const STORAGE_KEY = 'sgchat_voice_settings';
 
@@ -12,7 +13,8 @@ interface VoiceSettingsData {
   echoCancellation: boolean;
   autoGainControl: boolean;
   vad: boolean;
-  aiNoiseSuppression: boolean;
+  noiseCancellationMode: NoiseCancellationMode;
+  nsAggressiveness: number;
   inputSensitivity: number;
   joinSoundEnabled: boolean;
   leaveSoundEnabled: boolean;
@@ -29,7 +31,8 @@ interface VoiceSettingsState extends VoiceSettingsData {
   setEchoCancellation: (enabled: boolean) => void;
   setAutoGainControl: (enabled: boolean) => void;
   setVad: (enabled: boolean) => void;
-  setAiNoiseSuppression: (enabled: boolean) => void;
+  setNoiseCancellationMode: (mode: NoiseCancellationMode) => void;
+  setNsAggressiveness: (value: number) => void;
   setInputSensitivity: (value: number) => void;
   setJoinSoundEnabled: (enabled: boolean) => void;
   setLeaveSoundEnabled: (enabled: boolean) => void;
@@ -53,7 +56,8 @@ const DEFAULTS: VoiceSettingsData = {
   echoCancellation: true,
   autoGainControl: true,
   vad: true,
-  aiNoiseSuppression: false,
+  noiseCancellationMode: 'nsnet2',
+  nsAggressiveness: 0.5,
   inputSensitivity: 50,
   joinSoundEnabled: true,
   leaveSoundEnabled: true,
@@ -65,8 +69,17 @@ function loadSettings(): VoiceSettingsData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULTS };
-    const parsed = JSON.parse(raw) as Partial<VoiceSettingsData>;
-    return { ...DEFAULTS, ...parsed };
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    // Migrate legacy aiNoiseSuppression boolean → noiseCancellationMode
+    if ('aiNoiseSuppression' in parsed && !('noiseCancellationMode' in parsed)) {
+      parsed.noiseCancellationMode = parsed.aiNoiseSuppression ? 'nsnet2' : 'off';
+      delete parsed.aiNoiseSuppression;
+      // Persist migration immediately so it only runs once
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    }
+
+    return { ...DEFAULTS, ...(parsed as Partial<VoiceSettingsData>) };
   } catch {
     return { ...DEFAULTS };
   }
@@ -87,7 +100,8 @@ const SYNCABLE_KEYS: Partial<Record<keyof VoiceSettingsData, keyof RemoteSetting
   echoCancellation: 'echo_cancellation',
   autoGainControl: 'auto_gain_control',
   vad: 'vad',
-  aiNoiseSuppression: 'ai_noise_suppression',
+  noiseCancellationMode: 'noise_cancellation_mode',
+  nsAggressiveness: 'ns_aggressiveness',
   inputSensitivity: 'input_sensitivity',
   inputVolume: 'input_volume',
   outputVolume: 'output_volume',
@@ -118,7 +132,8 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set) => ({
   setEchoCancellation: (enabled) => set(autoPersist('echoCancellation')(enabled)),
   setAutoGainControl: (enabled) => set(autoPersist('autoGainControl')(enabled)),
   setVad: (enabled) => set(autoPersist('vad')(enabled)),
-  setAiNoiseSuppression: (enabled) => set(autoPersist('aiNoiseSuppression')(enabled)),
+  setNoiseCancellationMode: (mode) => set(autoPersist('noiseCancellationMode')(mode)),
+  setNsAggressiveness: (value) => set(autoPersist('nsAggressiveness')(value)),
   setInputSensitivity: (value) => set(autoPersist('inputSensitivity')(value)),
   setJoinSoundEnabled: (enabled) => set(autoPersist('joinSoundEnabled')(enabled)),
   setLeaveSoundEnabled: (enabled) => set(autoPersist('leaveSoundEnabled')(enabled)),
@@ -147,7 +162,14 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set) => ({
     if (remote.echo_cancellation !== undefined) updates.echoCancellation = remote.echo_cancellation;
     if (remote.auto_gain_control !== undefined) updates.autoGainControl = remote.auto_gain_control;
     if (remote.vad !== undefined) updates.vad = remote.vad;
-    if (remote.ai_noise_suppression !== undefined) updates.aiNoiseSuppression = remote.ai_noise_suppression;
+    // New noise cancellation mode field (string enum)
+    if (remote.noise_cancellation_mode !== undefined) {
+      updates.noiseCancellationMode = remote.noise_cancellation_mode as NoiseCancellationMode;
+    } else if (remote.ai_noise_suppression !== undefined) {
+      // Backward compat: old server only has boolean ai_noise_suppression
+      updates.noiseCancellationMode = remote.ai_noise_suppression ? 'nsnet2' : 'off';
+    }
+    if (remote.ns_aggressiveness !== undefined) updates.nsAggressiveness = remote.ns_aggressiveness;
     if (remote.input_sensitivity !== undefined) updates.inputSensitivity = remote.input_sensitivity;
     if (remote.input_volume !== undefined) updates.inputVolume = remote.input_volume;
     if (remote.output_volume !== undefined) updates.outputVolume = remote.output_volume;
