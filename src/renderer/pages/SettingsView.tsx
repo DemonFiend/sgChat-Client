@@ -1503,7 +1503,7 @@ function VoiceSettings() {
           )}
         </Group>
         <Text size="xs" c="dimmed" mb={8}>
-          Choose how background noise is removed from your microphone. All processing happens locally.
+          Remove background noise from your microphone. All processing happens on your device.
         </Text>
         <SegmentedControl
           value={noiseCancellationMode}
@@ -1513,14 +1513,27 @@ function VoiceSettings() {
           }}
           data={[
             { label: 'Off', value: 'off' },
-            { label: 'NSNet2', value: 'nsnet2', disabled: !nsnet2Supported },
-            { label: 'DeepFilter', value: 'deepfilter', disabled: !deepfilterAvailable },
+            { label: 'Standard', value: 'nsnet2', disabled: !nsnet2Supported },
+            { label: 'High Quality', value: 'deepfilter', disabled: !deepfilterAvailable },
           ]}
           fullWidth
         />
+        {noiseCancellationMode === 'off' ? (
+          <Text size="xs" c="dimmed" mt={6}>
+            No AI noise removal — only browser-level processing.
+          </Text>
+        ) : noiseCancellationMode === 'nsnet2' ? (
+          <Text size="xs" c="dimmed" mt={6}>
+            Lightweight AI filter. Good for quiet rooms with minor background noise. Low CPU usage.
+          </Text>
+        ) : (
+          <Text size="xs" c="dimmed" mt={6}>
+            Advanced AI filter. Best for noisy environments — keyboards, fans, traffic, music. Uses more CPU.
+          </Text>
+        )}
         {!deepfilterAvailable && (
           <Text size="xs" c="dimmed" mt={4}>
-            DeepFilter requires AudioWorklet and WebAssembly support.
+            High Quality mode requires AudioWorklet and WebAssembly support.
           </Text>
         )}
       </div>
