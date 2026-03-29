@@ -43,6 +43,24 @@ export function handleAppProtocol(): void {
       resolvedPath = path.join(rendererDir, 'index.html');
     }
 
-    return net.fetch(pathToFileURL(resolvedPath).toString());
+    // Set correct MIME type for WASM files (required for WebAssembly.instantiateStreaming)
+    const ext = path.extname(resolvedPath).toLowerCase();
+    const headers: Record<string, string> = {};
+    if (ext === '.wasm') {
+      headers['Content-Type'] = 'application/wasm';
+    }
+
+    const fileUrl = pathToFileURL(resolvedPath).toString();
+    if (Object.keys(headers).length > 0) {
+      return net.fetch(fileUrl).then((response) => {
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: { ...Object.fromEntries(response.headers.entries()), ...headers },
+        });
+      });
+    }
+
+    return net.fetch(fileUrl);
   });
 }

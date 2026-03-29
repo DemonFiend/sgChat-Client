@@ -105,7 +105,13 @@ class NoiseSuppressionService {
       const { createRNNWasmModule } = await import('@jitsi/rnnoise-wasm');
 
       this._rnnoiseModule = await Promise.race([
-        createRNNWasmModule(),
+        createRNNWasmModule({
+          locateFile: (filename: string) => {
+            // Point Emscripten to our public directory for the .wasm file
+            if (filename.endsWith('.wasm')) return `./rnnoise.wasm`;
+            return filename;
+          },
+        }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('RNNoise WASM load timed out after 10s')), LOAD_TIMEOUT_MS),
         ),
