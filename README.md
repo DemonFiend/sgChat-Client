@@ -84,14 +84,14 @@ Don't have a server? See [Host Your Own Server](#host-your-own-server) below.
 
 ---
 
-## Security & Privacy
+## Security
 
-sgChat is designed so that you never have to trust a third party with your conversations.
+The sgChat client is built to keep your device and credentials safe.
 
-- **End-to-end encrypted transport** — All client-server communication is encrypted
-- **Encrypted credential storage** — Auth tokens are stored encrypted on your device
-- **Sandboxed renderer** — The UI runs in a locked-down Chromium sandbox with no direct system access
-- **No data leaves your server** — Messages, files, and calls stay on infrastructure you control
+- **Encrypted credentials** — Your login tokens are stored encrypted on your machine, not in plain text
+- **Sandboxed app** — The UI runs in a locked-down sandbox with no direct access to your filesystem or system
+- **No telemetry** — The client collects zero data about you. No analytics, no tracking, no phone-home
+- **Open source** — Every line of code is auditable. You don't have to take our word for it
 
 ---
 
