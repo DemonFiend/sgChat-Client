@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Button, Group, Text } from '@mantine/core';
-import { api } from '../../lib/api';
+import { Button, Group, Text, Tooltip } from '@mantine/core';
+import { api, resolveAssetUrl } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { toastStore } from '../../stores/toastNotifications';
+import { useEmojiStore, type CustomEmoji } from '../../stores/emojiStore';
 
 interface RoleInfo {
   id: string;
@@ -15,6 +16,33 @@ interface RoleReactionEmbedProps {
   roles: RoleInfo[];
   serverId: string;
   userRoleIds: string[] | Set<string>;
+}
+
+function RoleEmoji({ emoji }: { emoji: string }) {
+  const manifest = useEmojiStore((s) => s.manifest);
+
+  const match = emoji.match(/^:([^:]+):$/);
+  if (match && manifest) {
+    const shortcode = match[1];
+    const custom: CustomEmoji | undefined = manifest.emojis.find(
+      (e) => e.shortcode === shortcode,
+    );
+    if (custom?.image_url) {
+      return (
+        <Tooltip label={emoji} position="top" withArrow>
+          <img
+            src={resolveAssetUrl(custom.image_url)}
+            alt={shortcode}
+            width={16}
+            height={16}
+            style={{ objectFit: 'contain', verticalAlign: 'middle' }}
+          />
+        </Tooltip>
+      );
+    }
+  }
+
+  return <span>{emoji}</span>;
 }
 
 export function RoleReactionEmbed({ roles, serverId, userRoleIds }: RoleReactionEmbedProps) {
@@ -86,7 +114,7 @@ export function RoleReactionEmbed({ roles, serverId, userRoleIds }: RoleReaction
                 },
               }}
             >
-              {role.emoji && <span style={{ marginRight: 4 }}>{role.emoji}</span>}
+              {role.emoji && <span style={{ marginRight: 4 }}><RoleEmoji emoji={role.emoji} /></span>}
               {role.name}
             </Button>
           );

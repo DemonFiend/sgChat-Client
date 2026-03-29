@@ -16,6 +16,14 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       input: path.resolve(__dirname, 'src/renderer/index.html'),
+      output: {
+        manualChunks: {
+          'mantine': ['@mantine/core', '@mantine/hooks', '@mantine/notifications'],
+          'livekit': ['livekit-client'],
+          'query': ['@tanstack/react-query'],
+          'icons': ['@tabler/icons-react'],
+        },
+      },
     },
   },
   resolve: {

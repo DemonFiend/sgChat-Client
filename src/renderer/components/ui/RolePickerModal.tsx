@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader, Modal, Stack, Switch, Text } from '@mantine/core';
-import { api } from '../../lib/api';
+import { Loader, Modal, Stack, Switch, Text, Tooltip } from '@mantine/core';
+import { api, resolveAssetUrl } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
 import { toastStore } from '../../stores/toastNotifications';
+import { useEmojiStore, type CustomEmoji } from '../../stores/emojiStore';
 
 interface RolePickerModalProps {
   opened: boolean;
@@ -31,6 +32,35 @@ interface RoleReactionGroup {
     role_color?: string | null;
     emoji: string;
   }>;
+}
+
+function RoleEmoji({ emoji }: { emoji: string }) {
+  const manifest = useEmojiStore((s) => s.manifest);
+
+  // Check if it's a custom emoji shortcode like :member_red:
+  const match = emoji.match(/^:([^:]+):$/);
+  if (match && manifest) {
+    const shortcode = match[1];
+    const custom: CustomEmoji | undefined = manifest.emojis.find(
+      (e) => e.shortcode === shortcode,
+    );
+    if (custom?.image_url) {
+      return (
+        <Tooltip label={emoji} position="top" withArrow>
+          <img
+            src={resolveAssetUrl(custom.image_url)}
+            alt={shortcode}
+            width={18}
+            height={18}
+            style={{ objectFit: 'contain', verticalAlign: 'middle' }}
+          />
+        </Tooltip>
+      );
+    }
+  }
+
+  // Unicode emoji or unresolved shortcode
+  return <span>{emoji}</span>;
 }
 
 export function RolePickerModal({ opened, onClose, serverId }: RolePickerModalProps) {
@@ -121,7 +151,7 @@ export function RolePickerModal({ opened, onClose, serverId }: RolePickerModalPr
                 }}
               />
               <Text size="sm" style={{ flex: 1 }}>
-                {mapping.emoji && <span style={{ marginRight: 6 }}>{mapping.emoji}</span>}
+                {mapping.emoji && <span style={{ marginRight: 6 }}><RoleEmoji emoji={mapping.emoji} /></span>}
                 {mapping.role_name || 'Unknown Role'}
               </Text>
               <Switch
