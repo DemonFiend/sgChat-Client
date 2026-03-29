@@ -3,6 +3,30 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import fs from 'fs';
 
+const MIME_TYPES: Record<string, string> = {
+  '.html': 'text/html',
+  '.css': 'text/css',
+  '.js': 'application/javascript',
+  '.mjs': 'application/javascript',
+  '.json': 'application/json',
+  '.wasm': 'application/wasm',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+};
+
 // MUST be called before app.whenReady()
 export function registerAppProtocol(): void {
   protocol.registerSchemesAsPrivileged([
@@ -43,20 +67,17 @@ export function handleAppProtocol(): void {
       resolvedPath = path.join(rendererDir, 'index.html');
     }
 
-    // Set correct MIME type for WASM files (required for WebAssembly.instantiateStreaming)
+    // Serve with correct MIME type — net.fetch(fileURL) doesn't always set it
     const ext = path.extname(resolvedPath).toLowerCase();
-    const headers: Record<string, string> = {};
-    if (ext === '.wasm') {
-      headers['Content-Type'] = 'application/wasm';
-    }
+    const mimeType = MIME_TYPES[ext];
 
     const fileUrl = pathToFileURL(resolvedPath).toString();
-    if (Object.keys(headers).length > 0) {
+    if (mimeType) {
       return net.fetch(fileUrl).then((response) => {
         return new Response(response.body, {
           status: response.status,
           statusText: response.statusText,
-          headers: { ...Object.fromEntries(response.headers.entries()), ...headers },
+          headers: { ...Object.fromEntries(response.headers.entries()), 'Content-Type': mimeType },
         });
       });
     }
