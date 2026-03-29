@@ -38,10 +38,20 @@ export function useDMMessages(conversationId: string | null) {
   });
 }
 
+interface SendDMPayload {
+  content: string;
+  is_encrypted?: boolean;
+  encrypted_content?: string;
+}
+
 export function useSendDM(conversationId: string) {
   return useMutation({
-    mutationFn: (content: string) =>
-      api.post(`/api/dms/${conversationId}/messages`, { content }),
+    mutationFn: (payload: string | SendDMPayload) => {
+      const body = typeof payload === 'string'
+        ? { content: payload }
+        : payload;
+      return api.post(`/api/dms/${conversationId}/messages`, body);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dm-messages', conversationId] });
       queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });

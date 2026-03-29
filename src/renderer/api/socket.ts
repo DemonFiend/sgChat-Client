@@ -366,7 +366,7 @@ export function handleEvent(type: string, data: any): void {
       if (!isActiveDM) {
         useUnreadStore.getState().incrementDM(data.conversation_id);
         const dmAuthor = data.author?.username || 'Someone';
-        const dmContent = data.content?.slice(0, 80) || '';
+        const dmContent = data.is_encrypted ? 'Encrypted message' : (data.content?.slice(0, 80) || '');
         toastStore.addToast({
           type: 'dm',
           title: `${dmAuthor} sent you a message`,
@@ -485,6 +485,7 @@ export function handleEvent(type: string, data: any): void {
     case 'server.banned':
       useVoiceStore.getState().leave().catch(() => {});
       queryClient.invalidateQueries({ queryKey: ['servers'] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
       toastStore.addToast({
         type: 'warning',
         title: 'Banned',

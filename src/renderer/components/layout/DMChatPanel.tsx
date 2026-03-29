@@ -11,6 +11,7 @@ import { joinDMVoice, leaveDMVoice, toggleDMMute, toggleDMVideo, onDMVoiceEvent 
 import { DMVoiceControls } from '../ui/DMVoiceControls';
 import { DMSettingsModal } from '../ui/DMSettingsModal';
 import { toastStore } from '../../stores/toastNotifications';
+import { useE2EStore } from '../../stores/e2eStore';
 import { MessageGroup } from '../messages/MessageGroup';
 import { MessageInput } from '../messages/MessageInput';
 import { DMCallArea } from '../ui/DMCallArea';
@@ -100,7 +101,7 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
     };
   }, [conversationId]);
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = async (content: string) => {
     // Stop typing indicator on send
     if (isTypingRef.current) {
       isTypingRef.current = false;
@@ -110,6 +111,26 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
         typingTimeoutRef.current = null;
       }
     }
+
+    // Attempt E2E encryption if available
+    const e2e = useE2EStore.getState();
+    if (otherUser?.id && e2e.initialized) {
+      try {
+        const envelope = await e2e.encryptMessage(otherUser.id, content);
+        if (envelope) {
+          sendDM.mutate({
+            content: '',
+            is_encrypted: true,
+            encrypted_content: JSON.stringify(envelope),
+          });
+          return;
+        }
+      } catch {
+        // E2E failed — fall back to plaintext
+      }
+    }
+
+    // Plaintext fallback (recipient has no E2E keys or encryption failed)
     sendDM.mutate(content);
   };
   const endRef = useRef<HTMLDivElement>(null);
