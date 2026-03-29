@@ -1,174 +1,109 @@
-# sgChat Desktop Client
+<p align="center">
+  <img src="resources/icon.png" alt="sgChat" width="128" height="128">
+</p>
 
-A feature-rich Windows desktop client for sgChat servers, built with Electron and React 19.
+<h1 align="center">sgChat</h1>
 
-## Tech Stack
+<p align="center">
+  A self-hosted platform for text, voice, and video — built for communities that want to own their data.
+</p>
 
-- **Electron 33** — Desktop shell with custom `app://` protocol
-- **React 19** — Renderer UI framework
-- **Mantine v8** — Component library (dark theme)
-- **TanStack Query v5** — Server state management (REST data fetching, caching, infinite scroll)
-- **TanStack Virtual** — Virtualized message lists
-- **Zustand 5** — Client state management (UI, presence, typing, voice, themes, keybinds)
-- **Socket.IO** — Real-time events (messages, presence, typing indicators)
-- **LiveKit** — Voice/video via WebRTC
-- **Framer Motion** — Animations and transitions
-- **React Router v7** — Client-side routing
-- **RNNoise WASM** — AI noise suppression (via `@jitsi/rnnoise-wasm`)
-- **Vite 7** — Renderer bundler with HMR
-- **esbuild** — Main/preload process bundler
-- **electron-builder** — Packaging (NSIS/DMG/AppImage)
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform">
+  <img src="https://img.shields.io/badge/status-alpha-orange" alt="Status">
+</p>
 
-## Architecture
-
-```
-┌─ Main Process (Node.js) ──────────────────────┐
-│  Window management, tray, global shortcuts     │
-│  Encrypted token storage (electron-store)      │
-│  REST API proxy (injects auth headers)         │
-│  Auth manager (login, refresh, logout)         │
-│  Custom app:// protocol for renderer           │
-│  Auto-updater, crash reporter                  │
-│  App audio capture (application loopback)      │
-└────────────────────────────────────────────────┘
-         ↕ IPC (contextBridge)
-┌─ Renderer (Chromium) ─────────────────────────┐
-│  React 19 + Mantine UI                        │
-│  TanStack Query (REST data + caching)         │
-│  Zustand stores (UI, presence, voice, etc.)   │
-│  Socket.IO client (real-time events)          │
-│  LiveKit client (voice/video WebRTC)          │
-│  RNNoise WASM (AI noise suppression)          │
-│  Markdown rendering, emoji system             │
-└────────────────────────────────────────────────┘
-         ↕ Network
-┌─ sgChat Server ───────────────────────────────┐
-│  REST API + Socket.IO gateway                 │
-│  LiveKit media server                         │
-└────────────────────────────────────────────────┘
-```
-
-## Project Structure
-
-```
-src/
-├── main/                        # Electron main process
-│   ├── index.ts                 # App entry, window creation, CSP
-│   ├── protocol.ts              # Custom app:// protocol
-│   ├── auth.ts                  # Token management (login, refresh, logout)
-│   ├── api-proxy.ts             # REST proxy with auto-refresh
-│   ├── ipc.ts                   # IPC handler registration
-│   ├── store.ts                 # Encrypted auth + settings stores
-│   ├── crypto.ts                # Encryption utilities
-│   ├── tray.ts                  # System tray (show/hide/quit)
-│   ├── shortcuts.ts             # Global shortcuts (mute, deafen)
-│   ├── window-state.ts          # Window position/size persistence
-│   ├── app-audio-capture.ts     # Application audio loopback
-│   ├── update-checker.ts        # Auto-update checking
-│   └── crash-reporter.ts        # Crash reporting
-├── preload/
-│   └── index.ts                 # contextBridge API (window.electronAPI)
-├── renderer/
-│   ├── main.tsx                 # React entry point
-│   ├── App.tsx                  # Auth router
-│   ├── api/
-│   │   └── socket.ts            # Socket.IO client + event dispatch
-│   ├── lib/
-│   │   ├── api.ts               # IPC-based REST wrapper
-│   │   ├── queryClient.ts       # TanStack Query config
-│   │   ├── voiceService.ts      # LiveKit room management
-│   │   ├── dmVoiceService.ts    # DM voice calls
-│   │   ├── noiseSuppressionService.ts  # RNNoise AI noise suppression
-│   │   ├── soundService.ts      # Sound effects
-│   │   ├── markdownParser.tsx   # Markdown rendering
-│   │   ├── mentionUtils.ts      # @mention parsing
-│   │   ├── messageCache.ts      # Offline message cache
-│   │   ├── imageUtils.ts        # Image processing
-│   │   └── crypto.ts            # Client-side encryption
-│   ├── stores/                  # Zustand state stores
-│   │   ├── authStore.ts         # Auth state
-│   │   ├── uiStore.ts           # UI navigation + modals
-│   │   ├── voiceStore.ts        # Voice connection state
-│   │   ├── presenceStore.ts     # Online/offline/idle presence
-│   │   ├── typingStore.ts       # Typing indicators
-│   │   ├── themeStore.ts        # Theme customization
-│   │   ├── keybindsStore.ts     # Custom keybindings
-│   │   ├── notificationStore.ts # Notification preferences
-│   │   └── ...                  # + activity, emoji, blocked users, etc.
-│   ├── hooks/                   # TanStack Query hooks
-│   │   ├── useMessages.ts       # Messages (infinite scroll)
-│   │   ├── useChannels.ts       # Channel CRUD
-│   │   ├── useServers.ts        # Server list
-│   │   ├── useEmojis.ts         # Custom emoji system
-│   │   ├── useEvents.ts         # Server events/calendar
-│   │   └── ...                  # + categories, DMs, friends, etc.
-│   ├── components/
-│   │   ├── layout/              # TitleBar, Sidebars, ChatPanel, MemberList
-│   │   ├── messages/            # MessageGroup, MessageItem, MessageInput
-│   │   ├── ui/                  # Modals, pickers, panels, settings
-│   │   │   └── server-settings/ # Dedicated server admin panels
-│   │   └── voice/               # VoiceBar, VoicePanel, StageControls
-│   ├── layouts/
-│   │   └── AppLayout.tsx        # Main app shell layout
-│   ├── pages/                   # Route-level views
-│   │   ├── ServerView.tsx       # Server channel view
-│   │   ├── ServerAdminView.tsx  # Server administration
-│   │   ├── DMView.tsx           # Direct messages
-│   │   ├── FriendsView.tsx      # Friends list
-│   │   ├── SettingsView.tsx     # User settings
-│   │   ├── LoginPage.tsx        # Authentication
-│   │   └── ...                  # + register, forgot password, etc.
-│   └── styles/
-│       └── globals.css          # Global styles + Mantine CSS
-├── scripts/
-│   └── dev.mjs                  # Dev server (Vite + esbuild + Electron)
-└── pages/
-    └── setup.html               # First-run server URL configuration
-```
+---
 
 ## Features
 
-- **Text Chat** — Rich messages with markdown, mentions, reactions, threads, embeds, pins
-- **Voice & Video** — WebRTC via LiveKit with screen sharing and stage controls
-- **AI Noise Suppression** — RNNoise WASM-based mic processing (48kHz, 10ms latency)
-- **Direct Messages** — Private messaging with voice/video calls
-- **Server Management** — Roles, permissions, channels, categories, invites, bans
-- **Custom Emoji & Stickers** — Emoji packs, sticker uploads, GIF picker
-- **Events & Calendar** — Server events with RSVP
-- **Notifications** — Desktop notifications, unread indicators, mention badges
-- **Soundboard** — Custom sound effects in voice channels
-- **Search** — Message search with filters
-- **Themes** — Customizable color themes
-- **Auto-Update** — Built-in update checker
+- **Text Chat** — Markdown, reactions, threads, pins, and message search
+- **Voice & Video** — Channels with screen sharing and stage controls
+- **AI Noise Suppression** — Built-in mic processing so your background stays quiet
+- **Direct Messages** — Private conversations with voice and video calling
+- **Custom Emoji & Stickers** — Upload your own emoji packs, stickers, and use the GIF picker
+- **Events & Calendar** — Schedule server events with RSVP
+- **Roles & Moderation** — Granular permissions, audit logs, and moderation tools
+- **Desktop Notifications** — Unread indicators, mention badges, and system alerts
+- **Themes** — Customizable color themes to match your style
+- **Multi-Server** — Connect to multiple servers and quick-switch between them
 
-## Security
+---
 
-- `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`
-- Auth tokens stored encrypted in main process via electron-store
-- REST API calls proxied through main process (tokens never exposed to renderer)
-- Socket.IO tokens obtained via IPC, short-lived
-- CSP headers injected for server origin
-- Single instance lock, external links opened in system browser
+## How to Install
 
-## Development
+> sgChat is in **alpha**. Expect rough edges and missing features. We'd love your feedback.
 
-```bash
-npm install
-npm run dev
-```
+### Prerequisites
 
-Starts Vite (renderer HMR) + esbuild (main/preload watch) + Electron.
+You need a running sgChat server to connect to. Don't have one? See [Host Your Own Server](#host-your-own-server) below.
 
-## Build
+### Download
 
-```bash
-npm run build          # Build all (main + preload + renderer)
-npm run start          # Build + launch Electron
-npm run dist:win       # Package for Windows (NSIS installer)
-npm run dist:mac       # Package for macOS (DMG)
-npm run dist:linux     # Package for Linux (AppImage)
-```
+<!-- Alpha release links will go here once builds are published -->
+| Platform | Download |
+|----------|----------|
+| Windows  | *Coming soon* |
+| macOS    | *Coming soon* |
+| Linux    | *Coming soon* |
 
-## License
+### Setup
 
-MIT
+1. Download and install sgChat for your platform
+2. Launch the app — you'll see the server connection screen
+3. Enter your server's URL (e.g. `https://chat.example.com`)
+4. Create an account or log in
+5. You're in
+
+---
+
+## Host Your Own Server
+
+sgChat is fully self-hosted. You run the server, you own the data. No third-party services, no telemetry, no subscriptions.
+
+Check out the server repo for setup instructions:
+
+**[sgChat Server on GitHub](https://github.com/DemonFiend/sgChat/blob/main/README.md)**
+
+---
+
+## FAQ
+
+Have questions? Check the **[FAQ](https://github.com/DemonFiend/sgChat/blob/main/FAQ.md)**.
+
+---
+
+## Known Issues
+
+This is alpha software. Here's what we know about:
+
+- Some features are still being ported from the web client
+- macOS and Linux builds have not been extensively tested
+- Auto-update is not yet connected to a release channel
+- Voice/video quality depends on your server's LiveKit relay configuration
+
+Found a bug? [Open an issue](https://github.com/DemonFiend/sgChat-Client/issues).
+
+---
+
+<details>
+<summary><strong>Screenshots</strong></summary>
+
+<br>
+
+<!-- Add screenshots here as the UI stabilizes. Format: -->
+<!-- <p align="center"> -->
+<!--   <img src="screenshots/chat.png" alt="Text chat" width="800"> -->
+<!--   <br><em>Text chat with markdown and reactions</em> -->
+<!-- </p> -->
+
+*Screenshots will be added as the alpha UI stabilizes.*
+
+</details>
+
+---
+
+<p align="center">
+  MIT License
+</p>
