@@ -1,141 +1,83 @@
 /**
- * DeepFilterNet Backend — renderer-side orchestrator for DeepFilterNet mode.
+ * DeepFilterNet3 Backend — WASM-based noise suppression using deepfilternet3-noise-filter.
  *
- * Captures mic audio via AudioWorklet, sends PCM to main process via IPC,
- * receives cleaned PCM back, and reconstructs a MediaStreamTrack for LiveKit.
+ * Runs DeepFilterNet3 entirely in the renderer via AudioWorklet + WASM.
+ * Same architecture as NSNet2 but with significantly better noise removal quality.
+ * No native binary, no IPC bridge, no main process involvement.
  *
  * Architecture:
- *   getUserMedia → mic-capture-worklet → IPC → Main (DeepFilter binary) → IPC
- *   → mic-playback-worklet → MediaStreamDestination → cleanTrack → LiveKit
+ *   getUserMedia → AudioContext(48kHz) → source → DeepFilterNet3 WorkletNode → destination → cleanStream
  */
 
-import type { NsBackend, NoiseSuppressionService } from './noiseSuppressionService';
-
-const CAPTURE_WORKLET_URL = import.meta.env.DEV
-  ? '/worklets/mic-capture-worklet-processor.js'
-  : './worklets/mic-capture-worklet-processor.js';
-const PLAYBACK_WORKLET_URL = import.meta.env.DEV
-  ? '/worklets/mic-playback-worklet-processor.js'
-  : './worklets/mic-playback-worklet-processor.js';
+import { DeepFilterNet3Core } from 'deepfilternet3-noise-filter';
+import type { NsBackend } from './noiseSuppressionService';
 
 export class DeepFilterBackend implements NsBackend {
   readonly name = 'deepfilter';
 
-  private _service: NoiseSuppressionService;
+  private _core: DeepFilterNet3Core | null = null;
   private _context: AudioContext | null = null;
-  private _captureNode: AudioWorkletNode | null = null;
-  private _playbackNode: AudioWorkletNode | null = null;
+  private _workletNode: AudioWorkletNode | null = null;
   private _source: MediaStreamAudioSourceNode | null = null;
   private _destination: MediaStreamAudioDestinationNode | null = null;
-  private _unsubProcessed: (() => void) | null = null;
-  private _unsubFallback: (() => void) | null = null;
-
-  constructor(service: NoiseSuppressionService) {
-    this._service = service;
-  }
 
   checkCapabilities(): { supported: boolean; reason?: string } {
-    const api = (window as any).electronAPI;
-    if (!api?.micNs) {
-      return { supported: false, reason: 'Electron micNs API not available' };
+    if (typeof AudioContext === 'undefined') {
+      return { supported: false, reason: 'AudioContext not supported' };
     }
-    // Actual binary availability is async — checked separately in UI
+    const ctx = new AudioContext();
+    const hasWorklet = typeof ctx.audioWorklet !== 'undefined';
+    ctx.close();
+    if (!hasWorklet) {
+      return { supported: false, reason: 'AudioWorklet not supported' };
+    }
+    if (typeof WebAssembly === 'undefined') {
+      return { supported: false, reason: 'WebAssembly not supported' };
+    }
     return { supported: true };
-  }
-
-  async checkAvailability(): Promise<boolean> {
-    const api = (window as any).electronAPI;
-    if (!api?.micNs?.isAvailable) return false;
-    return api.micNs.isAvailable();
   }
 
   async createOutboundPipeline(
     rawStream: MediaStream,
     aggressiveness: number,
   ): Promise<MediaStream> {
-    const api = (window as any).electronAPI;
-    if (!api?.micNs) throw new Error('Electron micNs API not available');
+    // Initialize DeepFilterNet3 core (loads WASM + model)
+    this._core = new DeepFilterNet3Core({
+      sampleRate: 48000,
+      noiseReductionLevel: Math.round(aggressiveness * 100),
+    });
+    await this._core.initialize();
 
-    // 1. Start DeepFilterNet in main process
-    const started = await api.micNs.start(aggressiveness);
-    if (!started) throw new Error('DeepFilterNet binary not available');
-
-    // 2. Create audio context at 48kHz
+    // Create audio context at 48kHz (DeepFilterNet native rate)
     this._context = new AudioContext({ sampleRate: 48000 });
 
-    // 3. Register both worklets
-    await Promise.all([
-      this._context.audioWorklet.addModule(CAPTURE_WORKLET_URL),
-      this._context.audioWorklet.addModule(PLAYBACK_WORKLET_URL),
-    ]);
+    // Create the DeepFilterNet3 AudioWorklet node (WASM runs inside worklet)
+    this._workletNode = await this._core.createAudioWorkletNode(this._context);
 
-    // 4. Build capture side: source → capture-worklet (extracts PCM, sends to main)
+    // Build the Web Audio graph
     this._source = this._context.createMediaStreamSource(rawStream);
-    this._captureNode = new AudioWorkletNode(this._context, 'mic-capture-processor');
-
-    this._captureNode.port.onmessage = (e) => {
-      if (e.data.type === 'pcm-frame') {
-        // Forward PCM frame to main process via IPC
-        api.micNs.sendPcm(e.data.buffer);
-      }
-    };
-
-    this._source.connect(this._captureNode);
-    // Capture worklet outputs silence — connect to avoid garbage collection
-    this._captureNode.connect(this._context.destination);
-
-    // 5. Build playback side: receives cleaned PCM → output → MediaStreamDestination
-    this._playbackNode = new AudioWorkletNode(this._context, 'mic-playback-processor', {
-      outputChannelCount: [1],
-    });
     this._destination = this._context.createMediaStreamDestination();
-    this._playbackNode.connect(this._destination);
 
-    // 6. Listen for processed PCM from main process
-    this._unsubProcessed = api.micNs.onProcessedPcm((data: Buffer) => {
-      if (!this._playbackNode) return;
-      // Convert Buffer to ArrayBuffer for transfer to worklet
-      const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-      this._playbackNode.port.postMessage({ type: 'pcm-data', buffer: ab }, [ab]);
-    });
+    this._source.connect(this._workletNode);
+    this._workletNode.connect(this._destination);
 
-    // 7. Listen for fallback signal (DeepFilter crashed too many times)
-    this._unsubFallback = api.micNs.onFallback(() => {
-      console.warn('[DeepFilter] Fallback signal received — switching to NSNet2');
-      this._service.handleFallback();
-    });
-
-    console.log('[DeepFilter] Outbound pipeline started');
+    console.log('[DeepFilter] Outbound pipeline started (WASM)');
     return this._destination.stream;
   }
 
   setAggressiveness(value: number): void {
-    const api = (window as any).electronAPI;
-    api?.micNs?.setAggressiveness(value);
+    // Map 0.0-1.0 to 0-100 suppression level
+    this._core?.setSuppressionLevel(Math.round(value * 100));
   }
 
   async destroy(): Promise<void> {
-    const api = (window as any).electronAPI;
-
-    // Unsubscribe IPC listeners
-    this._unsubProcessed?.();
-    this._unsubProcessed = null;
-    this._unsubFallback?.();
-    this._unsubFallback = null;
-
-    // Stop DeepFilterNet in main process
-    try { await api?.micNs?.stop(); } catch { /* ignore */ }
-
-    // Tear down audio graph
-    if (this._captureNode) {
-      this._captureNode.port.postMessage({ type: 'set-enabled', enabled: false });
-      this._captureNode.disconnect();
-      this._captureNode = null;
+    if (this._core) {
+      this._core.destroy();
+      this._core = null;
     }
-    if (this._playbackNode) {
-      this._playbackNode.port.postMessage({ type: 'stop' });
-      this._playbackNode.disconnect();
-      this._playbackNode = null;
+    if (this._workletNode) {
+      this._workletNode.disconnect();
+      this._workletNode = null;
     }
     if (this._source) {
       this._source.disconnect();
@@ -149,7 +91,6 @@ export class DeepFilterBackend implements NsBackend {
       await this._context.close();
       this._context = null;
     }
-
     console.log('[DeepFilter] Pipeline destroyed');
   }
 }

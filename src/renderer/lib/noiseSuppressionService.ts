@@ -125,7 +125,7 @@ export class NoiseSuppressionService {
     }
     if (mode === 'deepfilter') {
       if (!this._deepfilterBackend) {
-        this._deepfilterBackend = new DeepFilterBackend(this);
+        this._deepfilterBackend = new DeepFilterBackend();
       }
       return this._deepfilterBackend!;
     }

@@ -1293,13 +1293,11 @@ function VoiceSettings() {
 
   // Check noise suppression capabilities and subscribe to CPU level
   useEffect(() => {
-    const caps = noiseSuppressionService.checkCapabilities('nsnet2');
-    setNsnet2Supported(caps.supported);
-    // Check DeepFilterNet binary availability (async IPC)
-    const api = (window as any).electronAPI;
-    api?.micNs?.isAvailable?.().then((available: boolean) => {
-      setDeepfilterAvailable(available);
-    }).catch(() => setDeepfilterAvailable(false));
+    const nsnet2Caps = noiseSuppressionService.checkCapabilities('nsnet2');
+    setNsnet2Supported(nsnet2Caps.supported);
+    // DeepFilter now uses WASM (same requirements as NSNet2)
+    const dfCaps = noiseSuppressionService.checkCapabilities('deepfilter');
+    setDeepfilterAvailable(dfCaps.supported);
     const unsub = noiseSuppressionService.onCpuLevelChange(setCpuLevel);
     return unsub;
   }, []);
@@ -1522,7 +1520,7 @@ function VoiceSettings() {
         />
         {!deepfilterAvailable && (
           <Text size="xs" c="dimmed" mt={4}>
-            DeepFilterNet binary not found — download it to enable this option.
+            DeepFilter requires AudioWorklet and WebAssembly support.
           </Text>
         )}
       </div>
