@@ -11,6 +11,8 @@
  */
 
 import type { NoiseCancellationMode } from '../types/noiseSuppression';
+import { NSNet2Backend } from './nsnet2Backend';
+import { DeepFilterBackend } from './deepfilterBackend';
 
 export type CpuLevel = 'low' | 'moderate' | 'high';
 
@@ -117,14 +119,12 @@ export class NoiseSuppressionService {
   private _getBackend(mode: NoiseCancellationMode): NsBackend {
     if (mode === 'nsnet2') {
       if (!this._nsnet2Backend) {
-        const { NSNet2Backend } = require('./nsnet2Backend');
         this._nsnet2Backend = new NSNet2Backend();
       }
       return this._nsnet2Backend!;
     }
     if (mode === 'deepfilter') {
       if (!this._deepfilterBackend) {
-        const { DeepFilterBackend } = require('./deepfilterBackend');
         this._deepfilterBackend = new DeepFilterBackend(this);
       }
       return this._deepfilterBackend!;
