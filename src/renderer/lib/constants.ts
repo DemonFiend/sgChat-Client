@@ -1,5 +1,5 @@
 export const LINKS = {
-  GITHUB: 'https://github.com/anthropics/sgChat',
-  SELF_HOST: 'https://github.com/anthropics/sgChat#self-hosting',
-  FAQ: 'https://github.com/anthropics/sgChat/blob/main/FAQ.md',
+  GITHUB: 'https://github.com/DemonFiend/sgChat-Client',
+  SELF_HOST: 'https://github.com/DemonFiend/sgChat/blob/main/README.md',
+  FAQ: 'https://github.com/DemonFiend/sgChat/blob/main/FAQ.md',
 } as const;
