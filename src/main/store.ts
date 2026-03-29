@@ -1,5 +1,9 @@
 import Store from 'electron-store';
+import { safeStorage } from 'electron';
 import { randomBytes } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { app } from 'electron';
 
 // ── Lazy Store Initialization ────────────────────────────────────────────────
 // electron-store v10 needs `app.getPath('userData')` to resolve the config dir.
@@ -7,7 +11,7 @@ import { randomBytes } from 'node:crypto';
 // causing `conf` to throw "Please specify the `projectName` option."
 // We defer store creation to first access, which is always after app.whenReady().
 
-// ── Settings Store (unencrypted) ──────────────────────────────────────────────
+// ── Settings Store (encrypted with OS-level key) ─────────────────────────────
 
 export interface SavedServer {
   url: string;
@@ -34,21 +38,56 @@ interface SettingsSchema {
 
 let _settingsStore: Store<SettingsSchema> | null = null;
 
+const SETTINGS_DEFAULTS: SettingsSchema = {
+  autoStart: false,
+  windowState: {
+    width: 1280,
+    height: 800,
+    isMaximized: false,
+  },
+  savedServers: [],
+  favoriteServerUrl: '',
+};
+
+/**
+ * Migrate old plaintext settings.json to encrypted format.
+ * Reads the old file, deletes it, then lets the encrypted store re-create it.
+ */
+function migrateOldSettings(): SettingsSchema | null {
+  const oldPath = path.join(app.getPath('userData'), 'settings.json');
+  if (!fs.existsSync(oldPath)) return null;
+  try {
+    const raw = fs.readFileSync(oldPath, 'utf-8');
+    const data = JSON.parse(raw);
+    // If it parses as JSON with known fields, it's the old plaintext format
+    if (data && (data.savedServers || data.autoStart !== undefined || data.windowState)) {
+      fs.unlinkSync(oldPath); // Delete plaintext file
+      return data as SettingsSchema;
+    }
+  } catch {
+    // Not valid JSON — either already encrypted or corrupted, ignore
+  }
+  return null;
+}
+
 function getSettingsStore(): Store<SettingsSchema> {
   if (!_settingsStore) {
+    // Check for old plaintext settings before creating the encrypted store
+    const migratedData = migrateOldSettings();
+
     _settingsStore = new Store<SettingsSchema>({
       name: 'settings',
-      defaults: {
-        autoStart: false,
-        windowState: {
-          width: 1280,
-          height: 800,
-          isMaximized: false,
-        },
-        savedServers: [],
-        favoriteServerUrl: '',
-      },
+      encryptionKey: getEncryptionKey(),
+      defaults: SETTINGS_DEFAULTS,
     });
+
+    // Restore migrated data into the new encrypted store
+    if (migratedData) {
+      if (migratedData.autoStart !== undefined) _settingsStore.set('autoStart', migratedData.autoStart);
+      if (migratedData.windowState) _settingsStore.set('windowState', migratedData.windowState);
+      if (migratedData.savedServers?.length) _settingsStore.set('savedServers', migratedData.savedServers);
+      if (migratedData.favoriteServerUrl) _settingsStore.set('favoriteServerUrl', migratedData.favoriteServerUrl);
+    }
   }
   return _settingsStore;
 }
@@ -80,14 +119,55 @@ interface AuthSchema {
   encryptionSalt: string;
 }
 
-// Generate a machine-specific encryption key
+// ── OS-Protected Encryption Key ──────────────────────────────────────────────
+// The encryption key is protected by the OS credential store (DPAPI on Windows,
+// Keychain on macOS, libsecret on Linux). The key file on disk is an opaque
+// encrypted blob that only the current OS user session can decrypt.
+
+const KEY_FILE = 'encryption-key.bin';
+
+function getKeyFilePath(): string {
+  return path.join(app.getPath('userData'), KEY_FILE);
+}
+
 function getEncryptionKey(): string {
-  const keyStore = new Store<{ key: string }>({ name: 'keychain' });
-  let key = keyStore.get('key');
+  const keyPath = getKeyFilePath();
+
+  // Try to load existing OS-protected key
+  if (fs.existsSync(keyPath)) {
+    try {
+      const encryptedBuffer = fs.readFileSync(keyPath);
+      return safeStorage.decryptString(encryptedBuffer);
+    } catch {
+      // Corrupted or inaccessible — regenerate below
+    }
+  }
+
+  // Migrate from old plaintext keychain.json if it exists
+  const oldKeychainPath = path.join(app.getPath('userData'), 'keychain.json');
+  let key: string | null = null;
+  if (fs.existsSync(oldKeychainPath)) {
+    try {
+      const oldData = JSON.parse(fs.readFileSync(oldKeychainPath, 'utf-8'));
+      if (oldData.key) {
+        key = oldData.key;
+        // Delete the old plaintext key file
+        fs.unlinkSync(oldKeychainPath);
+      }
+    } catch {
+      // Old file unreadable — generate fresh key
+    }
+  }
+
+  // Generate new key if no migration
   if (!key) {
     key = randomBytes(32).toString('hex');
-    keyStore.set('key', key);
   }
+
+  // Encrypt and save with OS-level protection
+  const encryptedBuffer = safeStorage.encryptString(key);
+  fs.writeFileSync(keyPath, encryptedBuffer);
+
   return key;
 }
 
