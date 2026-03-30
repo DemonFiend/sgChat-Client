@@ -164,7 +164,9 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set) => ({
     if (remote.vad !== undefined) updates.vad = remote.vad;
     // New noise cancellation mode field (string enum)
     if (remote.noise_cancellation_mode !== undefined) {
-      updates.noiseCancellationMode = remote.noise_cancellation_mode as NoiseCancellationMode;
+      // Server may return 'native' (web browser NS) — treat as 'off' on desktop
+      const serverMode = remote.noise_cancellation_mode === 'native' ? 'off' : remote.noise_cancellation_mode;
+      updates.noiseCancellationMode = serverMode as NoiseCancellationMode;
     } else if (remote.ai_noise_suppression !== undefined) {
       // Backward compat: old server only has boolean ai_noise_suppression
       updates.noiseCancellationMode = remote.ai_noise_suppression ? 'nsnet2' : 'off';
