@@ -43,4 +43,3 @@ test-*.cjs
 
 # Server backups
 .srv_backup/
-resources/deepfilter/
