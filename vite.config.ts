@@ -34,5 +34,29 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    proxy: {
+      // Browser-mode proxy: forwards REST API calls to the QA server
+      // Uses a regex to avoid intercepting source file imports (api/socket.ts etc.)
+      '^/api/(?!.*\\.(ts|tsx|js|jsx|css|map)$)': {
+        target: 'http://localhost:3124',
+        changeOrigin: true,
+      },
+      '/socket.io': {
+        target: 'http://localhost:3124',
+        changeOrigin: true,
+        ws: true,
+      },
+      '/uploads': {
+        target: 'http://localhost:3124',
+        changeOrigin: true,
+      },
+      // LiveKit WebSocket proxy — rewrites /livekit-ws → ws://localhost:7880
+      // The browser shim rewrites livekit_url to use this path
+      '/livekit-ws': {
+        target: 'ws://localhost:7880',
+        ws: true,
+        rewrite: (path: string) => path.replace(/^\/livekit-ws/, ''),
+      },
+    },
   },
 });

@@ -5,6 +5,9 @@ let globalVolume = 0.5;
 // Ringtone state
 let ringtoneAudio: HTMLAudioElement | null = null;
 
+// Hold music state (separate from ringtone — can play independently)
+let holdMusicAudio: HTMLAudioElement | null = null;
+
 // User settings (loaded from server)
 let enableSounds = true;
 let enableVoiceJoinSounds = true;
@@ -19,6 +22,7 @@ const SOUND_URLS: Record<string, string> = {
   'stream-leave': '/sounds/stream-leave.mp3',
   notification: '/sounds/notification.mp3',
   ringtone: '/sounds/ringtone.mp3',
+  holdMusic: '/sounds/HoldMusic.mp3',
 };
 
 function getOrCreateAudio(sound: string): HTMLAudioElement | null {
@@ -94,6 +98,28 @@ export const soundService = {
       ringtoneAudio.pause();
       ringtoneAudio.remove();
       ringtoneAudio = null;
+    }
+  },
+
+  playHoldMusic() {
+    this.stopHoldMusic();
+    const audio = document.createElement('audio');
+    audio.src = SOUND_URLS.holdMusic || '/sounds/HoldMusic.mp3';
+    audio.loop = true;
+    audio.volume = 0.15; // Soft background — lower than ringtone
+    audio.style.display = 'none';
+    document.body.appendChild(audio);
+    audio.play().catch((err) => {
+      console.warn('[soundService] Failed to play hold music:', err.message);
+    });
+    holdMusicAudio = audio;
+  },
+
+  stopHoldMusic() {
+    if (holdMusicAudio) {
+      holdMusicAudio.pause();
+      holdMusicAudio.remove();
+      holdMusicAudio = null;
     }
   },
 

@@ -33,22 +33,27 @@ function AuthRouter() {
   const [view, setView] = useState<AuthView>('loading');
   const [resetToken, setResetToken] = useState('');
 
-  // Auto-connect to favorite server on startup, then check auth
+  // Auto-connect to favorite server on startup, then check auth.
+  // After a Quick Connect switch + reload, skip the favorite to respect the user's choice.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const favoriteUrl = await electronAPI.servers.getFavorite();
+        const skipFavorite = await electronAPI.servers.shouldSkipFavorite();
         if (cancelled) return;
-        if (favoriteUrl) {
-          const savedServers = await electronAPI.servers.getSaved();
+        if (!skipFavorite) {
+          const favoriteUrl = await electronAPI.servers.getFavorite();
           if (cancelled) return;
-          const hasCreds = savedServers.some((s: any) => s.url === favoriteUrl);
-          if (hasCreds) {
-            const result = await electronAPI.servers.switch(favoriteUrl);
+          if (favoriteUrl) {
+            const savedServers = await electronAPI.servers.getSaved();
             if (cancelled) return;
-            if (result) {
-              setServerUrl(favoriteUrl);
+            const hasCreds = savedServers.some((s: any) => s.url === favoriteUrl);
+            if (hasCreds) {
+              const result = await electronAPI.servers.switch(favoriteUrl);
+              if (cancelled) return;
+              if (result) {
+                setServerUrl(favoriteUrl);
+              }
             }
           }
         }

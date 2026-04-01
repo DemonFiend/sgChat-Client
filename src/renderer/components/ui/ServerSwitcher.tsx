@@ -17,11 +17,13 @@ export function ServerSwitcher() {
   const [servers, setServers] = useState<SavedServer[]>([]);
   const [favoriteUrl, setFavoriteUrl] = useState('');
   const [switching, setSwitching] = useState(false);
+  const [error, setError] = useState('');
   const currentServerUrl = useAuthStore((s) => s.serverUrl);
 
   // Load saved servers and favorite when popover opens
   useEffect(() => {
     if (opened) {
+      setError('');
       electronAPI.servers.getSaved().then((saved: SavedServer[]) => {
         setServers(saved.sort((a: SavedServer, b: SavedServer) => b.lastUsed - a.lastUsed));
       });
@@ -34,14 +36,18 @@ export function ServerSwitcher() {
   const handleSwitch = async (targetUrl: string) => {
     if (targetUrl === currentServerUrl || switching) return;
     setSwitching(true);
+    setError('');
     try {
       const result = await electronAPI.servers.switch(targetUrl);
       if (result) {
         // Reload the app to re-initialize with new credentials
         window.location.reload();
+      } else {
+        setError('Server not found.');
       }
     } catch (err) {
       console.error('[ServerSwitcher] Switch failed:', err);
+      setError('Switch failed. Please try again.');
     } finally {
       setSwitching(false);
     }
@@ -124,6 +130,12 @@ export function ServerSwitcher() {
           <Text size="xs" fw={600}>Quick Connect</Text>
           <Text size="xs" c="dimmed">Switch between saved servers</Text>
         </div>
+
+        {error && (
+          <div style={{ padding: '6px 12px', background: 'rgba(255,59,48,0.1)' }}>
+            <Text size="xs" c="red">{error}</Text>
+          </div>
+        )}
 
         <div style={{ padding: 4, maxHeight: 300, overflow: 'auto' }}>
           {servers.length === 0 && (

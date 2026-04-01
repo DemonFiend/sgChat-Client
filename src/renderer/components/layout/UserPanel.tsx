@@ -62,6 +62,8 @@ export function UserPanel() {
   const handleStatusChange = (status: string) => {
     emitPresenceUpdate(status);
     updateStatus(status as any);
+    // Immediately update presenceStore so UI reflects change without waiting for server echo
+    if (user) usePresenceStore.getState().updatePresence(user.id, status);
     setStatusMenuOpen(false);
   };
 

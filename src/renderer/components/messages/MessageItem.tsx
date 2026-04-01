@@ -287,7 +287,7 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
           </Group>
         </div>
       ) : (
-        <Text size="sm" style={{ color: 'var(--text-primary)', lineHeight: 1.375, wordBreak: 'break-word' }}>
+        <Text component="div" size="sm" style={{ color: 'var(--text-primary)', lineHeight: 1.375, wordBreak: 'break-word' }}>
           {message.is_encrypted ? (
             <Text component="span" size="sm" c="dimmed" fs="italic" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <IconLock size={14} />

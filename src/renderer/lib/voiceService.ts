@@ -14,6 +14,7 @@ import { soundService } from './soundService';
 import { createAppAudioTrack, destroyAppAudioTrack } from './appAudioBridge';
 import { noiseSuppressionService } from './noiseSuppressionService';
 import { networkStore, type RelayServer } from '../stores/networkStore';
+import { toastStore } from '../stores/toastNotifications';
 
 let currentRoom: Room | null = null;
 
@@ -421,6 +422,7 @@ export async function handleRelaySwitch(toChannelId: string): Promise<void> {
 export async function joinVoiceChannel(channelId: string): Promise<{
   success: boolean;
   error?: string;
+  micUnavailable?: boolean;
   permissions?: { canSpeak: boolean; canVideo: boolean; canStream: boolean };
 }> {
   try {
@@ -429,6 +431,7 @@ export async function joinVoiceChannel(channelId: string): Promise<{
     let canSpeak = false;
     let canVideo = false;
     let canStream = false;
+    let micUnavailable = false;
 
     try {
       const response = await api.post<{
@@ -595,36 +598,75 @@ export async function joinVoiceChannel(channelId: string): Promise<{
     });
 
     await room.connect(livekitUrl, livekitToken);
+    // Pre-check microphone availability before attempting to enable it.
+    // Sandboxed browsers (e.g. preview tools) have no mic — skip gracefully.
+    let hasMicAccess = false;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasMic = devices.some((d) => d.kind === 'audioinput' && d.deviceId !== '');
+      if (hasMic) {
+        // Verify we can actually get permission (some envs list devices but block access)
+        const testStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        testStream.getTracks().forEach((t) => t.stop());
+        hasMicAccess = true;
+      }
+    } catch {
+      // getUserMedia or enumerateDevices failed — no mic access
+    }
 
-    if (canSpeak) {
-      if (effectiveNsMode !== 'off') {
-        try {
-          const rawStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              deviceId: voiceSettings.inputDevice !== 'default' ? { exact: voiceSettings.inputDevice } : undefined,
-              autoGainControl: voiceSettings.autoGainControl,
-              echoCancellation: voiceSettings.echoCancellation,
-              noiseSuppression: false,
-            },
-          });
-          const cleanStream = await noiseSuppressionService.processOutboundTrack(
-            rawStream, effectiveNsMode, voiceSettings.nsAggressiveness,
-          );
-          const cleanTrack = cleanStream.getAudioTracks()[0];
-          await room.localParticipant.publishTrack(cleanTrack, {
-            source: Track.Source.Microphone,
-          });
-          console.log(`[VoiceService] Microphone enabled with ${effectiveNsMode} noise suppression`);
-        } catch (nsErr) {
-          console.warn(`[VoiceService] ${effectiveNsMode} NS failed, falling back to browser NS:`, nsErr);
+    if (canSpeak && !hasMicAccess) {
+      micUnavailable = true;
+      console.warn('[VoiceService] No microphone available, joining muted');
+      toastStore.addToast({
+        type: 'warning',
+        title: 'No microphone detected',
+        message: 'You joined the voice channel muted. Check your mic permissions or audio device settings.',
+        duration: 8000,
+      });
+    }
+
+    if (canSpeak && hasMicAccess) {
+      try {
+        if (effectiveNsMode !== 'off') {
+          try {
+            const rawStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                deviceId: voiceSettings.inputDevice !== 'default' ? { exact: voiceSettings.inputDevice } : undefined,
+                autoGainControl: voiceSettings.autoGainControl,
+                echoCancellation: voiceSettings.echoCancellation,
+                noiseSuppression: false,
+              },
+            });
+            const cleanStream = await noiseSuppressionService.processOutboundTrack(
+              rawStream, effectiveNsMode, voiceSettings.nsAggressiveness,
+            );
+            const cleanTrack = cleanStream.getAudioTracks()[0];
+            await room.localParticipant.publishTrack(cleanTrack, {
+              source: Track.Source.Microphone,
+            });
+            console.log(`[VoiceService] Microphone enabled with ${effectiveNsMode} noise suppression`);
+          } catch (nsErr: any) {
+            // If mic permission was denied, don't bother with fallback — join muted
+            if (nsErr?.name === 'NotAllowedError' || nsErr?.message?.includes('Permission denied')) {
+              throw nsErr;
+            }
+            console.warn(`[VoiceService] ${effectiveNsMode} NS failed, falling back to browser NS:`, nsErr);
+            await room.localParticipant.setMicrophoneEnabled(true);
+          }
+        } else {
           await room.localParticipant.setMicrophoneEnabled(true);
         }
-      } else {
-        try {
-          await room.localParticipant.setMicrophoneEnabled(true);
-        } catch {
-          // Token may restrict publishing (e.g. AFK channels) — silently continue
-        }
+      } catch (micErr: any) {
+        // Microphone unavailable (permission denied, no device, sandboxed browser, etc.)
+        // Join muted — user can unmute manually once a mic becomes available
+        micUnavailable = true;
+        console.warn('[VoiceService] Microphone unavailable, joining muted:', micErr.message || micErr);
+        toastStore.addToast({
+          type: 'warning',
+          title: 'No microphone detected',
+          message: 'You joined the voice channel muted. Check your mic permissions or audio device settings.',
+          duration: 8000,
+        });
       }
     }
 
@@ -641,6 +683,7 @@ export async function joinVoiceChannel(channelId: string): Promise<{
 
     return {
       success: true,
+      micUnavailable,
       permissions: { canSpeak, canVideo, canStream },
     };
   } catch (err: any) {

@@ -90,9 +90,41 @@ async function navigateTo(view: string) {
 async function ensureLoggedIn() {
   await window.waitForLoadState('load');
   await settle(3000);
+
+  // Check if we're already connected to the correct server
+  const currentUrl = await window.evaluate(async () => {
+    const api = (window as any).electronAPI;
+    return api?.config?.getServerUrl ? await api.config.getServerUrl() : '';
+  });
+
   const isOnMain = await window.evaluate(() =>
     document.body.innerText.includes('general') || document.body.innerText.includes('Direct Messages'));
+
+  // If on main but connected to wrong server, force switch to localhost
+  if (currentUrl && currentUrl !== SERVER_URL) {
+    console.log(`[ensureLoggedIn] Wrong server: ${currentUrl}, switching to ${SERVER_URL}`);
+    // Logout from current server
+    await window.evaluate(async () => {
+      const api = (window as any).electronAPI;
+      if (api?.auth?.logout) await api.auth.logout();
+    });
+    await settle(500);
+    // Login to correct server (auth:login calls setServerUrl internally)
+    const result = await window.evaluate(async (args: any) => {
+      const api = (window as any).electronAPI;
+      if (api?.auth?.login) {
+        try { const r = await api.auth.login(args.serverUrl, args.email, args.password); return { success: r?.success === true }; }
+        catch (err: any) { return { success: false, error: err?.message }; }
+      }
+      return { success: false };
+    }, { serverUrl: SERVER_URL, email: TEST_EMAIL, password: TEST_PASSWORD });
+    if (result.success) { await window.reload(); await settle(5000); }
+    return result.success;
+  }
+
   if (isOnMain) return true;
+
+  // Not on main — login
   const result = await window.evaluate(async (args: any) => {
     const api = (window as any).electronAPI;
     if (api?.auth?.login) {

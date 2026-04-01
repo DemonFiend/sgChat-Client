@@ -28,6 +28,7 @@ export function ServerSetupPage({ onComplete }: { onComplete: () => void }) {
   const [serversOpen, setServersOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
   const setServerUrl = useAuthStore((s) => s.setServerUrl);
+  const checkAuth = useAuthStore((s) => s.checkAuth);
 
   // Load saved servers and favorite on mount
   useEffect(() => {
@@ -77,14 +78,22 @@ export function ServerSetupPage({ onComplete }: { onComplete: () => void }) {
   const handleQuickConnect = async (targetUrl: string) => {
     if (switching) return;
     setSwitching(true);
+    setError('');
     try {
       const result = await electronAPI.servers.switch(targetUrl);
       if (result) {
         setServersOpen(false);
-        onComplete();
+        // Update Zustand so the reactive view logic sees the new serverUrl,
+        // then trigger a fresh auth check to auto-login with saved credentials.
+        setServerUrl(targetUrl);
+        useAuthStore.setState({ lastCheckAuthAt: 0, autoLoginFailed: false, isLoading: true });
+        checkAuth();
+      } else {
+        setError('Server not found in saved servers.');
       }
     } catch (err) {
       console.error('[ServerSetup] Quick connect failed:', err);
+      setError('Quick connect failed. Please try again.');
     } finally {
       setSwitching(false);
     }

@@ -359,7 +359,6 @@ export function MessageInput({ channelId, channelName, onSendOverride, onTyping 
                 color: 'var(--text-primary)',
                 fontSize: '0.9rem',
                 padding: '6px 0',
-                minHeight: 'unset',
               },
             }}
           />

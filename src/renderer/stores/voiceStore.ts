@@ -135,7 +135,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         connectionState: 'connected',
         connected: true,
         qualityStabilized: false,
-        muted: false,
+        muted: result.micUnavailable || false,
         deafened: false,
         isSpeaker: false,
         isHandRaised: false,

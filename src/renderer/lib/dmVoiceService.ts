@@ -9,6 +9,8 @@ import {
 import { api } from './api';
 import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
 import { noiseSuppressionService } from './noiseSuppressionService';
+import { soundService } from './soundService';
+import { toastStore } from '../stores/toastNotifications';
 
 let dmRoom: Room | null = null;
 
@@ -181,31 +183,73 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
 
     await room.connect(response.livekit_url, response.livekit_token);
 
-    if (effectiveNsMode !== 'off') {
-      try {
-        const rawStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: voiceSettings.inputDevice !== 'default' ? { exact: voiceSettings.inputDevice } : undefined,
-            autoGainControl: voiceSettings.autoGainControl,
-            echoCancellation: voiceSettings.echoCancellation,
-            noiseSuppression: false,
-          },
-        });
-        const cleanStream = await noiseSuppressionService.processOutboundTrack(
-          rawStream, effectiveNsMode, voiceSettings.nsAggressiveness,
-        );
-        const cleanTrack = cleanStream.getAudioTracks()[0];
-        await room.localParticipant.publishTrack(cleanTrack, {
-          source: Track.Source.Microphone,
-        });
-        console.log(`[DMVoiceService] Microphone enabled with ${effectiveNsMode} noise suppression`);
-      } catch (nsErr) {
-        console.warn(`[DMVoiceService] ${effectiveNsMode} NS failed, falling back to browser NS:`, nsErr);
+    // Pre-check microphone availability before attempting to enable it.
+    let hasMicAccess = false;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasMic = devices.some((d) => d.kind === 'audioinput' && d.deviceId !== '');
+      if (hasMic) {
+        const testStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        testStream.getTracks().forEach((t) => t.stop());
+        hasMicAccess = true;
+      }
+    } catch {
+      // No mic access
+    }
+
+    if (!hasMicAccess) {
+      console.warn('[DMVoiceService] No microphone available, joining muted');
+      toastStore.addToast({
+        type: 'warning',
+        title: 'No microphone detected',
+        message: 'You joined the call muted. Check your mic permissions or audio device settings.',
+        duration: 8000,
+      });
+    }
+
+    if (hasMicAccess) {
+    try {
+      if (effectiveNsMode !== 'off') {
+        try {
+          const rawStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              deviceId: voiceSettings.inputDevice !== 'default' ? { exact: voiceSettings.inputDevice } : undefined,
+              autoGainControl: voiceSettings.autoGainControl,
+              echoCancellation: voiceSettings.echoCancellation,
+              noiseSuppression: false,
+            },
+          });
+          const cleanStream = await noiseSuppressionService.processOutboundTrack(
+            rawStream, effectiveNsMode, voiceSettings.nsAggressiveness,
+          );
+          const cleanTrack = cleanStream.getAudioTracks()[0];
+          await room.localParticipant.publishTrack(cleanTrack, {
+            source: Track.Source.Microphone,
+          });
+          console.log(`[DMVoiceService] Microphone enabled with ${effectiveNsMode} noise suppression`);
+        } catch (nsErr: any) {
+          // If mic permission was denied, don't bother with fallback — join muted
+          if (nsErr?.name === 'NotAllowedError' || nsErr?.message?.includes('Permission denied')) {
+            throw nsErr;
+          }
+          console.warn(`[DMVoiceService] ${effectiveNsMode} NS failed, falling back to browser NS:`, nsErr);
+          await room.localParticipant.setMicrophoneEnabled(true);
+        }
+      } else {
         await room.localParticipant.setMicrophoneEnabled(true);
       }
-    } else {
-      await room.localParticipant.setMicrophoneEnabled(true);
+    } catch (micErr: any) {
+      // Microphone unavailable (permission denied, no device, sandboxed browser, etc.)
+      // Join muted — user can unmute manually once a mic becomes available
+      console.warn('[DMVoiceService] Microphone unavailable, joining muted:', micErr.message || micErr);
+      toastStore.addToast({
+        type: 'warning',
+        title: 'No microphone detected',
+        message: 'You joined the call muted. Check your mic permissions or audio device settings.',
+        duration: 8000,
+      });
     }
+    } // close if (hasMicAccess)
 
     dmRoom = room;
 

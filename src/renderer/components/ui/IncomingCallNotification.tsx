@@ -1,37 +1,36 @@
 import { useEffect, useRef } from 'react';
 import { ActionIcon, Avatar, Group, Paper, Stack, Text } from '@mantine/core';
-import { IconPhone, IconPhoneOff, IconPhoneIncoming } from '@tabler/icons-react';
+import { IconPhone, IconPhoneOff, IconPhoneIncoming, IconHeadphonesOff } from '@tabler/icons-react';
 import { soundService } from '../../lib/soundService';
 
 interface IncomingCallNotificationProps {
   callerName: string;
   callerAvatar?: string | null;
   onAccept: () => void;
-  onDecline: () => void;
+  onAcceptDeafened?: () => void;
+  onDecline: (reason?: 'manual' | 'timeout') => void;
 }
 
 export function IncomingCallNotification({
   callerName,
   callerAvatar,
   onAccept,
+  onAcceptDeafened,
   onDecline,
 }: IncomingCallNotificationProps) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // Play ringtone sound if available
-    try {
-      soundService.playNotification();
-    } catch {
-      // soundService may not have a ringtone — that's fine
-    }
+    // Play looping ringtone for incoming call (ignores deafen — always audible)
+    soundService.playRingtone();
 
     // Auto-dismiss after 30 seconds
     timeoutRef.current = setTimeout(() => {
-      onDecline();
+      onDecline('timeout');
     }, 30000);
 
     return () => {
+      soundService.stopRingtone();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -112,7 +111,7 @@ export function IncomingCallNotification({
             color="red"
             size="xl"
             radius="md"
-            onClick={onDecline}
+            onClick={() => onDecline('manual')}
             style={{ flex: 1, height: 40 }}
           >
             <Group gap={6}>
@@ -120,6 +119,21 @@ export function IncomingCallNotification({
               <Text size="sm" fw={500}>Decline</Text>
             </Group>
           </ActionIcon>
+          {onAcceptDeafened && (
+            <ActionIcon
+              variant="light"
+              color="yellow"
+              size="xl"
+              radius="md"
+              onClick={onAcceptDeafened}
+              style={{ flex: 1, height: 40 }}
+            >
+              <Group gap={6}>
+                <IconHeadphonesOff size={16} />
+                <Text size="sm" fw={500}>Deafened</Text>
+              </Group>
+            </ActionIcon>
+          )}
           <ActionIcon
             variant="light"
             color="green"

@@ -119,10 +119,21 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     removeSavedServer(url);
   });
 
+  // In-memory flag: after a Quick Connect switch, suppress the next
+  // startup auto-connect-to-favorite so the user's choice isn't overridden.
+  let quickConnectPending = false;
+
   ipcMain.handle('servers:switch', (_event, targetUrl: string) => {
     clearCryptoSession();
     const result = switchToServer(targetUrl);
+    if (result) quickConnectPending = true;
     return result;
+  });
+
+  ipcMain.handle('servers:shouldSkipFavorite', () => {
+    const skip = quickConnectPending;
+    quickConnectPending = false;
+    return skip;
   });
 
   ipcMain.handle('servers:getFavorite', () => {
