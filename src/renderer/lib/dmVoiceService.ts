@@ -88,10 +88,17 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
     remoteParticipantJoined = false;
     emit('call-phase-change', { phase: 'notifying' });
 
-    const response = await api.post<{
-      livekit_token: string;
-      livekit_url: string;
+    const raw = await api.post<{
+      token?: string;
+      livekit_token?: string;
+      url?: string;
+      livekit_url?: string;
     }>(`/api/dms/${dmChannelId}/voice/join`);
+    // Server returns { token, url } but client historically used { livekit_token, livekit_url }
+    const response = {
+      livekit_token: raw.livekit_token || raw.token || '',
+      livekit_url: raw.livekit_url || raw.url || '',
+    };
 
     const voiceSettings = useVoiceSettingsStore.getState();
     const nsMode = voiceSettings.noiseCancellationMode;
