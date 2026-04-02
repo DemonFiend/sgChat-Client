@@ -131,9 +131,10 @@ export function FriendsView() {
     }
   };
 
-  const handleCancelRequest = async (requestId: string) => {
+  const handleCancelRequest = async (targetUserId: string) => {
     try {
-      await api.delete(`/api/friends/requests/${requestId}`);
+      // Server route is DELETE /friends/:userId — cancels outgoing request or rejects incoming
+      await api.delete(`/api/friends/${targetUserId}`);
       queryClient.invalidateQueries({ queryKey: ['friend-requests'] });
     } catch {
       // Ignore
@@ -250,7 +251,7 @@ export function FriendsView() {
                     key={req.id}
                     request={req}
                     direction="outgoing"
-                    onCancel={() => handleCancelRequest(req.id)}
+                    onCancel={() => handleCancelRequest(req.to_user.id)}
                   />
                 ))}
 
