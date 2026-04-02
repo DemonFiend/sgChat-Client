@@ -92,8 +92,11 @@ export function FriendsView() {
     ? allFriends.filter((f) => matchesSearch(f, searchLower))
     : allFriends;
 
-  const incomingRequests = requests?.incoming?.filter((r) => r.status === 'pending') || [];
-  const outgoingRequests = requests?.outgoing?.filter((r) => r.status === 'pending') || [];
+  // Server doesn't include a 'status' field on friend requests — all requests
+  // returned by GET /friends/requests are inherently pending (accepted/rejected
+  // requests are deleted from the DB). No filtering needed.
+  const incomingRequests = requests?.incoming || [];
+  const outgoingRequests = requests?.outgoing || [];
   const filteredIncoming = searchLower
     ? incomingRequests.filter((r) => r.from_user.username.toLowerCase().includes(searchLower))
     : incomingRequests;
