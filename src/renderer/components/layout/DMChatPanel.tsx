@@ -7,7 +7,8 @@ import { emitJoinDM, emitLeaveDM, emitDMAck, emitTypingStart, emitTypingStop } f
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useTypingStore } from '../../stores/typingStore';
 import { useBlockedUsersStore } from '../../stores/blockedUsersStore';
-import { joinDMVoice, leaveDMVoice, toggleDMMute, toggleDMVideo, onDMVoiceEvent } from '../../lib/dmVoiceService';
+import { joinDMVoice, leaveDMVoice, toggleDMMute, toggleDMVideo } from '../../lib/dmVoiceService';
+import { useVoiceStore } from '../../stores/voiceStore';
 import { DMVoiceControls } from '../ui/DMVoiceControls';
 import { DMSettingsModal } from '../ui/DMSettingsModal';
 import { toastStore } from '../../stores/toastNotifications';
@@ -263,26 +264,19 @@ function DMHeader({ username, status, statusColor, avatarUrl, conversationId }: 
   avatarUrl?: string;
   conversationId: string;
 }) {
-  const [isInCall, setIsInCall] = useState(false);
+  const dmCallPhase = useVoiceStore((s) => s.dmCallPhase);
+  const isInCall = dmCallPhase !== 'idle';
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Reset mute/video state when call ends
   useEffect(() => {
-    const cleanup = onDMVoiceEvent((event) => {
-      switch (event) {
-        case 'connected':
-          setIsInCall(true);
-          break;
-        case 'disconnected':
-          setIsInCall(false);
-          setIsMuted(false);
-          setIsVideoOn(false);
-          break;
-      }
-    });
-    return cleanup;
-  }, []);
+    if (!isInCall) {
+      setIsMuted(false);
+      setIsVideoOn(false);
+    }
+  }, [isInCall]);
 
   const handleCall = async () => {
     const result = await joinDMVoice(conversationId);
