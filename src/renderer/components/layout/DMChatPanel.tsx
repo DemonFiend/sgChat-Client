@@ -7,12 +7,14 @@ import { emitJoinDM, emitLeaveDM, emitDMAck, emitTypingStart, emitTypingStop } f
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useTypingStore } from '../../stores/typingStore';
 import { useBlockedUsersStore } from '../../stores/blockedUsersStore';
-import { joinDMVoice, leaveDMVoice, toggleDMMute, toggleDMVideo } from '../../lib/dmVoiceService';
+import { joinDMVoice, leaveDMVoice, toggleDMMute, toggleDMVideo, toggleDMDeafen } from '../../lib/dmVoiceService';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { DMVoiceControls } from '../ui/DMVoiceControls';
 import { DMSettingsModal } from '../ui/DMSettingsModal';
+import { DMWaitingRoom } from '../ui/DMWaitingRoom';
 import { toastStore } from '../../stores/toastNotifications';
 import { useE2EStore } from '../../stores/e2eStore';
+import { useDMVoiceStatus } from '../../hooks/useServerInfo';
 import { MessageGroup } from '../messages/MessageGroup';
 import { MessageInput } from '../messages/MessageInput';
 import { DMCallArea } from '../ui/DMCallArea';
@@ -179,13 +181,21 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
         conversationId={conversationId}
       />
 
-      {/* DM Call Area */}
+      {/* DM Call Area (shown when current user IS in the call) */}
       <DMCallArea
         dmChannelId={conversationId}
         friendName={otherUser?.username || 'Unknown'}
         friendAvatarUrl={otherUser?.avatar_url}
         currentUserAvatarUrl={user?.avatar_url}
         currentUserDisplayName={user?.display_name || user?.username}
+      />
+
+      {/* Waiting Room (shown when someone else IS in a call but current user is NOT) */}
+      <WaitingRoomSection
+        conversationId={conversationId}
+        otherUsername={otherUser?.username}
+        otherAvatarUrl={otherUser?.avatar_url}
+        currentUserId={user?.id}
       />
 
       {/* Messages */}
@@ -359,6 +369,58 @@ function DMTypingIndicator({ conversationId }: { conversationId: string }) {
       </div>
       <Text size="xs" c="dimmed" fs="italic">{text}</Text>
     </div>
+  );
+}
+
+function WaitingRoomSection({ conversationId, otherUsername, otherAvatarUrl, currentUserId }: {
+  conversationId: string;
+  otherUsername?: string;
+  otherAvatarUrl?: string;
+  currentUserId?: string;
+}) {
+  const dmCallPhase = useVoiceStore((s) => s.dmCallPhase);
+  const { data: voiceStatus } = useDMVoiceStatus(conversationId);
+
+  // Show waiting room when: user is NOT in a call AND there's an active call with another participant
+  const isIdle = dmCallPhase === 'idle';
+  const hasActiveCall = voiceStatus?.active === true;
+  const otherInCall = Array.isArray(voiceStatus?.participants)
+    ? voiceStatus.participants.some((p: any) => (p.user_id || p.id) !== currentUserId)
+    : false;
+
+  if (!isIdle || !hasActiveCall || !otherInCall) return null;
+
+  // Find the waiting participant's info
+  const waitingParticipant = Array.isArray(voiceStatus?.participants)
+    ? voiceStatus.participants.find((p: any) => (p.user_id || p.id) !== currentUserId)
+    : null;
+
+  const callerName = waitingParticipant?.display_name || waitingParticipant?.username || otherUsername || 'Someone';
+  const callerAvatar = waitingParticipant?.avatar_url || otherAvatarUrl;
+
+  const handleJoin = async () => {
+    const result = await joinDMVoice(conversationId);
+    if (!result.success) {
+      toastStore.addToast({ type: 'warning', title: 'Call Failed', message: result.error || 'Could not join call' });
+    }
+  };
+
+  const handleJoinDeafened = async () => {
+    const result = await joinDMVoice(conversationId);
+    if (result.success) {
+      await toggleDMDeafen(true);
+    } else {
+      toastStore.addToast({ type: 'warning', title: 'Call Failed', message: result.error || 'Could not join call' });
+    }
+  };
+
+  return (
+    <DMWaitingRoom
+      callerName={callerName}
+      callerAvatar={callerAvatar}
+      onJoin={handleJoin}
+      onJoinDeafened={handleJoinDeafened}
+    />
   );
 }
 

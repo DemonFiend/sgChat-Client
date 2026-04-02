@@ -527,6 +527,7 @@ export function handleEvent(type: string, data: any): void {
     // Notifications
     case 'notification.new':
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
       soundService.playNotification();
       if (data.data?.title || data.type) {
         toastStore.addToast({
@@ -538,6 +539,17 @@ export function handleEvent(type: string, data: any): void {
       break;
     case 'notification.read':
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      break;
+
+    // DM call missed — server created system message + notification
+    case 'dm.call.missed':
+      if (data.dm_channel_id) {
+        queryClient.invalidateQueries({ queryKey: ['dm-messages'] });
+        queryClient.invalidateQueries({ queryKey: ['dm-voice-status', data.dm_channel_id] });
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      }
       break;
 
     // Soundboard

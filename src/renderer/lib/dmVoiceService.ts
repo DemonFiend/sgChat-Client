@@ -89,8 +89,9 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
     remoteParticipantJoined = false;
     useVoiceStore.getState().setDMCallPhase('notifying');
     emit('call-phase-change', { phase: 'notifying' });
-    // Play hold music while waiting for the other party
-    soundService.playHoldMusic();
+    // Play ringtone at half volume for the caller (receiver hears full volume)
+    // After 30s the notifying timer switches to hold music
+    soundService.playRingtone(0.175);
 
     const raw = await api.post<{
       token?: string;
@@ -165,6 +166,7 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
       useVoiceStore.getState().setRemoteParticipantLeft(false);
       emit('call-phase-change', { phase: 'connected' });
       // Stop hold music — friend has joined
+      soundService.stopRingtone();
       soundService.stopHoldMusic();
       // Clear notifying/waiting timers
       if (notifyingTimer) { clearTimeout(notifyingTimer); notifyingTimer = null; }
@@ -191,6 +193,7 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
 
     room.on(RoomEvent.Disconnected, () => {
       clearAllTimers();
+      soundService.stopRingtone();
       soundService.stopHoldMusic();
       callPhase = 'idle';
       useVoiceStore.getState().setDMCallPhase('idle');
@@ -279,12 +282,15 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
       useVoiceStore.getState().setDMCallPhase('connected');
       useVoiceStore.getState().setRemoteParticipantLeft(false);
       emit('call-phase-change', { phase: 'connected' });
+      soundService.stopRingtone();
       soundService.stopHoldMusic();
     }
 
-    // 30s notifying timer — transition to 'waiting' if no one joins
+    // 30s notifying timer — stop ringtone, start hold music, transition to 'waiting'
     notifyingTimer = setTimeout(() => {
       if (callPhase === 'notifying') {
+        soundService.stopRingtone();
+        soundService.playHoldMusic();
         callPhase = 'waiting';
         useVoiceStore.getState().setDMCallPhase('waiting');
         emit('call-phase-change', { phase: 'waiting' });
@@ -294,6 +300,7 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
     // 5min auto-kick timer — disconnect if still alone
     autoKickTimer = setTimeout(() => {
       if (!remoteParticipantJoined && dmRoom) {
+        soundService.stopRingtone();
         soundService.stopHoldMusic();
         leaveDMVoice();
       }
@@ -312,6 +319,7 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
     return { success: true };
   } catch (err: unknown) {
     callPhase = 'idle';
+    soundService.stopRingtone();
     soundService.stopHoldMusic();
     useVoiceStore.getState().setDMCallPhase('idle');
     emit('call-phase-change', { phase: 'idle' });
@@ -322,6 +330,7 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
 
 export async function leaveDMVoice(): Promise<void> {
   clearAllTimers();
+  soundService.stopRingtone();
   soundService.stopHoldMusic();
   callPhase = 'idle';
   useVoiceStore.getState().setDMCallPhase('idle');

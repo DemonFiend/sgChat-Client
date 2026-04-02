@@ -79,12 +79,12 @@ export const soundService = {
     this.play('notification');
   },
 
-  playRingtone() {
+  playRingtone(volume?: number) {
     this.stopRingtone();
     const audio = document.createElement('audio');
     audio.src = SOUND_URLS.ringtone || '/sounds/ringtone.mp3';
     audio.loop = true;
-    audio.volume = 0.35;
+    audio.volume = volume ?? 0.35;
     audio.style.display = 'none';
     document.body.appendChild(audio);
     audio.play().catch((err) => {
