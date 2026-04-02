@@ -234,8 +234,8 @@ export function FriendsView() {
                     key={req.id}
                     request={req}
                     direction="incoming"
-                    onAccept={() => acceptRequest.mutate(req.id)}
-                    onReject={() => handleRejectRequest(req.id)}
+                    onAccept={() => acceptRequest.mutate(req.from_user.id)}
+                    onReject={() => handleRejectRequest(req.from_user.id)}
                   />
                 ))}
 
