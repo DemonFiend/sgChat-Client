@@ -91,7 +91,7 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
     const response = await api.post<{
       livekit_token: string;
       livekit_url: string;
-    }>(`/api/voice/dm/join/${dmChannelId}`);
+    }>(`/api/dms/${dmChannelId}/voice/join`);
 
     const voiceSettings = useVoiceSettingsStore.getState();
     const nsMode = voiceSettings.noiseCancellationMode;
