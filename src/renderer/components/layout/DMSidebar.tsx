@@ -62,7 +62,7 @@ export function DMSidebar({ onCreateDM }: DMSidebarProps) {
           onChange={(e) => setSearch(e.currentTarget.value)}
           leftSection={<IconSearch size={14} />}
           rightSection={search ? (
-            <ActionIcon variant="subtle" size={16} onClick={() => setSearch('')}>
+            <ActionIcon aria-label="Clear search" variant="subtle" size={16} onClick={() => setSearch('')}>
               <IconX size={10} />
             </ActionIcon>
           ) : null}
@@ -91,7 +91,7 @@ export function DMSidebar({ onCreateDM }: DMSidebarProps) {
           <Text size="sm" fw={500}>Friends</Text>
         </UnstyledButton>
         <Tooltip label="Create DM" position="right" withArrow>
-          <ActionIcon variant="subtle" color="gray" size={28} onClick={onCreateDM}>
+          <ActionIcon aria-label="Create DM" variant="subtle" color="gray" size={28} onClick={onCreateDM}>
             <IconPlus size={16} />
           </ActionIcon>
         </Tooltip>

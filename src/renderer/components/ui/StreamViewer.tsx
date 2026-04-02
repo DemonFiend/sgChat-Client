@@ -363,6 +363,7 @@ export function StreamViewer() {
               <Group gap={12}>
                 <Tooltip label={isMuted ? 'Unmute' : 'Mute'} position="top" withArrow>
                   <ActionIcon
+                    aria-label={isMuted ? 'Unmute' : 'Mute'}
                     variant="subtle"
                     color="gray"
                     size={36}
@@ -393,7 +394,7 @@ export function StreamViewer() {
                 {/* PiP */}
                 {effectiveVideoElement && document.pictureInPictureEnabled && (
                   <Tooltip label={isPiP ? 'Exit PiP' : 'Picture-in-Picture'} position="top" withArrow>
-                    <ActionIcon variant="subtle" color="gray" size={36} onClick={togglePiP}>
+                    <ActionIcon aria-label={isPiP ? 'Exit PiP' : 'Picture-in-Picture'} variant="subtle" color="gray" size={36} onClick={togglePiP}>
                       {isPiP
                         ? <IconPictureInPictureOff size={20} color="white" />
                         : <IconPictureInPicture size={20} color="white" />}
@@ -403,7 +404,7 @@ export function StreamViewer() {
 
                 {/* Fullscreen */}
                 <Tooltip label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'} position="top" withArrow>
-                  <ActionIcon variant="subtle" color="gray" size={36} onClick={toggleFullscreen}>
+                  <ActionIcon aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'} variant="subtle" color="gray" size={36} onClick={toggleFullscreen}>
                     {isFullscreen
                       ? <IconMinimize size={20} color="white" />
                       : <IconMaximize size={20} color="white" />}
@@ -412,7 +413,7 @@ export function StreamViewer() {
 
                 {/* Minimize (keep audio) */}
                 <Tooltip label="Minimize (keep audio)" position="top" withArrow>
-                  <ActionIcon variant="subtle" color="gray" size={36} onClick={handleMinimize}>
+                  <ActionIcon aria-label="Minimize (keep audio)" variant="subtle" color="gray" size={36} onClick={handleMinimize}>
                     <IconChevronDown size={20} color="white" />
                   </ActionIcon>
                 </Tooltip>
@@ -420,6 +421,7 @@ export function StreamViewer() {
                 {/* Leave */}
                 <Tooltip label="Leave Stream" position="top" withArrow>
                   <ActionIcon
+                    aria-label="Leave Stream"
                     variant="filled"
                     color="red"
                     size={36}

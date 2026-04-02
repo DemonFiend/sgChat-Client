@@ -141,6 +141,11 @@ export async function connectSocket(): Promise<void> {
         handleEvent(envelope.type, eventData);
       }
     }
+
+    // Refresh member presence data to avoid stale online status after resume.
+    // The missed_events replay may not include all presence changes, and the DB
+    // may have updated statuses during the disconnect window.
+    queryClient.invalidateQueries({ queryKey: ['members'] }).catch(() => {});
   });
 
   socket.on('gateway.resume_failed', async (rawData: any) => {
@@ -151,6 +156,8 @@ export async function connectSocket(): Promise<void> {
     // Clear stale session and do a full reconnect
     gatewaySessionId = null;
     lastSequences = {};
+    // Clear stale presence — will be re-seeded from fresh member data
+    usePresenceStore.getState().clearAll();
     // Catch to prevent unhandled rejections from failing query refetches
     queryClient.invalidateQueries().catch(() => {});
   });

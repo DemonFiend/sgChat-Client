@@ -431,6 +431,8 @@ function MemberItem({ member, offline, roleColor, onContextMenu }: { member: Mem
           gap={8}
           px={8}
           py={4}
+          data-user-id={member.id}
+          data-testid="member-item"
           style={{
             borderRadius: 4,
             cursor: 'pointer',

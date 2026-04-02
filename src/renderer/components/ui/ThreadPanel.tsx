@@ -67,7 +67,7 @@ export function ThreadPanel({ threadId, channelId, onClose }: ThreadPanelProps) 
         flexShrink: 0,
       }}>
         <Tooltip label="Back" position="bottom" withArrow>
-          <ActionIcon variant="subtle" color="gray" size={28} onClick={onClose}>
+          <ActionIcon aria-label="Back" variant="subtle" color="gray" size={28} onClick={onClose}>
             <IconArrowLeft size={16} />
           </ActionIcon>
         </Tooltip>
@@ -79,6 +79,7 @@ export function ThreadPanel({ threadId, channelId, onClose }: ThreadPanelProps) 
           {thread && !thread.archived && (
             <Tooltip label={thread.locked ? 'Unlock' : 'Lock'} position="bottom" withArrow>
               <ActionIcon
+                aria-label={thread.locked ? 'Unlock' : 'Lock'}
                 variant="subtle"
                 color={thread.locked ? 'yellow' : 'gray'}
                 size={24}
@@ -90,6 +91,7 @@ export function ThreadPanel({ threadId, channelId, onClose }: ThreadPanelProps) 
           )}
           <Tooltip label={thread?.archived ? 'Unarchive' : 'Archive'} position="bottom" withArrow>
             <ActionIcon
+              aria-label={thread?.archived ? 'Unarchive' : 'Archive'}
               variant="subtle"
               color={thread?.archived ? 'yellow' : 'gray'}
               size={24}
@@ -98,7 +100,7 @@ export function ThreadPanel({ threadId, channelId, onClose }: ThreadPanelProps) 
               <IconArchive size={14} />
             </ActionIcon>
           </Tooltip>
-          <ActionIcon variant="subtle" color="gray" size={24} onClick={onClose}>
+          <ActionIcon aria-label="Close" variant="subtle" color="gray" size={24} onClick={onClose}>
             <IconX size={14} />
           </ActionIcon>
         </Group>

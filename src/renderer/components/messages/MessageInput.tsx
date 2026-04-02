@@ -258,7 +258,7 @@ export function MessageInput({ channelId, channelName, onSendOverride, onTyping 
           <Text size="xs" c="dimmed" style={{ flex: 1 }} truncate>
             Replying to <Text component="span" size="xs" fw={600} style={{ color: 'var(--accent)' }}>@{replyTo.author.username}</Text>
           </Text>
-          <ActionIcon variant="subtle" color="gray" size={20} onClick={() => setReplyTo(null)}>
+          <ActionIcon aria-label="Cancel reply" variant="subtle" color="gray" size={20} onClick={() => setReplyTo(null)}>
             <IconX size={12} />
           </ActionIcon>
         </div>
@@ -286,13 +286,13 @@ export function MessageInput({ channelId, channelName, onSendOverride, onTyping 
               border: spoilerFiles.has(i) ? '1px solid var(--danger)' : '1px solid transparent',
             }}>
               <Tooltip label={spoilerFiles.has(i) ? 'Remove spoiler' : 'Mark as spoiler'} position="top" withArrow>
-                <ActionIcon variant="subtle" color={spoilerFiles.has(i) ? 'red' : 'gray'} size={16} onClick={() => toggleSpoiler(i)}>
+                <ActionIcon aria-label={spoilerFiles.has(i) ? 'Remove spoiler' : 'Mark as spoiler'} variant="subtle" color={spoilerFiles.has(i) ? 'red' : 'gray'} size={16} onClick={() => toggleSpoiler(i)}>
                   {spoilerFiles.has(i) ? <IconEyeOff size={10} /> : <IconEye size={10} />}
                 </ActionIcon>
               </Tooltip>
               <Text size="xs" truncate style={{ flex: 1 }}>{spoilerFiles.has(i) ? 'SPOILER ' : ''}{file.name}</Text>
               <Text size="xs" c="dimmed">{(file.size / 1024).toFixed(0)}KB</Text>
-              <ActionIcon variant="subtle" color="gray" size={16} onClick={() => removeFile(i)}>
+              <ActionIcon aria-label="Remove file" variant="subtle" color="gray" size={16} onClick={() => removeFile(i)}>
                 <IconX size={10} />
               </ActionIcon>
             </div>
@@ -309,7 +309,7 @@ export function MessageInput({ channelId, channelName, onSendOverride, onTyping 
         alignItems: 'flex-end',
         gap: 4,
       }}>
-        <ActionIcon variant="subtle" color="gray" size={32} onClick={() => fileInputRef.current?.click()}>
+        <ActionIcon aria-label="Attach file" variant="subtle" color="gray" size={32} onClick={() => fileInputRef.current?.click()}>
           <IconPaperclip size={18} />
         </ActionIcon>
         <input
@@ -382,23 +382,24 @@ export function MessageInput({ channelId, channelName, onSendOverride, onTyping 
 
         <Group gap={2}>
           <Tooltip label="Stickers" position="top" withArrow>
-            <ActionIcon ref={stickerBtnRef} variant="subtle" color="gray" size={32} onClick={() => setStickerPickerOpen((v) => !v)}>
+            <ActionIcon aria-label="Stickers" ref={stickerBtnRef} variant="subtle" color="gray" size={32} onClick={() => setStickerPickerOpen((v) => !v)}>
               <IconSticker size={18} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label="GIF" position="top" withArrow>
-            <ActionIcon ref={gifBtnRef} variant="subtle" color="gray" size={32} onClick={() => setGifPickerOpen(true)}>
+            <ActionIcon aria-label="GIF" ref={gifBtnRef} variant="subtle" color="gray" size={32} onClick={() => setGifPickerOpen(true)}>
               <IconGif size={20} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label="Emoji" position="top" withArrow>
-            <ActionIcon ref={emojiBtnRef} variant="subtle" color="gray" size={32} onClick={() => setEmojiPickerOpen((v) => !v)}>
+            <ActionIcon aria-label="Emoji" ref={emojiBtnRef} variant="subtle" color="gray" size={32} onClick={() => setEmojiPickerOpen((v) => !v)}>
               <IconMoodSmile size={18} />
             </ActionIcon>
           </Tooltip>
           {isOverLimit && content.trim() && (
             <Tooltip label="Send as text file" position="top" withArrow>
               <ActionIcon
+                aria-label="Send as text file"
                 variant="filled"
                 color="yellow"
                 size={32}
@@ -410,6 +411,7 @@ export function MessageInput({ channelId, channelName, onSendOverride, onTyping 
           )}
           {(content.trim() || files.length > 0) && (
             <ActionIcon
+              aria-label="Send message"
               variant="filled"
               color={isOverLimit ? 'red' : 'brand'}
               size={32}

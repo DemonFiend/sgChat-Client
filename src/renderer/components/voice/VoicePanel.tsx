@@ -110,7 +110,7 @@ export function VoicePanel() {
             {error || 'Could not connect to voice channel'}
           </Text>
           <Tooltip label="Dismiss" position="top" withArrow>
-            <ActionIcon variant="filled" color="red" size={28} radius="xl" onClick={leave} mt={4}>
+            <ActionIcon aria-label="Dismiss" variant="filled" color="red" size={28} radius="xl" onClick={leave} mt={4}>
               <IconPhoneOff size={14} />
             </ActionIcon>
           </Tooltip>
@@ -225,6 +225,7 @@ export function VoicePanel() {
           onToggleMute={toggleMute}
           onRaiseHand={raiseHand}
           onLowerHand={lowerHand}
+          canManageStage={permissions?.canMuteMembers}
         />
       )}
 
@@ -240,6 +241,7 @@ export function VoicePanel() {
         <Group gap={4} justify="center">
           <Tooltip label={isServerMutedLocal ? 'Server Muted' : muted ? 'Unmute' : 'Mute'} position="top" withArrow>
             <ActionIcon
+              aria-label={isServerMutedLocal ? 'Server Muted' : muted ? 'Unmute' : 'Mute'}
               variant={muted ? 'filled' : 'subtle'}
               color={muted ? 'red' : 'gray'}
               size={28}
@@ -253,6 +255,7 @@ export function VoicePanel() {
 
           <Tooltip label={isServerDeafenedLocal ? 'Server Deafened' : deafened ? 'Undeafen' : 'Deafen'} position="top" withArrow>
             <ActionIcon
+              aria-label={isServerDeafenedLocal ? 'Server Deafened' : deafened ? 'Undeafen' : 'Deafen'}
               variant={deafened ? 'filled' : 'subtle'}
               color={deafened ? 'red' : 'gray'}
               size={28}
@@ -268,6 +271,7 @@ export function VoicePanel() {
 
           <Tooltip label="Soundboard" position="top" withArrow>
             <ActionIcon
+              aria-label="Soundboard"
               variant={soundboardOpen ? 'filled' : 'subtle'}
               color={soundboardOpen ? 'brand' : 'gray'}
               size={28}
@@ -279,7 +283,7 @@ export function VoicePanel() {
           </Tooltip>
 
           <Tooltip label="Disconnect" position="top" withArrow>
-            <ActionIcon variant="filled" color="red" size={28} radius="xl" onClick={leave}>
+            <ActionIcon aria-label="Disconnect" variant="filled" color="red" size={28} radius="xl" onClick={leave}>
               <IconPhoneOff size={14} />
             </ActionIcon>
           </Tooltip>

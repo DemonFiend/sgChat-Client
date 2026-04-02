@@ -230,7 +230,7 @@ export function SoundboardPanel({ serverId: serverIdProp, opened, onClose }: Sou
             {sounds.length}/{config.max_sounds}
           </Badge>
         )}
-        <ActionIcon variant="subtle" color="gray" size={24} onClick={onClose}>
+        <ActionIcon aria-label="Close" variant="subtle" color="gray" size={24} onClick={onClose}>
           <IconX size={12} />
         </ActionIcon>
       </Group>
@@ -247,6 +247,7 @@ export function SoundboardPanel({ serverId: serverIdProp, opened, onClose }: Sou
         />
         <Tooltip label={userSoundCount >= maxPerUser ? `Upload limit reached (${maxPerUser})` : 'Upload sound'} position="top" withArrow>
           <ActionIcon
+            aria-label={userSoundCount >= maxPerUser ? `Upload limit reached (${maxPerUser})` : 'Upload sound'}
             variant="subtle"
             color="brand"
             size={28}
@@ -379,6 +380,7 @@ export function SoundboardPanel({ serverId: serverIdProp, opened, onClose }: Sou
                   <Group gap={4}>
                     <Tooltip label="Play locally (only you)" position="bottom" withArrow>
                       <ActionIcon
+                        aria-label="Play locally (only you)"
                         variant="subtle"
                         color="gray"
                         size={22}
@@ -390,6 +392,7 @@ export function SoundboardPanel({ serverId: serverIdProp, opened, onClose }: Sou
 
                     <Tooltip label="Broadcast to voice" position="bottom" withArrow>
                       <ActionIcon
+                        aria-label="Broadcast to voice"
                         variant="subtle"
                         color="brand"
                         size={22}
@@ -403,6 +406,7 @@ export function SoundboardPanel({ serverId: serverIdProp, opened, onClose }: Sou
                     {sound.uploaded_by === currentUserId && (
                       <Tooltip label="Delete" position="bottom" withArrow>
                         <ActionIcon
+                          aria-label="Delete"
                           variant="subtle"
                           color="red"
                           size={22}

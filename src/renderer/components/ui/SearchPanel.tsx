@@ -138,7 +138,7 @@ export function SearchPanel({ opened, onClose, channelId }: SearchPanelProps) {
           autoFocus
           rightSection={
             query ? (
-              <ActionIcon variant="subtle" color="gray" size={20} onClick={() => handleQueryChange('')}>
+              <ActionIcon aria-label="Clear search" variant="subtle" color="gray" size={20} onClick={() => handleQueryChange('')}>
                 <IconX size={14} />
               </ActionIcon>
             ) : null

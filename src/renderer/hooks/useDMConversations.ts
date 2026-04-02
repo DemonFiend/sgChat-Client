@@ -27,7 +27,21 @@ export function useDMMessages(conversationId: string | null) {
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams({ limit: '50' });
       if (pageParam) params.set('before', pageParam);
-      return ensureArray<Message>(await api.get(`/api/dms/${conversationId}/messages?${params}`));
+      const raw = ensureArray<any>(await api.get(`/api/dms/${conversationId}/messages?${params}`));
+      // Server DM endpoint returns flat fields (author_id, username, avatar_url)
+      // instead of a nested author object — normalize to match Message interface
+      return raw.map((msg): Message => ({
+        ...msg,
+        author: msg.author ?? (msg.author_id ? {
+          id: msg.author_id,
+          username: msg.username || msg.author_username || 'Unknown',
+          display_name: msg.display_name || msg.author_display_name || msg.username || msg.author_username || 'Unknown',
+          avatar_url: msg.avatar_url || msg.author_avatar_url || null,
+          role_color: msg.role_color || msg.author_role_color || null,
+        } : null),
+        reactions: Array.isArray(msg.reactions) ? msg.reactions : [],
+        attachments: Array.isArray(msg.attachments) ? msg.attachments : [],
+      }));
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => {

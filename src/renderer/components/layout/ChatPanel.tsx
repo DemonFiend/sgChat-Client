@@ -163,6 +163,7 @@ export function ChatPanel() {
         )}
         <Tooltip label={eventsOpen ? 'Hide Events' : 'Server Events'} position="bottom" withArrow>
           <ActionIcon
+            aria-label={eventsOpen ? 'Hide Events' : 'Server Events'}
             variant={eventsOpen ? 'light' : 'subtle'}
             color={eventsOpen ? 'brand' : 'gray'}
             size={28}
@@ -174,6 +175,7 @@ export function ChatPanel() {
         </Tooltip>
         <Tooltip label={pinnedOpen ? 'Hide Pinned' : 'Pinned Messages'} position="bottom" withArrow>
           <ActionIcon
+            aria-label={pinnedOpen ? 'Hide Pinned' : 'Pinned Messages'}
             variant={pinnedOpen ? 'light' : 'subtle'}
             color={pinnedOpen ? 'yellow' : 'gray'}
             size={28}
@@ -185,6 +187,7 @@ export function ChatPanel() {
         </Tooltip>
         <Tooltip label={threadsOpen ? 'Hide Threads' : 'Threads'} position="bottom" withArrow>
           <ActionIcon
+            aria-label={threadsOpen ? 'Hide Threads' : 'Threads'}
             variant={threadsOpen ? 'light' : 'subtle'}
             color={threadsOpen ? 'brand' : 'gray'}
             size={28}
@@ -196,6 +199,7 @@ export function ChatPanel() {
         </Tooltip>
         <Tooltip label="Search" position="bottom" withArrow>
           <ActionIcon
+            aria-label="Search"
             variant="subtle"
             color="gray"
             size={28}
@@ -207,6 +211,7 @@ export function ChatPanel() {
         </Tooltip>
         <Tooltip label={memberListVisible ? 'Hide Members' : 'Show Members'} position="bottom" withArrow>
           <ActionIcon
+            aria-label={memberListVisible ? 'Hide Members' : 'Show Members'}
             variant={memberListVisible ? 'light' : 'subtle'}
             color={memberListVisible ? 'brand' : 'gray'}
             size={28}
@@ -238,7 +243,7 @@ export function ChatPanel() {
         }}>
           <Group justify="space-between" mb={8}>
             <Text size="sm" fw={600}>Pinned Messages</Text>
-            <ActionIcon variant="subtle" color="gray" size={20} onClick={() => setPinnedOpen(false)}>
+            <ActionIcon aria-label="Close pinned messages" variant="subtle" color="gray" size={20} onClick={() => setPinnedOpen(false)}>
               <Text size="xs">×</Text>
             </ActionIcon>
           </Group>
@@ -257,6 +262,7 @@ export function ChatPanel() {
                     <Text size="xs" fw={600} c="dimmed" truncate>{msg.author?.username || 'Unknown'}</Text>
                     <Tooltip label="Unpin" position="left" withArrow>
                       <ActionIcon
+                        aria-label="Unpin"
                         variant="subtle"
                         color="yellow"
                         size={20}

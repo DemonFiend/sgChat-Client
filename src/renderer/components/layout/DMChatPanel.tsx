@@ -330,7 +330,7 @@ function DMHeader({ username, status, statusColor, avatarUrl, conversationId }: 
         onToggleVideo={handleToggleVideo}
       />
       <Tooltip label="DM Settings" position="bottom" withArrow>
-        <ActionIcon variant="subtle" color="gray" size={28} onClick={() => setSettingsOpen(true)}>
+        <ActionIcon aria-label="DM Settings" variant="subtle" color="gray" size={28} onClick={() => setSettingsOpen(true)}>
           <IconSettings size={16} />
         </ActionIcon>
       </Tooltip>

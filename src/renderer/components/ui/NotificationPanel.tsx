@@ -42,7 +42,7 @@ export function NotificationPanel() {
               Mark all read
             </Button>
           )}
-          <ActionIcon variant="subtle" color="gray" size={24} onClick={closePanel}>
+          <ActionIcon aria-label="Close" variant="subtle" color="gray" size={24} onClick={closePanel}>
             <IconX size={14} />
           </ActionIcon>
         </Group>
@@ -71,10 +71,10 @@ export function NotificationPanel() {
               <Group justify="space-between" mb={2}>
                 <Text size="xs" fw={600}>{notif.data?.title || notif.type}</Text>
                 <Group gap={2}>
-                  <ActionIcon variant="subtle" color="gray" size={18} onClick={() => markRead.mutate(notif.id)}>
+                  <ActionIcon aria-label="Mark as read" variant="subtle" color="gray" size={18} onClick={() => markRead.mutate(notif.id)}>
                     <IconCheck size={12} />
                   </ActionIcon>
-                  <ActionIcon variant="subtle" color="red" size={18} onClick={() => deleteNotif.mutate(notif.id)}>
+                  <ActionIcon aria-label="Delete notification" variant="subtle" color="red" size={18} onClick={() => deleteNotif.mutate(notif.id)}>
                     <IconTrash size={12} />
                   </ActionIcon>
                 </Group>
@@ -102,7 +102,7 @@ export function NotificationPanel() {
             >
               <Group justify="space-between" mb={2}>
                 <Text size="xs" fw={500}>{notif.data?.title || notif.type}</Text>
-                <ActionIcon variant="subtle" color="red" size={18} onClick={() => deleteNotif.mutate(notif.id)}>
+                <ActionIcon aria-label="Delete notification" variant="subtle" color="red" size={18} onClick={() => deleteNotif.mutate(notif.id)}>
                   <IconTrash size={12} />
                 </ActionIcon>
               </Group>

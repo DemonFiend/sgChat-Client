@@ -42,7 +42,7 @@ export function DMVoiceControls({
   if (!isInCall) {
     return (
       <Tooltip label="Start Voice Call" position="bottom" withArrow>
-        <ActionIcon variant="subtle" color="green" size={28} onClick={onCall}>
+        <ActionIcon aria-label="Start Voice Call" variant="subtle" color="green" size={28} onClick={onCall}>
           <IconPhone size={16} />
         </ActionIcon>
       </Tooltip>
@@ -72,6 +72,7 @@ export function DMVoiceControls({
       <Group gap={4}>
         <Tooltip label={isMuted ? 'Unmute' : 'Mute'} position="bottom" withArrow>
           <ActionIcon
+            aria-label={isMuted ? 'Unmute' : 'Mute'}
             variant={isMuted ? 'filled' : 'subtle'}
             color={isMuted ? 'red' : 'gray'}
             size={28}
@@ -82,6 +83,7 @@ export function DMVoiceControls({
         </Tooltip>
         <Tooltip label={isDeafened ? 'Undeafen' : 'Deafen'} position="bottom" withArrow>
           <ActionIcon
+            aria-label={isDeafened ? 'Undeafen' : 'Deafen'}
             variant={isDeafened ? 'filled' : 'subtle'}
             color={isDeafened ? 'red' : 'gray'}
             size={28}
@@ -92,6 +94,7 @@ export function DMVoiceControls({
         </Tooltip>
         <Tooltip label={isVideoOn ? 'Turn Off Camera' : 'Turn On Camera'} position="bottom" withArrow>
           <ActionIcon
+            aria-label={isVideoOn ? 'Turn Off Camera' : 'Turn On Camera'}
             variant={isVideoOn ? 'filled' : 'subtle'}
             color={isVideoOn ? 'brand' : 'gray'}
             size={28}
@@ -103,6 +106,7 @@ export function DMVoiceControls({
         {callPhase === 'connected' && (
           <Tooltip label={isScreenSharing ? 'Stop Screen Share' : 'Share Screen'} position="bottom" withArrow>
             <ActionIcon
+              aria-label={isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
               variant={isScreenSharing ? 'filled' : 'subtle'}
               color={isScreenSharing ? 'violet' : 'gray'}
               size={28}
@@ -113,7 +117,7 @@ export function DMVoiceControls({
           </Tooltip>
         )}
         <Tooltip label="End Call" position="bottom" withArrow>
-          <ActionIcon variant="filled" color="red" size={28} onClick={onHangup}>
+          <ActionIcon aria-label="End Call" variant="filled" color="red" size={28} onClick={onHangup}>
             <IconPhoneOff size={14} />
           </ActionIcon>
         </Tooltip>

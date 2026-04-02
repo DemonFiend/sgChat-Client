@@ -206,17 +206,17 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
           }}
         >
           <Tooltip label="Reply" position="top" withArrow>
-            <ActionIcon variant="subtle" color="gray" size={24} onClick={handleReply}>
+            <ActionIcon aria-label="Reply" variant="subtle" color="gray" size={24} onClick={handleReply}>
               <IconArrowBackUp size={14} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label="React" position="top" withArrow>
-            <ActionIcon ref={reactionBtnRef} variant="subtle" color="gray" size={24} onClick={() => setReactionPickerOpen(true)}>
+            <ActionIcon aria-label="React" ref={reactionBtnRef} variant="subtle" color="gray" size={24} onClick={() => setReactionPickerOpen(true)}>
               <IconMoodSmile size={14} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label="Create Thread" position="top" withArrow>
-            <ActionIcon variant="subtle" color="gray" size={24} onClick={() => {
+            <ActionIcon aria-label="Create Thread" variant="subtle" color="gray" size={24} onClick={() => {
               const name = `Thread: ${message.content.slice(0, 40)}${message.content.length > 40 ? '...' : ''}`;
               createThread.mutate(
                 { parent_message_id: message.id, channel_id: channelId, name },
@@ -228,13 +228,13 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
           </Tooltip>
           {message.pinned ? (
             <Tooltip label="Unpin" position="top" withArrow>
-              <ActionIcon variant="subtle" color="yellow" size={24} onClick={() => unpinMessage.mutate(message.id)}>
+              <ActionIcon aria-label="Unpin" variant="subtle" color="yellow" size={24} onClick={() => unpinMessage.mutate(message.id)}>
                 <IconPinnedOff size={14} />
               </ActionIcon>
             </Tooltip>
           ) : (
             <Tooltip label="Pin" position="top" withArrow>
-              <ActionIcon variant="subtle" color="gray" size={24} onClick={() => pinMessage.mutate(message.id)}>
+              <ActionIcon aria-label="Pin" variant="subtle" color="gray" size={24} onClick={() => pinMessage.mutate(message.id)}>
                 <IconPin size={14} />
               </ActionIcon>
             </Tooltip>
@@ -242,12 +242,12 @@ export function MessageItem({ message, channelId, hovered }: MessageItemProps) {
           {isOwn && (
             <>
               <Tooltip label="Edit" position="top" withArrow>
-                <ActionIcon variant="subtle" color="gray" size={24} onClick={handleStartEdit}>
+                <ActionIcon aria-label="Edit" variant="subtle" color="gray" size={24} onClick={handleStartEdit}>
                   <IconEdit size={14} />
                 </ActionIcon>
               </Tooltip>
               <Tooltip label="Delete" position="top" withArrow>
-                <ActionIcon variant="subtle" color="red" size={24} onClick={() => setDeleteModalOpen(true)}>
+                <ActionIcon aria-label="Delete" variant="subtle" color="red" size={24} onClick={() => setDeleteModalOpen(true)}>
                   <IconTrash size={14} />
                 </ActionIcon>
               </Tooltip>

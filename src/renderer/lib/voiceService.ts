@@ -29,6 +29,10 @@ export interface VoiceParticipant {
   isStreaming?: boolean;
   avatarUrl?: string;
   voiceStatus?: string;
+  /** Stage channel: whether this participant has speaker role */
+  isStageSpeaker?: boolean;
+  /** Stage channel: whether this participant has raised their hand */
+  isHandRaised?: boolean;
 }
 
 // ── Screen share types & constants ──────────────────────────────────────────

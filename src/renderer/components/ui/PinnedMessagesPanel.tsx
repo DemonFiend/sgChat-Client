@@ -70,7 +70,7 @@ export function PinnedMessagesPanel({
           </Text>
         </div>
         {onClose && (
-          <ActionIcon variant="subtle" size="sm" onClick={onClose} c="var(--text-muted)">
+          <ActionIcon aria-label="Close pinned messages" variant="subtle" size="sm" onClick={onClose} c="var(--text-muted)">
             <IconPinnedOff size={16} />
           </ActionIcon>
         )}

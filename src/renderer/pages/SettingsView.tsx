@@ -384,6 +384,7 @@ function AccountSettings({ user }: { user: any }) {
     <Stack gap={24}>
       <Text size="xl" fw={700}>My Account</Text>
 
+      <Text size="sm" fw={500}>Avatar</Text>
       <AvatarPicker
         currentAvatarUrl={user?.avatar_url}
         username={user?.username}

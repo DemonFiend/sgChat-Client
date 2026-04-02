@@ -306,6 +306,7 @@ export function TitleBar() {
       <Group gap={0} className="no-drag">
         <Tooltip label="Minimize" position="bottom" withArrow>
           <ActionIcon
+            aria-label="Minimize"
             variant="subtle"
             color="gray"
             size={36}
@@ -318,6 +319,7 @@ export function TitleBar() {
         </Tooltip>
         <Tooltip label="Maximize" position="bottom" withArrow>
           <ActionIcon
+            aria-label="Maximize"
             variant="subtle"
             color="gray"
             size={36}
@@ -330,6 +332,7 @@ export function TitleBar() {
         </Tooltip>
         <Tooltip label="Close" position="bottom" withArrow>
           <ActionIcon
+            aria-label="Close"
             variant="subtle"
             color="red"
             size={36}

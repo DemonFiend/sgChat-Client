@@ -217,6 +217,7 @@ export function UserPanel() {
       <Group gap={2}>
         <Tooltip label={muted ? 'Unmute' : 'Mute'} position="top" withArrow>
           <ActionIcon
+            aria-label={muted ? 'Unmute' : 'Mute'}
             variant="subtle"
             color={muted ? 'red' : 'gray'}
             size={28}
@@ -227,6 +228,7 @@ export function UserPanel() {
         </Tooltip>
         <Tooltip label={deafened ? 'Undeafen' : 'Deafen'} position="top" withArrow>
           <ActionIcon
+            aria-label={deafened ? 'Undeafen' : 'Deafen'}
             variant="subtle"
             color={deafened ? 'red' : 'gray'}
             size={28}
@@ -236,7 +238,7 @@ export function UserPanel() {
           </ActionIcon>
         </Tooltip>
         <Tooltip label="Settings" position="top" withArrow>
-          <ActionIcon variant="subtle" color="gray" size={28} onClick={() => setView('settings')}>
+          <ActionIcon aria-label="Settings" variant="subtle" color="gray" size={28} onClick={() => setView('settings')}>
             <IconSettings size={16} />
           </ActionIcon>
         </Tooltip>

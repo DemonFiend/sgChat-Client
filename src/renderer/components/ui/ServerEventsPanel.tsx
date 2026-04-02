@@ -112,6 +112,7 @@ export function ServerEventsPanel({ serverId, channels, roles }: ServerEventsPan
           />
           <Tooltip label={showHistory ? 'Show Upcoming' : 'Show History'} position="bottom" withArrow>
             <ActionIcon
+              aria-label={showHistory ? 'Show Upcoming' : 'Show History'}
               variant={showHistory ? 'light' : 'subtle'}
               color={showHistory ? 'brand' : 'gray'}
               size={28}
@@ -122,7 +123,7 @@ export function ServerEventsPanel({ serverId, channels, roles }: ServerEventsPan
           </Tooltip>
           {canManage && (
             <Tooltip label="Create Event" position="bottom" withArrow>
-              <ActionIcon variant="light" size={28} onClick={() => setCreateOpen(true)}>
+              <ActionIcon aria-label="Create Event" variant="light" size={28} onClick={() => setCreateOpen(true)}>
                 <IconCalendarPlus size={16} />
               </ActionIcon>
             </Tooltip>
@@ -140,9 +141,9 @@ export function ServerEventsPanel({ serverId, channels, roles }: ServerEventsPan
         borderBottom: '1px solid var(--border)',
         flexShrink: 0,
       }}>
-        <ActionIcon variant="subtle" size={24} onClick={prevMonth}><IconChevronLeft size={14} /></ActionIcon>
+        <ActionIcon aria-label="Previous month" variant="subtle" size={24} onClick={prevMonth}><IconChevronLeft size={14} /></ActionIcon>
         <Text size="sm" fw={600} style={{ minWidth: 140, textAlign: 'center' }}>{formatMonthLabel(currentMonth)}</Text>
-        <ActionIcon variant="subtle" size={24} onClick={nextMonth}><IconChevronRight size={14} /></ActionIcon>
+        <ActionIcon aria-label="Next month" variant="subtle" size={24} onClick={nextMonth}><IconChevronRight size={14} /></ActionIcon>
       </div>
 
       {/* Day filter indicator */}
@@ -160,7 +161,7 @@ export function ServerEventsPanel({ serverId, channels, roles }: ServerEventsPan
           <Text size="xs" c="dimmed">
             Showing events for {formatMonthLabel(currentMonth).split(' ')[0]} {selectedDay}
           </Text>
-          <ActionIcon variant="subtle" size={16} onClick={() => setSelectedDay(null)}>
+          <ActionIcon aria-label="Clear day filter" variant="subtle" size={16} onClick={() => setSelectedDay(null)}>
             <IconX size={10} />
           </ActionIcon>
         </div>

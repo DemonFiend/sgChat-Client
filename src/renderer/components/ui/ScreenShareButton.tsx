@@ -23,8 +23,14 @@ export function ScreenShareButton({ size = 28 }: { size?: number }) {
   const startScreenShare = useVoiceStore((s) => s.startScreenShare);
   const stopScreenShare = useVoiceStore((s) => s.stopScreenShare);
   const canStream = useVoiceStore((s) => s.permissions?.canStream ?? false);
+  const channelType = useVoiceStore((s) => s.channelType);
+  const isSpeaker = useVoiceStore((s) => s.isSpeaker);
+
+  // In stage channels, only speakers can screen share
+  const isStageRestricted = channelType === 'stage' && !isSpeaker;
 
   if (!canStream) return null;
+  if (isStageRestricted && !isSharing) return null;
 
   const handleQualitySelect = async (q: ScreenShareQuality) => {
     if (isSharing) {
@@ -39,6 +45,7 @@ export function ScreenShareButton({ size = 28 }: { size?: number }) {
       {isSharing ? (
         <Tooltip label="Stop Sharing" position="top" withArrow>
           <ActionIcon
+            aria-label="Stop Sharing"
             variant="filled"
             color="green"
             size={size}
@@ -51,7 +58,7 @@ export function ScreenShareButton({ size = 28 }: { size?: number }) {
         <Menu position="top" withArrow>
           <Menu.Target>
             <Tooltip label="Share Screen" position="top" withArrow>
-              <ActionIcon variant="subtle" color="gray" size={size}>
+              <ActionIcon aria-label="Share Screen" variant="subtle" color="gray" size={size}>
                 <IconScreenShare size={size * 0.57} />
               </ActionIcon>
             </Tooltip>
@@ -77,7 +84,7 @@ export function ScreenShareButton({ size = 28 }: { size?: number }) {
         <Menu position="top" withArrow>
           <Menu.Target>
             <Tooltip label="Stream Settings" position="top" withArrow>
-              <ActionIcon variant="subtle" color="gray" size={size}>
+              <ActionIcon aria-label="Stream Settings" variant="subtle" color="gray" size={size}>
                 <IconSettings size={size * 0.57} />
               </ActionIcon>
             </Tooltip>

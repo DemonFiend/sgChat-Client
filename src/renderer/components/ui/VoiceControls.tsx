@@ -34,6 +34,7 @@ export function VoiceControls({ size = 28 }: VoiceControlsProps) {
       <Group gap={4}>
         <Tooltip label={isServerMutedLocal ? 'Server Muted' : muted ? 'Unmute' : 'Mute'} position="top" withArrow>
           <ActionIcon
+            aria-label={isServerMutedLocal ? 'Server Muted' : muted ? 'Unmute' : 'Mute'}
             variant={muted ? 'filled' : 'subtle'}
             color={muted ? 'red' : 'gray'}
             size={size}
@@ -46,6 +47,7 @@ export function VoiceControls({ size = 28 }: VoiceControlsProps) {
 
         <Tooltip label={isServerDeafenedLocal ? 'Server Deafened' : deafened ? 'Undeafen' : 'Deafen'} position="top" withArrow>
           <ActionIcon
+            aria-label={isServerDeafenedLocal ? 'Server Deafened' : deafened ? 'Undeafen' : 'Deafen'}
             variant={deafened ? 'filled' : 'subtle'}
             color={deafened ? 'red' : 'gray'}
             size={size}
@@ -60,6 +62,7 @@ export function VoiceControls({ size = 28 }: VoiceControlsProps) {
 
         <Tooltip label="Soundboard" position="top" withArrow>
           <ActionIcon
+            aria-label="Soundboard"
             variant={soundboardOpen ? 'filled' : 'subtle'}
             color={soundboardOpen ? 'brand' : 'gray'}
             size={size}
@@ -72,7 +75,7 @@ export function VoiceControls({ size = 28 }: VoiceControlsProps) {
         <PingIndicator size={size * 0.5} />
 
         <Tooltip label="Disconnect" position="top" withArrow>
-          <ActionIcon variant="filled" color="red" size={size} onClick={leave}>
+          <ActionIcon aria-label="Disconnect" variant="filled" color="red" size={size} onClick={leave}>
             <IconPhoneOff size={size * 0.5} />
           </ActionIcon>
         </Tooltip>

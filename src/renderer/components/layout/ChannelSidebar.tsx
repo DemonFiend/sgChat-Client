@@ -5,7 +5,7 @@ import {
   IconHash, IconVolume, IconChevronDown, IconChevronRight,
   IconSpeakerphone, IconMusic, IconPlus, IconMoon, IconSettings,
   IconBell, IconBellOff, IconBellRinging, IconCrown, IconInfoCircle,
-  IconCheck, IconCalendar, IconUserCheck, IconShield,
+  IconCheck, IconCalendar, IconUserCheck, IconShield, IconChevronUp,
 } from '@tabler/icons-react';
 import { useChannelNotificationStore, type NotificationLevel } from '../../stores/channelNotificationStore';
 import { useChannels, type Channel, type ChannelType } from '../../hooks/useChannels';
@@ -214,18 +214,52 @@ export function ChannelSidebar() {
           {activeServer?.icon_url && (
             <Avatar src={activeServer.icon_url} size={32} radius="md" />
           )}
-          <Text fw={700} size="sm" truncate style={{
-            color: activeServer?.banner_url ? '#fff' : 'var(--text-primary)',
-            textShadow: activeServer?.banner_url ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
-            flex: 1,
-            minWidth: 0,
-          }}>
-            {activeServer?.name || 'Server'}
-          </Text>
+          <Menu position="bottom-start" shadow="md" withArrow>
+            <Menu.Target>
+              <UnstyledButton style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Text fw={700} size="sm" truncate style={{
+                  color: activeServer?.banner_url ? '#fff' : 'var(--text-primary)',
+                  textShadow: activeServer?.banner_url ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
+                  flex: 1,
+                  minWidth: 0,
+                }}>
+                  {activeServer?.name || 'Server'}
+                </Text>
+                <IconChevronUp size={12} style={{ color: activeServer?.banner_url ? '#fff' : 'var(--text-muted)', flexShrink: 0, transform: 'rotate(180deg)' }} />
+              </UnstyledButton>
+            </Menu.Target>
+            <Menu.Dropdown style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+              <Menu.Item leftSection={<IconCalendar size={14} />} onClick={toggleEventsPanel}>
+                Server Events
+              </Menu.Item>
+              {hasSelfAssignableRoles && (
+                <Menu.Item leftSection={<IconUserCheck size={14} />} onClick={() => setRolePickerOpen(true)}>
+                  Role Picker
+                </Menu.Item>
+              )}
+              <Menu.Item leftSection={<IconBell size={14} />} onClick={() => openAdminView('overview')}>
+                Notification Settings
+              </Menu.Item>
+              {showSettingsButton && (
+                <>
+                  <Menu.Divider />
+                  <Menu.Item leftSection={<IconSettings size={14} />} onClick={() => setServerSettingsOpen(true)}>
+                    Server Settings
+                  </Menu.Item>
+                </>
+              )}
+              {showAdminButtons && (
+                <Menu.Item leftSection={<IconShield size={14} />} onClick={() => openAdminView('roles')}>
+                  Admin Panel
+                </Menu.Item>
+              )}
+            </Menu.Dropdown>
+          </Menu>
           {/* Sidebar header action buttons */}
           <Group gap={2} style={{ flexShrink: 0 }}>
             <Tooltip label="Server Events" withArrow position="bottom">
               <ActionIcon
+                aria-label="Server Events"
                 variant={eventsOpen ? 'light' : 'subtle'}
                 color={eventsOpen ? 'brand' : activeServer?.banner_url ? 'white' : 'gray'}
                 size={24}
@@ -237,6 +271,7 @@ export function ChannelSidebar() {
             {hasSelfAssignableRoles && (
               <Tooltip label="Role Picker" withArrow position="bottom">
                 <ActionIcon
+                  aria-label="Role Picker"
                   variant="subtle"
                   color={activeServer?.banner_url ? 'white' : 'gray'}
                   size={24}
@@ -249,6 +284,7 @@ export function ChannelSidebar() {
             {showSettingsButton && (
               <Tooltip label="Server Settings" withArrow position="bottom">
                 <ActionIcon
+                  aria-label="Server Settings"
                   variant="subtle"
                   color={activeServer?.banner_url ? 'white' : 'gray'}
                   size={24}
@@ -261,6 +297,7 @@ export function ChannelSidebar() {
             {showAdminButtons && (
               <Tooltip label="Admin Panel" withArrow position="bottom">
                 <ActionIcon
+                  aria-label="Admin Panel"
                   variant="subtle"
                   color={activeServer?.banner_url ? 'white' : 'gray'}
                   size={24}
@@ -379,6 +416,7 @@ export function ChannelSidebar() {
                     </UnstyledButton>
                     <Tooltip label="Category Settings" withArrow position="right">
                       <ActionIcon
+                        aria-label="Category Settings"
                         variant="subtle"
                         color="gray"
                         size={18}
@@ -568,6 +606,7 @@ function ChannelItem({ channel, active, onClick, serverId }: { channel: Channel;
             {hovered && (
               <Tooltip label="Edit Channel" withArrow position="top">
                 <ActionIcon
+                  aria-label="Edit Channel"
                   variant="subtle"
                   color="gray"
                   size={20}

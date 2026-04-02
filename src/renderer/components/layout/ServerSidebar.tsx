@@ -56,6 +56,7 @@ export function ServerSidebar() {
             position="bottom-end"
           >
             <ActionIcon
+              aria-label="Direct Messages"
               variant={view === 'dms' || view === 'friends' ? 'filled' : 'subtle'}
               color={view === 'dms' || view === 'friends' ? 'brand' : 'gray'}
               size={48}
@@ -97,6 +98,7 @@ export function ServerSidebar() {
           {/* Add server button */}
           <Tooltip label="Create Server" position="right" withArrow>
             <ActionIcon
+              aria-label="Create Server"
               variant="subtle"
               color="green"
               size={48}
@@ -111,6 +113,7 @@ export function ServerSidebar() {
           {/* Join server button */}
           <Tooltip label="Join Server" position="right" withArrow>
             <ActionIcon
+              aria-label="Join Server"
               variant="subtle"
               color="blue"
               size={48}

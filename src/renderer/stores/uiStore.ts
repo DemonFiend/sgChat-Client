@@ -2,6 +2,16 @@ import { create } from 'zustand';
 
 import type { AdminSection } from '../pages/ServerAdminView';
 
+const DM_STORAGE_KEY = 'sgchat-active-dm';
+
+function getPersistedDMId(): string | null {
+  try {
+    return localStorage.getItem(DM_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
 interface ReplyTarget {
   id: string;
   content: string;
@@ -39,7 +49,7 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
   activeServerId: null,
   activeChannelId: null,
-  activeDMId: null,
+  activeDMId: getPersistedDMId(),
   activeThreadId: null,
   view: 'servers',
   adminSection: 'roles',
@@ -55,8 +65,10 @@ export const useUIStore = create<UIState>((set) => ({
   setActiveChannel: (channelId) =>
     set({ activeChannelId: channelId, activeThreadId: null, replyTo: null }),
 
-  setActiveDM: (dmId) =>
-    set({ activeDMId: dmId, view: 'dms' }),
+  setActiveDM: (dmId) => {
+    try { localStorage.setItem(DM_STORAGE_KEY, dmId); } catch { /* noop */ }
+    set({ activeDMId: dmId, view: 'dms' });
+  },
 
   setView: (view) =>
     set({ view }),

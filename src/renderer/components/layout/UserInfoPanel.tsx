@@ -187,6 +187,7 @@ export function UserInfoPanel() {
 
         <Tooltip label="User Settings" position="top" withArrow>
           <ActionIcon
+            aria-label="User Settings"
             variant="subtle"
             color="gray"
             size="sm"
