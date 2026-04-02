@@ -177,9 +177,10 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
 
     room.on(RoomEvent.ParticipantDisconnected, () => {
       emit('participant-update', getDMParticipants(room));
-      // If remote left after being connected, start 5min auto-leave timer
+      // If remote left after being connected, play hold music + start 5min auto-leave timer
       if (remoteParticipantJoined && room.remoteParticipants.size === 0) {
         useVoiceStore.getState().setRemoteParticipantLeft(true);
+        soundService.playHoldMusic();
         emit('remote-participant-left', null);
         autoLeaveAfterRemoteLeftTimer = setTimeout(() => {
           leaveDMVoice();
@@ -407,9 +408,27 @@ export function isDMDeafened(): boolean {
 export async function toggleDMVideo(): Promise<boolean> {
   if (!dmRoom) return false;
   const enabled = dmRoom.localParticipant.isCameraEnabled;
-  await dmRoom.localParticipant.setCameraEnabled(!enabled);
-  emit('participant-update', getDMParticipants(dmRoom));
-  return !enabled;
+  try {
+    await dmRoom.localParticipant.setCameraEnabled(!enabled);
+    emit('participant-update', getDMParticipants(dmRoom));
+    return !enabled;
+  } catch (err: any) {
+    if (err?.name === 'NotAllowedError' || err?.message?.includes('Permission denied')) {
+      toastStore.addToast({
+        type: 'warning',
+        title: 'Camera Unavailable',
+        message: 'Camera permission was denied. Check your browser/system settings.',
+        duration: 6000,
+      });
+    } else {
+      toastStore.addToast({
+        type: 'warning',
+        title: 'Camera Error',
+        message: err?.message || 'Could not toggle camera',
+      });
+    }
+    return enabled; // Return unchanged state
+  }
 }
 
 // ── DM Screen share ───────────────────────────────────────────────────────

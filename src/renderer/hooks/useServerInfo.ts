@@ -48,12 +48,13 @@ export function useChannelReadState(channelId: string | null) {
 }
 
 // P3: DM voice status (GET /dms/:id/voice/status)
+// Polls every 5s for prompt waiting room detection
 export function useDMVoiceStatus(dmId: string | null) {
   return useQuery({
     queryKey: ['dm-voice-status', dmId],
     queryFn: () => api.get<{ active: boolean; participants?: any[] }>(`/api/dms/${dmId}/voice/status`),
     enabled: !!dmId,
-    refetchInterval: 30_000,
+    refetchInterval: 5_000,
   });
 }
 

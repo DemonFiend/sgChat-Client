@@ -714,6 +714,8 @@ export function handleEvent(type: string, data: any): void {
         if (incoming && incoming.dmChannelId === data.dm_channel_id) {
           useVoiceStore.getState().setIncomingDMCall(null);
         }
+        // Refresh voice status so waiting room appears/disappears promptly
+        queryClient.invalidateQueries({ queryKey: ['dm-voice-status', data.dm_channel_id] });
       }
       break;
     }

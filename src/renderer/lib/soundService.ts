@@ -81,22 +81,36 @@ export const soundService = {
 
   playRingtone(volume?: number) {
     this.stopRingtone();
-    const audio = document.createElement('audio');
-    audio.src = SOUND_URLS.ringtone || '/sounds/ringtone.mp3';
+    const audio = getOrCreateAudio('ringtone');
+    if (!audio) return;
     audio.loop = true;
     audio.volume = volume ?? 0.35;
-    audio.style.display = 'none';
-    document.body.appendChild(audio);
-    audio.play().catch((err) => {
-      console.warn('[soundService] Failed to play ringtone:', err.message);
-    });
+    audio.currentTime = 0;
     ringtoneAudio = audio;
+
+    if (audio.readyState >= 2) {
+      audio.play().catch((err) => {
+        console.warn('[soundService] Failed to play ringtone:', err.message);
+      });
+    } else {
+      const onCanPlay = () => {
+        audio.removeEventListener('canplay', onCanPlay);
+        if (ringtoneAudio === audio) {
+          audio.play().catch((err) => {
+            console.warn('[soundService] Failed to play ringtone:', err.message);
+          });
+        }
+      };
+      audio.addEventListener('canplay', onCanPlay);
+      audio.load();
+    }
   },
 
   stopRingtone() {
     if (ringtoneAudio) {
       ringtoneAudio.pause();
-      ringtoneAudio.remove();
+      ringtoneAudio.loop = false;
+      ringtoneAudio.currentTime = 0;
       ringtoneAudio = null;
     }
   },

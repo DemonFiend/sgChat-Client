@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Avatar, Group, Stack, Text } from '@mantine/core';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { onDMVoiceEvent, type DMVoiceParticipant } from '../../lib/dmVoiceService';
+import { useAuthStore } from '../../stores/authStore';
 
 interface DMCallAreaProps {
   dmChannelId: string;
@@ -26,6 +28,24 @@ export function DMCallArea({
   // Call duration timer
   const [callDuration, setCallDuration] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const currentUserId = useAuthStore((s) => s.user?.id);
+
+  // Track speaking state for voice activity indicators
+  const [localSpeaking, setLocalSpeaking] = useState(false);
+  const [remoteSpeaking, setRemoteSpeaking] = useState(false);
+
+  useEffect(() => {
+    const cleanup = onDMVoiceEvent((event: string, data: any) => {
+      if (event === 'participant-update' && Array.isArray(data)) {
+        const local = data.find((p: DMVoiceParticipant) => p.userId === currentUserId);
+        const remote = data.find((p: DMVoiceParticipant) => p.userId !== currentUserId);
+        setLocalSpeaking(local?.isSpeaking ?? false);
+        setRemoteSpeaking(remote?.isSpeaking ?? false);
+      }
+    });
+    return cleanup;
+  }, [currentUserId]);
 
   // Use store state (not isDMConnected()) so React re-renders when call phase changes
   const isInDMCall = dmCallPhase !== 'idle';
@@ -105,6 +125,10 @@ export function DMCallArea({
           0%, 100% { opacity: 1; }
           50% { opacity: 0.3; }
         }
+        @keyframes dmSpeakingGlow {
+          0%, 100% { box-shadow: 0 0 0 2px rgba(74,222,128,0.6); }
+          50% { box-shadow: 0 0 8px 3px rgba(74,222,128,0.4); }
+        }
       `}</style>
 
       <Stack align="center" gap={12}>
@@ -115,15 +139,18 @@ export function DMCallArea({
             <div
               style={{
                 borderRadius: '50%',
-                ...(isWaiting
-                  ? {
-                      boxShadow: `0 0 0 2px ${dotColor}40`,
-                      animation: 'dmCallPulse 2s ease-in-out infinite',
-                    }
-                  : {}),
+                transition: 'box-shadow 0.2s',
+                ...(localSpeaking && isConnectedWithFriend
+                  ? { animation: 'dmSpeakingGlow 1s ease-in-out infinite' }
+                  : isWaiting
+                    ? {
+                        boxShadow: `0 0 0 2px ${dotColor}40`,
+                        animation: 'dmCallPulse 2s ease-in-out infinite',
+                      }
+                    : {}),
               }}
             >
-              <Avatar src={currentUserAvatarUrl} size={56} radius="xl" color="brand">
+              <Avatar src={currentUserAvatarUrl} size={56} radius="xl" color={localSpeaking && isConnectedWithFriend ? 'green' : 'brand'}>
                 {(currentUserDisplayName || 'You').charAt(0).toUpperCase()}
               </Avatar>
             </div>
@@ -156,14 +183,16 @@ export function DMCallArea({
             <div
               style={{
                 borderRadius: '50%',
-                transition: 'opacity 0.3s',
+                transition: 'opacity 0.3s, box-shadow 0.2s',
                 opacity: friendLeft ? 0.4 : 1,
-                ...(isConnectedWithFriend
-                  ? { boxShadow: `0 0 0 2px ${dotColor}60` }
-                  : {}),
+                ...(remoteSpeaking && isConnectedWithFriend
+                  ? { animation: 'dmSpeakingGlow 1s ease-in-out infinite' }
+                  : isConnectedWithFriend
+                    ? { boxShadow: `0 0 0 2px ${dotColor}60` }
+                    : {}),
               }}
             >
-              <Avatar src={friendAvatarUrl} size={56} radius="xl" color="brand">
+              <Avatar src={friendAvatarUrl} size={56} radius="xl" color={remoteSpeaking && isConnectedWithFriend ? 'green' : 'brand'}>
                 {friendName.charAt(0).toUpperCase()}
               </Avatar>
             </div>

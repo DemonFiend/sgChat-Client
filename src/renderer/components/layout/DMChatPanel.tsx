@@ -7,7 +7,7 @@ import { emitJoinDM, emitLeaveDM, emitDMAck, emitTypingStart, emitTypingStop } f
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useTypingStore } from '../../stores/typingStore';
 import { useBlockedUsersStore } from '../../stores/blockedUsersStore';
-import { joinDMVoice, leaveDMVoice, toggleDMMute, toggleDMVideo, toggleDMDeafen } from '../../lib/dmVoiceService';
+import { joinDMVoice, leaveDMVoice, toggleDMMute, toggleDMDeafen, toggleDMVideo } from '../../lib/dmVoiceService';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { DMVoiceControls } from '../ui/DMVoiceControls';
 import { DMSettingsModal } from '../ui/DMSettingsModal';
@@ -15,6 +15,7 @@ import { DMWaitingRoom } from '../ui/DMWaitingRoom';
 import { toastStore } from '../../stores/toastNotifications';
 import { useE2EStore } from '../../stores/e2eStore';
 import { useDMVoiceStatus } from '../../hooks/useServerInfo';
+import { useFriends } from '../../hooks/useFriends';
 import { MessageGroup } from '../messages/MessageGroup';
 import { MessageInput } from '../messages/MessageInput';
 import { DMCallArea } from '../ui/DMCallArea';
@@ -48,6 +49,19 @@ export function DMChatPanel({ conversationId }: DMChatPanelProps) {
   const otherUser = conversation?.participants?.find((p) => p.id !== user?.id) || conversation?.participants?.[0];
   const status = usePresenceStore((s) => (otherUser ? s.statuses[otherUser.id] : undefined) || 'offline');
   const statusColor = STATUS_COLORS[status] || 'gray';
+
+  // Seed DM partner presence from friends list (they may not be a server member)
+  const { data: friends } = useFriends();
+  useEffect(() => {
+    if (!otherUser?.id || !friends) return;
+    const friend = friends.find((f) => f.id === otherUser.id);
+    if (friend?.status) {
+      const currentStatus = usePresenceStore.getState().statuses[otherUser.id];
+      if (!currentStatus || currentStatus === 'offline') {
+        usePresenceStore.getState().updatePresence(otherUser.id, friend.status);
+      }
+    }
+  }, [otherUser?.id, friends]);
 
   // Check if partner is blocked
   const isBlocked = useBlockedUsersStore((s) => s.isBlocked);
@@ -277,13 +291,15 @@ function DMHeader({ username, status, statusColor, avatarUrl, conversationId }: 
   const dmCallPhase = useVoiceStore((s) => s.dmCallPhase);
   const isInCall = dmCallPhase !== 'idle';
   const [isMuted, setIsMuted] = useState(false);
+  const [isDeafened, setIsDeafened] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Reset mute/video state when call ends
+  // Reset mute/video/deafen state when call ends
   useEffect(() => {
     if (!isInCall) {
       setIsMuted(false);
+      setIsDeafened(false);
       setIsVideoOn(false);
     }
   }, [isInCall]);
@@ -298,6 +314,13 @@ function DMHeader({ username, status, statusColor, avatarUrl, conversationId }: 
   const handleToggleMute = async () => {
     const nowEnabled = await toggleDMMute();
     setIsMuted(!nowEnabled);
+  };
+
+  const handleToggleDeafen = async () => {
+    const nowDeafened = await toggleDMDeafen();
+    setIsDeafened(nowDeafened);
+    // Deafening also mutes
+    if (nowDeafened) setIsMuted(true);
   };
 
   const handleToggleVideo = async () => {
@@ -327,10 +350,12 @@ function DMHeader({ username, status, statusColor, avatarUrl, conversationId }: 
       <DMVoiceControls
         isInCall={isInCall}
         isMuted={isMuted}
+        isDeafened={isDeafened}
         isVideoOn={isVideoOn}
         onCall={handleCall}
         onHangup={leaveDMVoice}
         onToggleMute={handleToggleMute}
+        onToggleDeafen={handleToggleDeafen}
         onToggleVideo={handleToggleVideo}
       />
       <Tooltip label="DM Settings" position="bottom" withArrow>
