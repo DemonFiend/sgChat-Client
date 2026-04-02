@@ -17,7 +17,20 @@ export interface DMConversation {
 export function useDMConversations() {
   return useQuery({
     queryKey: ['dm-conversations'],
-    queryFn: async () => ensureArray<DMConversation>(await api.get('/api/dms/')),
+    queryFn: async () => {
+      const raw = ensureArray<any>(await api.get('/api/dms/'));
+      // Server returns flat fields (other_username, other_user_id, other_avatar_url)
+      // instead of a participants array — normalize to match DMConversation interface
+      return raw.map((conv): DMConversation => ({
+        ...conv,
+        participants: conv.participants ?? (conv.other_user_id ? [{
+          id: conv.other_user_id,
+          username: conv.other_username || 'Unknown',
+          avatar_url: conv.other_avatar_url || undefined,
+        }] : []),
+        updated_at: conv.updated_at || conv.created_at || new Date().toISOString(),
+      }));
+    },
   });
 }
 
