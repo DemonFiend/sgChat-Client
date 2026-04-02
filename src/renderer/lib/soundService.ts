@@ -103,12 +103,12 @@ export const soundService = {
 
   playHoldMusic() {
     this.stopHoldMusic();
-    const audio = document.createElement('audio');
-    audio.src = SOUND_URLS.holdMusic || '/sounds/HoldMusic.mp3';
+    // Use getOrCreateAudio to leverage preloading + caching (same as join/leave sounds)
+    const audio = getOrCreateAudio('holdMusic');
+    if (!audio) return;
     audio.loop = true;
     audio.volume = 0.15; // Soft background — lower than ringtone
-    audio.style.display = 'none';
-    document.body.appendChild(audio);
+    audio.currentTime = 0;
     audio.play().catch((err) => {
       console.warn('[soundService] Failed to play hold music:', err.message);
     });
@@ -118,7 +118,9 @@ export const soundService = {
   stopHoldMusic() {
     if (holdMusicAudio) {
       holdMusicAudio.pause();
-      holdMusicAudio.remove();
+      holdMusicAudio.loop = false;
+      holdMusicAudio.currentTime = 0;
+      // Don't remove — it's cached by getOrCreateAudio for reuse
       holdMusicAudio = null;
     }
   },
