@@ -272,6 +272,16 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
 
     dmRoom = room;
 
+    // Check if remote participant is ALREADY in the room (they joined before us)
+    if (room.remoteParticipants.size > 0) {
+      remoteParticipantJoined = true;
+      callPhase = 'connected';
+      useVoiceStore.getState().setDMCallPhase('connected');
+      useVoiceStore.getState().setRemoteParticipantLeft(false);
+      emit('call-phase-change', { phase: 'connected' });
+      soundService.stopHoldMusic();
+    }
+
     // 30s notifying timer — transition to 'waiting' if no one joins
     notifyingTimer = setTimeout(() => {
       if (callPhase === 'notifying') {

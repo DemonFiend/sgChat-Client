@@ -103,16 +103,32 @@ export const soundService = {
 
   playHoldMusic() {
     this.stopHoldMusic();
-    // Use getOrCreateAudio to leverage preloading + caching (same as join/leave sounds)
     const audio = getOrCreateAudio('holdMusic');
     if (!audio) return;
     audio.loop = true;
-    audio.volume = 0.15; // Soft background — lower than ringtone
+    audio.volume = 0.15;
     audio.currentTime = 0;
-    audio.play().catch((err) => {
-      console.warn('[soundService] Failed to play hold music:', err.message);
-    });
     holdMusicAudio = audio;
+
+    // If audio is already loaded, play immediately; otherwise wait for it
+    if (audio.readyState >= 2) {
+      audio.play().catch((err) => {
+        console.warn('[soundService] Failed to play hold music:', err.message);
+      });
+    } else {
+      const onCanPlay = () => {
+        audio.removeEventListener('canplay', onCanPlay);
+        // Only play if we haven't been stopped in the meantime
+        if (holdMusicAudio === audio) {
+          audio.play().catch((err) => {
+            console.warn('[soundService] Failed to play hold music:', err.message);
+          });
+        }
+      };
+      audio.addEventListener('canplay', onCanPlay);
+      // Force reload if stale
+      audio.load();
+    }
   },
 
   stopHoldMusic() {
