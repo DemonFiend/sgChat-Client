@@ -8,6 +8,7 @@ import {
 } from 'livekit-client';
 import { api } from './api';
 import { useVoiceSettingsStore } from '../stores/voiceSettingsStore';
+import { useVoiceStore } from '../stores/voiceStore';
 import { noiseSuppressionService } from './noiseSuppressionService';
 import { soundService } from './soundService';
 import { toastStore } from '../stores/toastNotifications';
@@ -86,7 +87,10 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
   try {
     callPhase = 'notifying';
     remoteParticipantJoined = false;
+    useVoiceStore.getState().setDMCallPhase('notifying');
     emit('call-phase-change', { phase: 'notifying' });
+    // Play hold music while waiting for the other party
+    soundService.playHoldMusic();
 
     const raw = await api.post<{
       token?: string;
@@ -157,7 +161,11 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
     room.on(RoomEvent.ParticipantConnected, () => {
       remoteParticipantJoined = true;
       callPhase = 'connected';
+      useVoiceStore.getState().setDMCallPhase('connected');
+      useVoiceStore.getState().setRemoteParticipantLeft(false);
       emit('call-phase-change', { phase: 'connected' });
+      // Stop hold music — friend has joined
+      soundService.stopHoldMusic();
       // Clear notifying/waiting timers
       if (notifyingTimer) { clearTimeout(notifyingTimer); notifyingTimer = null; }
       if (autoKickTimer) { clearTimeout(autoKickTimer); autoKickTimer = null; }
@@ -169,6 +177,7 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
       emit('participant-update', getDMParticipants(room));
       // If remote left after being connected, start 5min auto-leave timer
       if (remoteParticipantJoined && room.remoteParticipants.size === 0) {
+        useVoiceStore.getState().setRemoteParticipantLeft(true);
         emit('remote-participant-left', null);
         autoLeaveAfterRemoteLeftTimer = setTimeout(() => {
           leaveDMVoice();
@@ -182,7 +191,10 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
 
     room.on(RoomEvent.Disconnected, () => {
       clearAllTimers();
+      soundService.stopHoldMusic();
       callPhase = 'idle';
+      useVoiceStore.getState().setDMCallPhase('idle');
+      useVoiceStore.getState().setRemoteParticipantLeft(false);
       emit('call-phase-change', { phase: 'idle' });
       emit('disconnected', null);
       dmRoom = null;
@@ -264,6 +276,7 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
     notifyingTimer = setTimeout(() => {
       if (callPhase === 'notifying') {
         callPhase = 'waiting';
+        useVoiceStore.getState().setDMCallPhase('waiting');
         emit('call-phase-change', { phase: 'waiting' });
       }
     }, 30_000);
@@ -271,6 +284,7 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
     // 5min auto-kick timer — disconnect if still alone
     autoKickTimer = setTimeout(() => {
       if (!remoteParticipantJoined && dmRoom) {
+        soundService.stopHoldMusic();
         leaveDMVoice();
       }
     }, 5 * 60 * 1000);
@@ -288,6 +302,8 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
     return { success: true };
   } catch (err: unknown) {
     callPhase = 'idle';
+    soundService.stopHoldMusic();
+    useVoiceStore.getState().setDMCallPhase('idle');
     emit('call-phase-change', { phase: 'idle' });
     const message = err instanceof Error ? err.message : 'Failed to join DM voice';
     return { success: false, error: message };
@@ -296,7 +312,10 @@ export async function joinDMVoice(dmChannelId: string): Promise<{ success: boole
 
 export async function leaveDMVoice(): Promise<void> {
   clearAllTimers();
+  soundService.stopHoldMusic();
   callPhase = 'idle';
+  useVoiceStore.getState().setDMCallPhase('idle');
+  useVoiceStore.getState().setRemoteParticipantLeft(false);
   dmDeafened = false;
   wasMutedBeforeDeafen = false;
   remoteParticipantJoined = false;

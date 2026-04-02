@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Avatar, Group, Stack, Text } from '@mantine/core';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { isDMConnected } from '../../lib/dmVoiceService';
-import type { DMCallPhase } from '../../stores/voiceStore';
 
 interface DMCallAreaProps {
   dmChannelId: string;
@@ -29,7 +27,8 @@ export function DMCallArea({
   const [callDuration, setCallDuration] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const isInDMCall = isDMConnected();
+  // Use store state (not isDMConnected()) so React re-renders when call phase changes
+  const isInDMCall = dmCallPhase !== 'idle';
 
   useEffect(() => {
     if (dmCallPhase === 'connected' && !remoteParticipantLeft) {
