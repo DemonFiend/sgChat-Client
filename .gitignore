@@ -43,3 +43,6 @@ test-*.cjs
 
 # Server backups
 .srv_backup/
+
+# Local Playwright/QA e2e tests (contain local-only dev credentials)
+e2e/
