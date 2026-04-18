@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Group, Text, Popover, Stack, ActionIcon, Tooltip, CopyButton,
 } from '@mantine/core';
-import { IconCopy, IconCheck, IconServer2, IconRefresh } from '@tabler/icons-react';
+import { IconCopy, IconCheck, IconServer2, IconRefresh, IconLogout } from '@tabler/icons-react';
 import { useAuthStore } from '../../stores/authStore';
 
 interface ServerStatusPillProps {
@@ -240,7 +240,7 @@ export function ServerStatusPill({ onChangeServer, variant = 'titlebar' }: Serve
           </Group>
 
           {/* Server URL */}
-          <Group gap={8} px="sm" py={8} style={{ borderBottom: onChangeServer ? '1px solid var(--border)' : 'none' }}>
+          <Group gap={8} px="sm" py={8} style={{ borderBottom: (onChangeServer || variant === 'titlebar') ? '1px solid var(--border)' : 'none' }}>
             <Text size="xs" c="dimmed" style={{ width: 50 }}>URL</Text>
             <Text
               size="xs"
@@ -272,7 +272,8 @@ export function ServerStatusPill({ onChangeServer, variant = 'titlebar' }: Serve
               style={{
                 cursor: 'pointer',
                 transition: 'background 0.15s',
-                borderRadius: '0 0 8px 8px',
+                borderBottom: variant === 'titlebar' ? '1px solid var(--border)' : 'none',
+                borderRadius: variant === 'titlebar' ? 0 : '0 0 8px 8px',
               }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover, var(--bg-secondary))'; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
@@ -285,6 +286,32 @@ export function ServerStatusPill({ onChangeServer, variant = 'titlebar' }: Serve
               <IconRefresh size={14} style={{ color: 'var(--accent)' }} />
               <Text size="xs" fw={500} style={{ color: 'var(--accent)' }}>
                 Change Server
+              </Text>
+            </Group>
+          )}
+
+          {/* Log Out action — titlebar only */}
+          {variant === 'titlebar' && (
+            <Group
+              gap={8}
+              px="sm"
+              py={8}
+              style={{
+                cursor: 'pointer',
+                transition: 'background 0.15s',
+                borderRadius: '0 0 8px 8px',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover, var(--bg-secondary))'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setPopoverOpen(false);
+                useAuthStore.getState().logout(true);
+              }}
+            >
+              <IconLogout size={14} style={{ color: 'var(--danger, #ef4444)' }} />
+              <Text size="xs" fw={500} style={{ color: 'var(--danger, #ef4444)' }}>
+                Log Out
               </Text>
             </Group>
           )}
