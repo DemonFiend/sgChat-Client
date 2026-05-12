@@ -39,11 +39,15 @@ Most chat platforms own your data, lock you into their ecosystem, and charge for
 
 - **Text Chat** — Markdown, reactions, threads, pins, and message search
 - **Voice & Video** — Channels with screen sharing and stage controls
-- **AI Noise Suppression** — Built-in mic processing so your background stays quiet
+- **AI Noise Suppression** — Pick your mode: RNNoise, NSNet2, or DeepFilterNet for crystal-clear mic input
+- **End-to-End Encrypted DMs** — Signal-style key ratcheting; your DMs are unreadable by the server
 - **Direct Messages** — Private conversations with voice and video calling
+- **Soundboard & Voice Sounds** — Server soundboard plus custom join/leave sounds per server
 - **Custom Emoji & Stickers** — Upload your own emoji packs, stickers, and use the GIF picker
 - **Events & Calendar** — Schedule server events with RSVP
 - **Roles & Moderation** — Granular permissions, audit logs, and moderation tools
+- **Desktop Integration** — System tray, global shortcuts (push-to-talk, mute, deafen), and auto-launch with Windows
+- **Per-App Audio Capture** — Windows-only: stream a specific app's audio without grabbing your whole system
 - **Desktop Notifications** — Unread indicators, mention badges, and system alerts
 - **Themes** — Customizable color themes to match your style
 - **Multi-Server** — Connect to multiple servers and quick-switch between them
@@ -56,12 +60,22 @@ Most chat platforms own your data, lock you into their ecosystem, and charge for
 
 ### System Requirements
 
-| | Minimum |
-|---|---------|
-| **OS** | Windows 10+, Ubuntu 22.04+ LTS, or Android 10+ |
-| **RAM** | 4 GB |
-| **Storage** | 200 MB |
-| **Network** | Active connection to a sgChat server |
+Measured against the current Windows alpha. Linux and Android requirements will be published when those builds ship.
+
+| | Minimum | Recommended |
+|---|---|---|
+| **OS** | Windows 10 (1809+) | Windows 11 |
+| **CPU** | Dual-core x64 | Quad-core x64 |
+| **RAM** | 4 GB system / 750 MB free | 8 GB system / 1 GB free |
+| **Disk** | 700 MB install | 1 GB install |
+| **Network** | 256 kbps voice / 1 Mbps screen share | 1 Mbps voice / 4 Mbps screen share |
+| **GPU** | Any with hardware acceleration | Dedicated GPU for stream decoding |
+
+Typical RAM usage in our testing:
+
+- **Idle / browsing channels:** ~485 MB
+- **In a voice call:** ~600 MB
+- **Voice + screen share:** ~600 MB (the encoder is offloaded to the OS, so screen share barely adds any heap)
 
 ### Download
 
@@ -109,12 +123,11 @@ Check out the server repo for setup instructions:
 
 Here's what's coming next. No promises on timelines — we ship when it's ready.
 
-- [ ] Alpha release builds (Windows installer, Ubuntu .AppImage, Android APK)
-- [ ] Auto-update connected to release channel
-- [ ] Full feature parity with the web client
+- [ ] Public alpha releases (Windows installer is built; Linux `.AppImage` and Android APK still to come)
+- [ ] Auto-update connected to a release channel (`electron-updater` is wired; just needs a feed)
+- [ ] Linux desktop build (Ubuntu LTS first)
 - [ ] Android mobile app
 - [ ] Push notifications (mobile)
-- [ ] End-to-end encrypted DMs
 
 Have a feature request? [Open an issue](https://github.com/DemonFiend/sgChat-Client/issues).
 
@@ -130,10 +143,11 @@ Have questions? Check the **[FAQ](https://github.com/DemonFiend/sgChat/blob/main
 
 This is alpha software. Here's what we know about:
 
-- Some features are still being ported from the web client
-- Ubuntu and Android builds have not been extensively tested
-- Auto-update is not yet connected to a release channel
+- The desktop client and the web client are tracked separately and may temporarily diverge on individual screens
+- Linux and Android builds are not yet published
+- Auto-update is not yet connected to a release channel (it works locally; the feed is the missing piece)
 - Voice/video quality depends on your server's LiveKit relay configuration
+- Per-app audio capture is Windows-only — Linux/macOS fall back to system audio capture
 
 Found a bug? [Open an issue](https://github.com/DemonFiend/sgChat-Client/issues).
 
